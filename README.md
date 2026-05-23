@@ -10,6 +10,22 @@ Double-click:
 start_attendance_app.bat
 ```
 
+Local development
+
+1. Create and install dependencies:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
+
+2. Run the app from the venv:
+
+```powershell
+\.venv\Scripts\python.exe attendance_app.py
+```
+
 The app saves entries to:
 
 ```text
