@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Local data (never commit production DB or uploads)
+database/*.db
+database/*.db-journal
+database/*.sqlite
+uploads/**/*
+!uploads/.gitkeep
+photos/**/*
+!photos/.gitkeep
+reports/**
+!reports/.gitkeep
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs / env
+*.log
+.env
+.env.*
+
+# Cursor
+.cursor/
+
+# Legacy desktop app (optional keep in repo - we keep maxek_erp_all_in_one.py in repo)
+# Remove line above if you want to exclude legacy tk app

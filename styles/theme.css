@@ -1,0 +1,552 @@
+/* MAXEK ERP - Global theme */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  --primary: #0f172a;
+  --secondary: #2563eb;
+  --secondary-dark: #1d4ed8;
+  --accent: #10b981;
+  --bg: #f5f7fb;
+  --panel: #ffffff;
+  --border: #e5e7eb;
+  --muted: #64748b;
+  --shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+}
+
+html, body, [class*="css"] {
+  font-family: 'Inter', 'Segoe UI', sans-serif !important;
+}
+
+body {
+  background: var(--bg);
+}
+
+section[data-testid="stSidebar"] {
+  display: block !important;
+  background: linear-gradient(180deg, #0d2a5c 0%, #081d42 100%) !important;
+  border-right: none !important;
+}
+
+section[data-testid="stSidebar"] > div {
+  background: transparent !important;
+}
+
+section[data-testid="stSidebar"] .block-container {
+  padding-top: 1rem !important;
+  padding-bottom: 1rem !important;
+}
+
+header[data-testid="stHeader"] {
+  background: transparent !important;
+}
+
+.block-container {
+  padding-top: 0.7rem !important;
+  max-width: 1500px !important;
+  background: var(--bg);
+}
+
+.maxek-watermark {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(46vw, 420px);
+  height: auto;
+  opacity: 0.045;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.maxek-app-layer {
+  position: relative;
+  z-index: 1;
+}
+
+.maxek-sidebar-shell {
+  padding-bottom: 0.25rem;
+}
+
+.maxek-sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  color: #fff;
+  margin-bottom: 1rem;
+}
+
+.maxek-sidebar-brand img {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 0.35rem;
+}
+
+.maxek-sidebar-title {
+  font-weight: 700;
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
+.maxek-sidebar-subtitle {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.74rem;
+  margin-top: 0.15rem;
+}
+
+.maxek-sidebar-section {
+  margin: 1rem 0 0.65rem;
+  padding: 0.45rem 0.2rem;
+  color: rgba(255, 255, 255, 0.64);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.maxek-sidebar-user {
+  margin: 1rem 0 0.8rem;
+  padding: 0.85rem 0.95rem;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.maxek-sidebar-user strong {
+  display: block;
+  color: #fff;
+  font-size: 0.92rem;
+}
+
+.maxek-sidebar-user span {
+  display: block;
+  margin-top: 0.25rem;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.76rem;
+}
+
+.maxek-header-pill,
+.maxek-header-user,
+.maxek-panel,
+.maxek-overview-card,
+.maxek-kpi-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+
+.maxek-header-pill,
+.maxek-header-user {
+  border-radius: 16px;
+  padding: 0.95rem 1rem;
+  min-height: 74px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.maxek-header-page {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.maxek-header-caption,
+.maxek-header-user-meta {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin-top: 0.2rem;
+}
+
+.maxek-header-user {
+  align-items: flex-end;
+}
+
+.maxek-header-user-name {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.maxek-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.65rem;
+}
+
+.maxek-header-chip {
+  padding: 0.6rem 0.75rem;
+  border-radius: 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  color: var(--primary);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.maxek-dashboard-intro {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 1.1rem 0 1rem;
+}
+
+.maxek-dashboard-intro h1 {
+  margin: 0;
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.maxek-dashboard-intro p {
+  margin: 0.35rem 0 0;
+  color: var(--muted);
+}
+
+.maxek-dashboard-date {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  border-radius: 16px;
+  padding: 0.9rem 1rem;
+  text-align: right;
+  color: var(--primary);
+  min-width: 170px;
+}
+
+.maxek-dashboard-date span {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin-top: 0.25rem;
+}
+
+.maxek-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.maxek-kpi-card {
+  border-radius: 16px;
+  padding: 1.15rem 1.15rem;
+  transition: transform 0.2s ease;
+  min-height: 156px;
+}
+
+.maxek-kpi-card:hover {
+  transform: translateY(-2px);
+}
+
+.maxek-kpi-label {
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-weight: 600;
+  margin-top: 0.7rem;
+}
+
+.maxek-kpi-value {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: #111827;
+  margin-top: 0.25rem;
+}
+
+.maxek-kpi-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #eff6ff;
+  font-size: 1.25rem;
+}
+
+.maxek-kpi-helper {
+  margin-top: 0.7rem;
+  color: var(--secondary);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.maxek-panel {
+  border-radius: 14px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.maxek-panel h2, .maxek-panel h3 {
+  color: var(--primary);
+  margin-top: 0;
+  margin-bottom: 0.9rem;
+}
+
+.maxek-overview-card {
+  border-radius: 16px;
+  padding: 1.15rem 1.2rem;
+  min-height: 210px;
+  margin-bottom: 1rem;
+}
+
+.maxek-overview-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--primary);
+  margin-bottom: 1rem;
+}
+
+.maxek-overview-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.65rem 0;
+  border-top: 1px solid #eef2f7;
+  color: var(--muted);
+}
+
+.maxek-overview-row:first-of-type {
+  border-top: none;
+  padding-top: 0;
+}
+
+.maxek-overview-row strong {
+  color: var(--primary);
+}
+
+.maxek-note-item {
+  border: 1px solid #eef2f7;
+  border-radius: 12px;
+  padding: 0.9rem;
+  margin-bottom: 0.75rem;
+  background: #fafcff;
+}
+
+.maxek-note-item strong {
+  display: block;
+  color: var(--primary);
+  font-size: 0.9rem;
+}
+
+.maxek-note-item span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.78rem;
+  margin-top: 0.35rem;
+}
+
+.maxek-cash-card {
+  margin-top: 1.15rem;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  padding: 1rem;
+  color: #fff;
+}
+
+.maxek-cash-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  margin-bottom: 0.75rem;
+}
+
+.maxek-cash-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0;
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 0.84rem;
+}
+
+.maxek-cash-total {
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  margin-top: 0.35rem;
+  padding-top: 0.8rem;
+}
+
+div.stButton > button[kind="primary"] {
+  background: linear-gradient(135deg, var(--secondary), var(--secondary-dark)) !important;
+  border: none !important;
+  border-radius: 10px !important;
+  font-weight: 600 !important;
+  color: #fff !important;
+  min-height: 2.8rem !important;
+}
+
+div.stButton > button[kind="primary"]:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgba(37, 99, 235, 0.28);
+}
+
+[data-testid="stSidebar"] div.stButton > button[kind="secondary"] {
+  background: rgba(255, 255, 255, 0.04) !important;
+  color: rgba(255, 255, 255, 0.92) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 10px !important;
+  min-height: 2.8rem !important;
+}
+
+[data-testid="stSidebar"] div.stButton > button[kind="primary"] {
+  background: linear-gradient(135deg, var(--secondary), var(--secondary-dark)) !important;
+  border-radius: 10px !important;
+  min-height: 2.8rem !important;
+}
+
+[data-testid="stSidebar"] div.stButton {
+  margin-bottom: 0.3rem;
+}
+
+[data-testid="stSidebar"] .stCaption {
+  color: rgba(255, 255, 255, 0.72) !important;
+}
+
+div.stTextInput > div > div > input,
+div.stNumberInput input,
+div[data-baseweb="select"] > div,
+div.stTextArea textarea {
+  border-radius: 12px !important;
+  border: 1px solid var(--border) !important;
+  background: #fff !important;
+}
+
+div.stTextArea textarea {
+  min-height: 120px !important;
+}
+
+div.stSelectbox label,
+div.stTextInput label,
+div.stNumberInput label,
+div.stTextArea label,
+div.stDateInput label,
+div.stFileUploader label {
+  color: var(--primary) !important;
+  font-weight: 600 !important;
+}
+
+.stTabs [data-baseweb="tab-list"] {
+  gap: 0.45rem;
+  background: #edf2ff;
+  border-radius: 12px;
+  padding: 0.35rem;
+}
+
+.stTabs [data-baseweb="tab"] {
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+.stDataFrame {
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+
+div[data-testid="stFileUploaderDropzone"] {
+  border-radius: 14px !important;
+  border: 1px dashed #bfdbfe !important;
+  background: #f8fbff !important;
+}
+
+div[data-testid="stForm"] {
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 1rem 1rem 0.25rem;
+  margin-bottom: 1rem;
+}
+
+div[data-testid="stForm"] h3 {
+  margin-top: 0.5rem;
+}
+
+.maxek-login-wrap {
+  min-height: 70vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+section.main:has(.maxek-login-marker) {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: calc(100vh - 1rem);
+  padding-top: 0 !important;
+}
+
+section.main:has(.maxek-login-marker) .block-container {
+  max-width: 420px;
+  width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+  padding: 2rem 1.75rem 1.5rem;
+  background: rgba(255, 255, 255, 0.96);
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+
+section.main:has(.maxek-login-marker) [data-testid="stTextInput"] input {
+  autocomplete: off;
+}
+
+section.main:has(.maxek-login-marker) input[type="password"] {
+  autocomplete: new-password !important;
+}
+
+.maxek-login-card {
+  max-width: 420px;
+  width: 100%;
+  background: rgba(255,255,255,0.94);
+  border-radius: 18px;
+  padding: 2rem;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+
+.maxek-login-logo {
+  display: block;
+  width: 140px;
+  margin: 0 auto 0.8rem;
+}
+
+.maxek-login-title {
+  text-align: center;
+  color: var(--primary);
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.maxek-login-subtitle {
+  text-align: center;
+  color: var(--muted);
+  margin-bottom: 0.8rem;
+}
+
+@media (max-width: 768px) {
+  .maxek-dashboard-intro {
+    flex-direction: column;
+  }
+  .maxek-header-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+  .maxek-dashboard-date {
+    width: 100%;
+    text-align: left;
+  }
+  .maxek-sidebar-shell {
+    min-height: auto;
+    position: static;
+  }
+}
