@@ -505,33 +505,7 @@ div[data-testid="stForm"] h3 {
   justify-content: center;
 }
 
-section.main:has(.maxek-login-marker) {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  min-height: calc(100vh - 1rem);
-  padding-top: 0 !important;
-}
-
-section.main:has(.maxek-login-marker) .block-container {
-  max-width: 420px;
-  width: 100%;
-  margin-left: auto;
-  margin-right: auto;
-  padding: 2rem 1.75rem 1.5rem;
-  background: rgba(255, 255, 255, 0.96);
-  border-radius: 18px;
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow);
-}
-
-section.main:has(.maxek-login-marker) [data-testid="stTextInput"] input {
-  autocomplete: off;
-}
-
-section.main:has(.maxek-login-marker) input[type="password"] {
-  autocomplete: new-password !important;
-}
+/* Login sizing is enforced in modules/ui.py (_LOGIN_PAGE_CSS) via body.maxek-login-page */
 
 .maxek-login-card {
   max-width: 420px;

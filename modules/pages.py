@@ -1,5 +1,6 @@
 """ERP page content for MAXEK Streamlit app."""
 
+import base64
 import os
 from datetime import datetime
 from io import BytesIO
@@ -47,6 +48,103 @@ def _resolve_pay_to_name(pay_to_type, pay_to_value):
     if pay_to_type == "Employee" and " - " in pay_to_value:
         return pay_to_value.split(" - ", 1)[1]
     return pay_to_value
+
+
+def _load_employee_allowance_components(employee_id):
+    conn = get_conn()
+    df = pd.read_sql_query(
+        """
+        SELECT allowance_head, COALESCE(amount, 0) AS amount
+        FROM employee_allowance_components
+        WHERE employee_id = ?
+          AND UPPER(COALESCE(status, 'ACTIVE')) = 'ACTIVE'
+        ORDER BY id
+        """,
+        conn,
+        params=(employee_id,),
+    )
+    conn.close()
+    return df
+
+
+def _save_employee_allowance_components(conn, employee_id, allowance_amounts):
+    conn.execute("DELETE FROM employee_allowance_components WHERE employee_id = ?", (employee_id,))
+    for head, amount in (allowance_amounts or {}).items():
+        if head and float(amount or 0) > 0:
+            conn.execute(
+                """
+                INSERT INTO employee_allowance_components(employee_id, allowance_head, amount, status)
+                VALUES(?,?,?,?)
+                """,
+                (employee_id, head, float(amount), "Active"),
+            )
+
+
+def _render_employee_allowance_inputs(allowance_heads, prefix="employee"):
+    amounts = {}
+    total_allowance = 0.0
+    head_options = [""] + allowance_heads
+    st.caption("Select allowance heads and enter amounts. Total salary = Basic + allowances.")
+    for idx in range(1, 6):
+        c1, c2 = st.columns([2, 1])
+        head = c1.selectbox(f"Allowance {idx}", head_options, key=f"{prefix}_allowance_head_{idx}")
+        amount = c2.number_input(f"Amount {idx} (Rs)", min_value=0.0, step=100.0, key=f"{prefix}_allowance_amount_{idx}")
+        if head and amount > 0:
+            amounts[head] = amounts.get(head, 0.0) + float(amount)
+            total_allowance += float(amount)
+    return amounts, total_allowance
+
+
+def _render_photo_preview(uploaded_file=None, saved_path=""):
+    image_bytes = None
+    mime = "image/jpeg"
+    if uploaded_file is not None:
+        image_bytes = uploaded_file.getvalue()
+        mime = uploaded_file.type or mime
+    elif saved_path:
+        abs_path = os.path.join(BASE_DIR, saved_path.replace("/", os.sep))
+        if os.path.isfile(abs_path):
+            with open(abs_path, "rb") as f:
+                image_bytes = f.read()
+            ext = os.path.splitext(abs_path)[1].lower()
+            mime = "image/png" if ext == ".png" else "image/jpeg"
+    if not image_bytes:
+        return
+    encoded = base64.b64encode(image_bytes).decode()
+    st.markdown(
+        f"""
+        <div style="text-align:center;margin:0.5rem 0;">
+          <img src="data:{mime};base64,{encoded}"
+               alt="Employee photo"
+               style="width:120px;height:150px;object-fit:cover;border:1px solid #cbd5e1;border-radius:8px;" />
+          <div style="font-size:0.75rem;color:#64748b;margin-top:0.25rem;">Passport size preview</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _clear_employee_form_keys():
+    for key, value in {
+        "employee_type": "Company Staff",
+        "employee_name": "",
+        "employee_mobile": "",
+        "employee_address": "",
+        "employee_blood_group": "",
+        "employee_native_place": "",
+        "employee_aadhaar": "",
+        "employee_pan": "",
+        "employee_status": "Active",
+        "employee_experience": "",
+        "employee_remarks": "",
+        "employee_basic_salary": 0.0,
+        "employee_ot_applicable": "No",
+        "employee_ot_rate": 0.0,
+    }.items():
+        st.session_state[key] = value
+    for idx in range(1, 6):
+        st.session_state[f"employee_allowance_head_{idx}"] = ""
+        st.session_state[f"employee_allowance_amount_{idx}"] = 0.0
 
 
 def _ensure_subcontractor_draft():
@@ -319,10 +417,15 @@ def _render_boq_rate_editor(subcontractors, project_options):
 
 def page_employee_management():
     st.subheader("Employee Management")
+    last_saved_id = st.session_state.pop("employee_last_saved_id", "")
+    if last_saved_id:
+        st.success(f"Employee saved. ID: {last_saved_id}")
+
     departments = [""] + load_lookup("departments", "department_name")
     designations = [""] + load_lookup("designations", "designation_name")
     project_names = [""] + load_project_names()
     subcontractors = [""] + load_subcontractor_names()
+    allowance_heads = load_lookup("allowance_heads", "head_name")
 
     st.markdown("### Basic Details")
     c1, c2, c3 = st.columns(3)
@@ -331,6 +434,8 @@ def page_employee_management():
     c1.caption(f"Employee ID (preview): {generate_id(preview_prefix, 'employees')}")
     employee_name = c2.text_input("Employee Name", key="employee_name")
     photo = c3.file_uploader("Photo Upload", type=["jpg", "jpeg", "png"], key="employee_photo")
+    if photo is not None:
+        _render_photo_preview(uploaded_file=photo)
     mobile_number = c1.text_input("Mobile Number", key="employee_mobile")
     address = c2.text_area("Address", key="employee_address")
     blood_group = c3.text_input("Blood Group", key="employee_blood_group")
@@ -344,14 +449,15 @@ def page_employee_management():
     )
 
     d1, d2, d3 = st.columns(3)
-    native_place = d1.text_input("Native Place", key="employee_native_place")
-    aadhaar_number = d2.text_input("Aadhaar Number", key="employee_aadhaar")
-    pan_number = d3.text_input("PAN Number", key="employee_pan")
+    date_of_birth = d1.date_input("Date of Birth", value=None, key="employee_dob")
+    native_place = d2.text_input("Native Place", key="employee_native_place")
+    aadhaar_number = d3.text_input("Aadhaar Number", key="employee_aadhaar")
 
     e1, e2, e3 = st.columns(3)
-    joining_date = e1.date_input("Joining Date", key="employee_joining")
-    leaving_date = e2.date_input("Leaving Date", value=None, key="employee_leaving")
-    status = e3.selectbox("Status", ["Active", "Inactive", "Left"], key="employee_status")
+    pan_number = e1.text_input("PAN Number", key="employee_pan")
+    joining_date = e2.date_input("Joining Date", key="employee_joining")
+    leaving_date = e3.date_input("Leaving Date", value=None, key="employee_leaving")
+    status = st.selectbox("Status", ["Active", "Inactive", "Left"], key="employee_status")
 
     st.markdown("### Job Details")
     with st.expander("Add New Department / Designation"):
@@ -397,9 +503,15 @@ def page_employee_management():
 
     k1, k2, k3 = st.columns(3)
     designation = k1.selectbox("Designation", designations, index=0, key="employee_designation")
+    allowance_amounts = {}
+    allowance_total = 0.0
+    basic_salary = 0.0
     if employee_type == "Company Staff":
         salary_type = k2.selectbox("Salary Type", ["Monthly", "Daily"], key="employee_salary_type")
-        salary_amount = k3.number_input("Salary Amount", min_value=0.0, step=100.0, key="employee_salary_amount")
+        basic_salary = k3.number_input("Basic Salary", min_value=0.0, step=100.0, key="employee_basic_salary")
+        allowance_amounts, allowance_total = _render_employee_allowance_inputs(allowance_heads, prefix="employee")
+        salary_amount = basic_salary + allowance_total
+        st.metric("Total Salary (Rs)", f"{salary_amount:,.2f}")
         l1, l2, l3 = st.columns(3)
         ot_applicable = l1.selectbox("OT Applicable", ["Yes", "No"], key="employee_ot_applicable")
         ot_rate = l2.number_input("OT Rate", min_value=0.0, step=10.0, key="employee_ot_rate")
@@ -434,17 +546,18 @@ def page_employee_management():
             employee_prefix = "EMP" if employee_type == "Company Staff" else "WRK"
             employee_id = generate_id(employee_prefix, "employees")
             photo_path = _save_upload(photo, "uploads/employees", employee_id)
+            dob_text = date_of_birth.strftime(DATE_FMT) if date_of_birth else ""
             conn = get_conn()
             conn.execute(
                 """
                 INSERT INTO employees(
                     employee_id, employee_type, employee_name, photo, mobile_number,
                     address, country, region, district, native_place, blood_group, aadhaar_number,
-                    pan_number, joining_date, leaving_date, status,
+                    pan_number, date_of_birth, joining_date, leaving_date, status,
                     company_or_subcontractor, project_name, department, designation,
-                    reporting_manager, salary_type, salary_amount, ot_applicable,
-                    ot_rate, shift, experience, skills, remarks
-                ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    reporting_manager, salary_type, salary_amount, basic_salary,
+                    ot_applicable, ot_rate, shift, experience, skills, remarks
+                ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """,
                 (
                     employee_id,
@@ -460,6 +573,7 @@ def page_employee_management():
                     blood_group,
                     aadhaar_number,
                     pan_number,
+                    dob_text,
                     joining_date.strftime(DATE_FMT),
                     leaving_date.strftime(DATE_FMT) if status == "Left" and leaving_date else "",
                     status,
@@ -470,6 +584,7 @@ def page_employee_management():
                     "",
                     salary_type,
                     salary_amount,
+                    basic_salary if employee_type == "Company Staff" else 0.0,
                     ot_applicable,
                     ot_rate,
                     "",
@@ -479,6 +594,7 @@ def page_employee_management():
                 ),
             )
             if employee_type == "Company Staff":
+                _save_employee_allowance_components(conn, employee_id, allowance_amounts)
                 conn.execute(
                     """
                     INSERT INTO staff(staff_id, staff_name, department, designation, mobile, salary, region, manager_name, country, state)
@@ -539,24 +655,95 @@ def page_employee_management():
                     )
             conn.commit()
             conn.close()
-            st.success(f"Employee saved. ID: {employee_id}")
+            _clear_employee_form_keys()
+            st.session_state.employee_last_saved_id = employee_id
             st.rerun()
 
     conn = get_conn()
-    st.dataframe(
-        pd.read_sql_query(
-            """
-            SELECT employee_id, employee_name, employee_type, country, region, district, department,
-                   designation, project_name, salary_type, salary_amount, status
-            FROM employees
-            ORDER BY id DESC
-            """,
-            conn,
-        ),
-        width="stretch",
-        hide_index=True,
+    employees_df = pd.read_sql_query(
+        """
+        SELECT employee_id, employee_name, employee_type, mobile_number, date_of_birth, joining_date,
+               country, region, district, department, designation, project_name,
+               salary_type, salary_amount, basic_salary, status, photo
+        FROM employees
+        ORDER BY id DESC
+        """,
+        conn,
+    )
+    allowance_summary_df = pd.read_sql_query(
+        """
+        SELECT employee_id,
+               GROUP_CONCAT(allowance_head, ', ') AS allowance_heads,
+               COALESCE(SUM(amount), 0) AS allowance_total
+        FROM employee_allowance_components
+        WHERE UPPER(COALESCE(status, 'ACTIVE')) = 'ACTIVE'
+        GROUP BY employee_id
+        """,
+        conn,
     )
     conn.close()
+    if not allowance_summary_df.empty:
+        employees_df = employees_df.merge(allowance_summary_df, on="employee_id", how="left")
+        employees_df["allowance_heads"] = employees_df["allowance_heads"].fillna("")
+        employees_df["allowance_total"] = employees_df["allowance_total"].fillna(0)
+
+    st.markdown("### Employee Register")
+    st.dataframe(employees_df.drop(columns=["photo"], errors="ignore"), width="stretch", hide_index=True)
+
+    st.markdown("### View Full Staff Details")
+    if employees_df.empty:
+        st.caption("No employees saved yet.")
+    else:
+        pick_labels = {
+            f"{row['employee_id']} | {row['employee_name']}": row["employee_id"]
+            for _, row in employees_df.iterrows()
+        }
+        pick = st.selectbox("Select Staff", [""] + list(pick_labels.keys()), key="view_employee_pick")
+        if pick and pick in pick_labels:
+            emp_id = pick_labels[pick]
+            row = employees_df[employees_df["employee_id"] == emp_id].iloc[0]
+            c1, c2 = st.columns([1, 2])
+            with c1:
+                _render_photo_preview(saved_path=row.get("photo", "") or "")
+            with c2:
+                for col in [
+                    "employee_id",
+                    "employee_name",
+                    "employee_type",
+                    "date_of_birth",
+                    "mobile_number",
+                    "department",
+                    "designation",
+                    "project_name",
+                    "basic_salary",
+                    "allowance_heads",
+                    "allowance_total",
+                    "salary_amount",
+                    "status",
+                ]:
+                    if col in row.index:
+                        st.write(f"**{col.replace('_', ' ').title()}:** {row.get(col, '')}")
+            allowance_df = _load_employee_allowance_components(emp_id)
+            if not allowance_df.empty:
+                st.markdown("#### Allowance Split-up")
+                st.dataframe(allowance_df, width="stretch", hide_index=True)
+            conn = get_conn()
+            docs_df = pd.read_sql_query(
+                """
+                SELECT document_type, file_path, uploaded_at
+                FROM document_uploads
+                WHERE entity_type = 'employee' AND entity_id = ?
+                ORDER BY id DESC
+                """,
+                conn,
+                params=(emp_id,),
+            )
+            conn.close()
+            st.markdown("#### Attached Documents")
+            if docs_df.empty:
+                st.caption("No attached documents for this staff.")
+            else:
+                st.dataframe(docs_df, width="stretch", hide_index=True)
 
 
 def page_subcontractors():

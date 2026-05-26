@@ -326,6 +326,7 @@ def init_db():
             blood_group TEXT,
             aadhaar_number TEXT,
             pan_number TEXT,
+            date_of_birth TEXT,
             joining_date TEXT,
             leaving_date TEXT,
             status TEXT,
@@ -336,6 +337,11 @@ def init_db():
             reporting_manager TEXT,
             salary_type TEXT,
             salary_amount REAL,
+            basic_salary REAL,
+            room_allowance REAL,
+            food_allowance REAL,
+            telephone_allowance REAL,
+            other_allowance REAL,
             ot_applicable TEXT,
             ot_rate REAL,
             shift TEXT,
@@ -409,6 +415,52 @@ def init_db():
             net_salary REAL,
             salary_status TEXT,
             paid_date TEXT
+        );
+        CREATE TABLE IF NOT EXISTS allowance_heads(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            head_name TEXT UNIQUE
+        );
+        CREATE TABLE IF NOT EXISTS employee_allowance_components(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            employee_id TEXT,
+            allowance_head TEXT,
+            amount REAL,
+            status TEXT
+        );
+        CREATE TABLE IF NOT EXISTS employee_salary_revisions(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            revision_id TEXT,
+            employee_id TEXT,
+            revision_date TEXT,
+            previous_salary REAL,
+            revised_salary REAL,
+            increment_amount REAL,
+            reason TEXT,
+            basic_salary REAL,
+            remarks TEXT,
+            created_by TEXT,
+            created_at TEXT
+        );
+        CREATE TABLE IF NOT EXISTS employee_bonus(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            bonus_id TEXT,
+            employee_id TEXT,
+            bonus_date TEXT,
+            bonus_month TEXT,
+            amount REAL,
+            remarks TEXT,
+            created_by TEXT,
+            created_at TEXT
+        );
+        CREATE TABLE IF NOT EXISTS employee_bata(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            bata_id TEXT,
+            employee_id TEXT,
+            bata_date TEXT,
+            amount REAL,
+            remarks TEXT,
+            created_by TEXT,
+            created_at TEXT
         );
         CREATE TABLE IF NOT EXISTS payments(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -691,6 +743,12 @@ def init_db():
         "employees": (
             ("country", "TEXT"),
             ("district", "TEXT"),
+            ("date_of_birth", "TEXT"),
+            ("basic_salary", "REAL"),
+            ("room_allowance", "REAL"),
+            ("food_allowance", "REAL"),
+            ("telephone_allowance", "REAL"),
+            ("other_allowance", "REAL"),
         ),
     }
     for table, columns in migrations.items():
@@ -809,6 +867,20 @@ def init_db():
     _seed_if_empty(cur, "designations", "designation_name", ["Manager", "Engineer", "Supervisor", "Staff", "Worker"])
     _seed_if_empty(cur, "payment_heads", "head_name", ["Salary", "Advance", "Sub Contractor", "Material", "Fuel", "Site", "Transport", "Office", "Labour", "Other"])
     _seed_if_empty(cur, "expense_heads", "head_name", ["Material", "Fuel", "Site", "Transport", "Office", "Labour", "Miscellaneous"])
+    _seed_if_empty(
+        cur,
+        "allowance_heads",
+        "head_name",
+        [
+            "Room Allowance",
+            "Food Allowance",
+            "Telephone Allowance",
+            "Transport Allowance",
+            "Special Allowance",
+            "Site Allowance",
+            "Other Allowance",
+        ],
+    )
     _seed_dashboard_settings(cur)
 
     cur.execute("SELECT COUNT(*) FROM salary_rules")

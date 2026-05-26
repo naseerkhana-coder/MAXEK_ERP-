@@ -386,35 +386,107 @@ def render_dashboard_home(user_name: str):
         st.info("All dashboard sections are hidden. Enable them from Settings > Dashboard.")
 
 
+_LOGIN_PAGE_CSS = """
+body.maxek-login-page section.main {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: calc(100vh - 1rem);
+  padding-top: 0 !important;
+}
+body.maxek-login-page section.main .block-container {
+  max-width: 360px !important;
+  width: 360px !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  padding: 2rem 1.5rem 1.25rem !important;
+  background: rgba(255, 255, 255, 0.96) !important;
+  border-radius: 18px !important;
+  border: 1px solid #e5e7eb !important;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08) !important;
+}
+body.maxek-login-page [data-testid="stTextInput"],
+body.maxek-login-page [data-testid="stTextInput"] > div,
+body.maxek-login-page [data-testid="stTextInput"] > div > div {
+  width: 280px !important;
+  max-width: 280px !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+body.maxek-login-page [data-testid="stTextInput"] input {
+  width: 280px !important;
+  max-width: 280px !important;
+  min-width: 0 !important;
+  height: 42px !important;
+  font-size: 0.95rem !important;
+  box-sizing: border-box !important;
+}
+body.maxek-login-page div.stButton {
+  width: 280px !important;
+  max-width: 280px !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+body.maxek-login-page div.stButton button {
+  width: 280px !important;
+  max-width: 280px !important;
+  height: 42px !important;
+}
+body.maxek-login-page input:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0 1000px #ffffff inset !important;
+  box-shadow: 0 0 0 1000px #ffffff inset !important;
+}
+.maxek-login-decoy {
+  position: absolute;
+  left: -9999px;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+"""
+
+
 def show_login_page():
     inject_global_css()
+    add_watermark()
+    st.markdown(f"<style>{_LOGIN_PAGE_CSS}</style>", unsafe_allow_html=True)
     st.markdown(
         """
         <div class="maxek-login-marker"></div>
+        <div class="maxek-login-decoy" aria-hidden="true">
+            <input type="text" name="fake_username" tabindex="-1" autocomplete="username" />
+            <input type="password" name="fake_password" tabindex="-1" autocomplete="current-password" />
+        </div>
         <script>
-        setTimeout(function () {
-            document.querySelectorAll('input').forEach(function (el) {
+        function maxekApplyLoginPage() {
+            var onLogin = !!document.querySelector('.maxek-login-marker');
+            document.body.classList.toggle('maxek-login-page', onLogin);
+            if (!onLogin) return;
+            document.querySelectorAll('section.main input[type="text"], section.main input[type="password"]').forEach(function (el) {
+                if (el.closest('.maxek-login-decoy')) return;
+                el.style.width = '280px';
+                el.style.maxWidth = '280px';
                 el.setAttribute('autocomplete', el.type === 'password' ? 'new-password' : 'off');
-                el.setAttribute('autocorrect', 'off');
-                el.setAttribute('autocapitalize', 'off');
-                el.setAttribute('spellcheck', 'false');
                 el.setAttribute('data-lpignore', 'true');
-                el.setAttribute('data-form-type', 'other');
-                if (el.type === 'password') {
-                    el.setAttribute('name', 'maxek-password-field');
-                } else {
-                    el.setAttribute('name', 'maxek-username-field');
-                }
+                el.setAttribute('data-1p-ignore', 'true');
             });
-        }, 150);
+        }
+        maxekApplyLoginPage();
+        setTimeout(maxekApplyLoginPage, 80);
+        setTimeout(maxekApplyLoginPage, 400);
         </script>
         """,
         unsafe_allow_html=True,
     )
+
     uri = _logo_data_uri()
-    logo_block = f'<img src="{uri}" class="maxek-login-logo" alt="MAXEK" />' if uri else ""
-    if logo_block:
-        st.markdown(logo_block, unsafe_allow_html=True)
+    if uri:
+        st.markdown(
+            f'<img src="{uri}" class="maxek-login-logo" alt="MAXEK" />',
+            unsafe_allow_html=True,
+        )
     st.markdown(
         """
         <div class="maxek-login-title">MAXEK ERP Login</div>
@@ -424,12 +496,14 @@ def show_login_page():
     )
     username = st.text_input("Username", key="login_user", placeholder="Enter username")
     password = st.text_input("Password", type="password", key="login_pass", placeholder="Enter password")
-    if st.button("Login", type="primary", width="stretch"):
+    login_clicked = st.button("Login", type="primary", key="login_btn")
+
+    if login_clicked:
         conn = get_conn()
         cur = conn.cursor()
         cur.execute(
             "SELECT full_name, role FROM users WHERE username=? AND password=?",
-            (username, password),
+            (username.strip(), password),
         )
         row = cur.fetchone()
         conn.close()

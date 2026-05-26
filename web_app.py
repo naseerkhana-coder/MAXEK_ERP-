@@ -17,6 +17,7 @@ from modules.pages import (
 )
 from modules.store import page_store
 from modules.ui import (
+    add_watermark,
     inject_global_css,
     render_dashboard_home,
     render_page_header,
@@ -108,6 +109,7 @@ def main():
         return
 
     inject_global_css()
+    add_watermark()
     st.markdown('<div class="maxek-app-layer">', unsafe_allow_html=True)
     with st.sidebar:
         render_sidebar(
