@@ -432,14 +432,44 @@ div.stFileUploader label {
 
 .stTabs [data-baseweb="tab-list"] {
   gap: 0.45rem;
-  background: #edf2ff;
+  background: #f8fafc;
   border-radius: 12px;
-  padding: 0.35rem;
+  border: 1px solid #e2e8f0;
+  padding: 0.45rem;
+  overflow-x: auto;
+  flex-wrap: nowrap;
 }
 
 .stTabs [data-baseweb="tab"] {
-  border-radius: 8px;
+  border-radius: 9px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #334155;
+  font-weight: 500;
+  font-size: 0.8rem;
+  letter-spacing: 0.01em;
+  min-height: 2rem;
+  padding: 0.4rem 0.7rem;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.stTabs [data-baseweb="tab"] * {
+  color: inherit !important;
+}
+
+.stTabs [data-baseweb="tab"][aria-selected="true"] {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8) !important;
+  color: #ffffff !important;
+  border-color: #1d4ed8 !important;
   font-weight: 600;
+  box-shadow: 0 4px 10px rgba(37, 99, 235, 0.25);
+}
+
+.stTabs [data-baseweb="tab"][aria-selected="false"]:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+  border-color: #cbd5e1;
 }
 
 .stDataFrame {

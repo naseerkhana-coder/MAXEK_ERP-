@@ -33,6 +33,7 @@ NAV_ITEMS = [
     ("billing", "Billing", "🧾"),
     ("payroll", "Payroll", "💰"),
     ("finance", "Finance", "💳"),
+    ("store", "Store", "🏬"),
     ("clients_projects", "Clients & Projects", "🏢"),
     ("subcontractors", "Sub Contractors", "🧱"),
     ("reports", "Reports", "📊"),

@@ -15,6 +15,7 @@ from modules.pages import (
     page_settings,
     page_subcontractors,
 )
+from modules.store import page_store
 from modules.ui import (
     inject_global_css,
     render_dashboard_home,
@@ -32,6 +33,7 @@ PAGE_HANDLERS = {
     "billing": page_billing,
     "payroll": page_payroll,
     "finance": page_finance,
+    "store": page_store,
     "clients_projects": page_clients_projects,
     "reports": page_reports,
     "settings": page_settings,
@@ -40,10 +42,10 @@ PAGE_HANDLERS = {
 ROLE_PERMISSIONS = {
     "Admin": set(PAGE_HANDLERS.keys()) | {"dashboard"},
     "HR": {"dashboard", "employee_management", "attendance", "reports", "settings"},
-    "MD": {"dashboard", "finance", "dpr", "billing", "reports"},
-    "Accountant": {"dashboard", "payroll", "finance", "dpr", "billing", "reports"},
-    "Project Manager": {"dashboard", "clients_projects", "subcontractors", "attendance", "finance", "dpr", "reports"},
-    "Site Engineer": {"dashboard", "attendance", "clients_projects", "subcontractors", "finance", "dpr", "reports"},
+    "MD": {"dashboard", "finance", "store", "dpr", "billing", "reports"},
+    "Accountant": {"dashboard", "payroll", "finance", "store", "dpr", "billing", "reports"},
+    "Project Manager": {"dashboard", "clients_projects", "subcontractors", "attendance", "finance", "store", "dpr", "reports"},
+    "Site Engineer": {"dashboard", "attendance", "clients_projects", "subcontractors", "finance", "store", "dpr", "reports"},
 }
 
 
