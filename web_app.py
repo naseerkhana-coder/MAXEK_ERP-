@@ -97,7 +97,7 @@ def main():
         page_title="MAXEK ERP",
         page_icon="🏗️",
         layout="wide",
-        initial_sidebar_state="collapsed",
+        initial_sidebar_state="expanded",
     )
 
     init_db()
