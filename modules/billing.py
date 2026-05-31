@@ -9,6 +9,8 @@ from modules.database import (
     DATE_FMT,
     generate_id,
     get_conn,
+    log_finance_audit,
+    next_document_number,
     load_client_names,
     load_pending_client_bill_dprs,
     load_project_boq_by_project,
@@ -136,7 +138,15 @@ def _render_client_bill_tab():
     boq_df = load_project_boq_by_project(project_name) if project_name else pd.DataFrame()
     if not boq_df.empty:
         with st.expander("Manual BOQ line (without DPR)"):
-            boq_map = {f"{r['boq_number']} | {r['description'][:30]}": r for _, r in boq_df.iterrows()}
+            boq_map = {}
+            seen_labels: dict[str, int] = {}
+            for _, r in boq_df.iterrows():
+                base = f"{r['boq_number']} | {str(r.get('description') or '')[:30]}"
+                seen_labels[base] = seen_labels.get(base, 0) + 1
+                label = base
+                if seen_labels[base] > 1 and "id" in boq_df.columns:
+                    label = f"{base} (#{int(r['id'])})"
+                boq_map[label] = r
             manual_pick = st.selectbox("BOQ", [""] + list(boq_map.keys()), key="cb_manual_boq")
             m1, m2 = st.columns(2)
             manual_qty = m1.number_input("Quantity", min_value=0.0, step=0.01, key="cb_manual_qty")
@@ -251,15 +261,17 @@ def _render_sub_bill_tab(bill_type, preview_fn, title):
         bill_id = generate_id("SBL", "subcontractor_bills")
         labour_total = float(preview["labour_amount"]) + float(preview.get("ot_amount", 0))
         conn = get_conn()
+        doc_no = next_document_number("subcontractor_bill", conn=conn)
         conn.execute(
             """
             INSERT INTO subcontractor_bills(
-                bill_id, bill_date, bill_month, subcontractor_name, bill_type,
+                bill_id, document_no, bill_date, bill_month, subcontractor_name, bill_type,
                 labour_amount, ot_amount, boq_amount, advance_amount, total_amount, net_amount, remarks, status
-            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 bill_id,
+                doc_no,
                 datetime.now().strftime(DATE_FMT),
                 preview["bill_month"],
                 sub_name,
@@ -274,10 +286,21 @@ def _render_sub_bill_tab(bill_type, preview_fn, title):
                 "Generated",
             ),
         )
+        log_finance_audit(
+            conn,
+            "subcontractor_bill",
+            bill_id,
+            "Created",
+            st.session_state.get("user_name", "User"),
+            "",
+            "Generated",
+            remarks,
+            {"document_no": doc_no},
+        )
         conn.commit()
         conn.close()
         st.session_state[f"print_sub_bill_id"] = bill_id
-        st.success(f"Bill generated. ID: {bill_id}")
+        st.success(f"Bill generated: {doc_no}")
         st.rerun()
 
 

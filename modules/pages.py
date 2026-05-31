@@ -15,7 +15,11 @@ from modules.database import (
     DASHBOARD_SECTION_LABELS,
     DASHBOARD_SECTION_ORDER_DEFAULT,
     DATE_FMT,
+    ATTENDANCE_DEFAULT_BREAK_HOURS,
+    ATTENDANCE_DEFAULT_IN_TIME,
+    ATTENDANCE_DEFAULT_OUT_TIME,
     calculate_hours,
+    parse_flexible_time,
     ensure_district,
     ensure_region,
     generate_id,
@@ -52,10 +56,13 @@ from modules.database import (
     payroll_preview,
     save_dashboard_role_visibility,
     save_dashboard_settings,
+    resolve_subcontractor_name,
     save_payroll_record,
     subcontractor_bill_preview,
+    subcontractor_timesheet_day_amount,
     update_payroll_workflow,
 )
+from modules.roles import ERP_USER_ROLES, can_manage_users, display_role_name, is_management, is_super_admin
 from modules.payroll_engine import (
     ATTENDANCE_STATUSES,
     PAYMENT_MODES,
@@ -1195,6 +1202,9 @@ def page_employee_management():
 
 def page_subcontractors():
     st.subheader("Sub Contractors")
+    hint = st.session_state.pop("subcontractor_hint", None)
+    if hint:
+        st.caption(f"Go to tab: **{hint}**")
     _ensure_subcontractor_draft()
     projects = load_project_names()
     project_options = [""] + projects
@@ -1680,20 +1690,98 @@ def _attendance_widget_suffix(edit_id):
     return f"_e{int(edit_id)}" if edit_id else "_new"
 
 
+def _normalize_attendance_times(in_time, out_time):
+    """Parse flexible in/out times; returns (HH:MM, HH:MM) or raises ValueError."""
+    in_raw = str(in_time or "").strip()
+    out_raw = str(out_time or "").strip()
+    if not in_raw and not out_raw:
+        return "", ""
+    try:
+        in_norm = parse_flexible_time(in_raw, is_out_time=False) if in_raw else ""
+        out_norm = parse_flexible_time(out_raw, is_out_time=True) if out_raw else ""
+    except ValueError as exc:
+        raise ValueError(str(exc)) from exc
+    if in_raw and not in_norm:
+        raise ValueError("Invalid In Time.")
+    if out_raw and not out_norm:
+        raise ValueError("Invalid Out Time.")
+    return in_norm, out_norm
+
+
 def _safe_attendance_hours(in_time, out_time, break_time, fixed_hours, ot_allowed):
     if not str(in_time or "").strip() or not str(out_time or "").strip():
         return 0.0, 0.0
     try:
-        return calculate_hours(in_time, out_time, break_time, fixed_hours, ot_allowed)
-    except (ValueError, TypeError):
+        in_norm, out_norm = _normalize_attendance_times(in_time, out_time)
+        if not in_norm or not out_norm:
+            return 0.0, 0.0
+        return calculate_hours(in_norm, out_norm, break_time, fixed_hours, ot_allowed)
+    except (ValueError, TypeError) as exc:
+        st.session_state["attendance_hours_error"] = str(exc)
         return 0.0, 0.0
+
+
+def _render_subcontractor_payment_panel(
+    sub_contractor,
+    project_name,
+    designation,
+    working_hours,
+    status,
+    total_hours,
+    ot_hours,
+    applied_rate,
+    applied_ot_rate,
+    ot_allowed,
+    rate_card,
+    attendance_date,
+    fixed_working_hours,
+):
+    st.markdown("### Sub Contractor Payment (this timesheet)")
+    if not sub_contractor:
+        st.warning("No sub contractor linked on this worker. Set **Company / Sub Contractor** in Employee Master.")
+        return
+    sub_name = resolve_subcontractor_name(sub_contractor)
+    if not rate_card:
+        st.warning(
+            f"No active manpower rate found for **{sub_name}** · project **{project_name or '—'}** · "
+            f"**{designation or '—'}** · **{working_hours}**. "
+            "Add it under **Sub Contractors → Manpower Rates**."
+        )
+    else:
+        st.caption(
+            f"Rate card: Rs {applied_rate:,.2f}/day · OT {'Yes' if ot_allowed else 'No'}"
+            + (f" · Rs {applied_ot_rate:,.2f}/hr OT" if ot_allowed else "")
+            + f" · {fixed_working_hours:g}h standard shift"
+        )
+    labour_pay, ot_pay, total_pay = subcontractor_timesheet_day_amount(
+        status, applied_rate, ot_hours, applied_ot_rate, ot_allowed
+    )
+    p1, p2, p3, p4, p5 = st.columns(5)
+    p1.metric("Worked Hours", f"{total_hours:,.2f}")
+    p2.metric("OT Hours", f"{ot_hours:,.2f}")
+    p3.metric("Day Pay", f"Rs {labour_pay:,.2f}")
+    p4.metric("OT Pay", f"Rs {ot_pay:,.2f}")
+    p5.metric("Total Pay", f"Rs {total_pay:,.2f}")
+    if status in ("Present", "Half Day") and total_hours <= 0:
+        st.info("Enter **In Time** and **Out Time** (e.g. 8 and 5) to calculate OT hours.")
+    bill_month = attendance_date.strftime("%m/%Y")
+    preview = subcontractor_bill_preview(sub_name, bill_month)
+    st.markdown(f"#### Sub contractor month total — {bill_month}")
+    m1, m2, m3, m4, m5 = st.columns(5)
+    m1.metric("Labour", f"Rs {preview['labour_amount']:,.2f}")
+    m2.metric("OT", f"Rs {preview['ot_amount']:,.2f}")
+    m3.metric("BOQ", f"Rs {preview['boq_amount']:,.2f}")
+    m4.metric("Advances", f"Rs {preview['advance_amount']:,.2f}")
+    m5.metric("Net Bill", f"Rs {preview['net_amount']:,.2f}")
+    st.caption("Generate formal bill under **Sub Contractors → Bills** tab.")
 
 
 def page_attendance():
     st.subheader("Attendance Entry")
     st.caption(
         "Enter only Present, Absent, Leave, or Half Day. "
-        "Weekly off and holidays are calculated automatically in payroll."
+        "Weekly off and holidays are calculated automatically in payroll. "
+        "For **Sub Contractor Workers**, daily pay and OT appear below the form; monthly bill is under **Sub Contractors → Bills**."
     )
 
     employee_options = load_employee_options()
@@ -1754,14 +1842,18 @@ def page_attendance():
     in_default = (
         edit_record.get("in_time") or edit_record.get("start_time") or ""
         if edit_record
-        else ""
+        else ATTENDANCE_DEFAULT_IN_TIME
     )
     out_default = (
         edit_record.get("out_time") or edit_record.get("end_time") or ""
         if edit_record
-        else ""
+        else ATTENDANCE_DEFAULT_OUT_TIME
     )
-    break_default = float(edit_record.get("break_hours") or 0) if edit_record else 0.0
+    break_default = (
+        float(edit_record.get("break_hours") or 0)
+        if edit_record
+        else ATTENDANCE_DEFAULT_BREAK_HOURS
+    )
     remarks_default = (edit_record.get("remarks") or "") if edit_record else ""
 
     fwh = float(edit_record.get("fixed_working_hours") or 8) if edit_record else 8.0
@@ -1800,8 +1892,18 @@ def page_attendance():
     )
 
     d1, d2, d3, d4 = st.columns(4)
-    in_time = d1.text_input("In Time", value=in_default, key=f"attendance_in_time{widget_suffix}")
-    out_time = d2.text_input("Out Time", value=out_default, key=f"attendance_out_time{widget_suffix}")
+    in_time = d1.text_input(
+        "In Time",
+        value=in_default,
+        key=f"attendance_in_time{widget_suffix}",
+        placeholder="8 or 08:00",
+    )
+    out_time = d2.text_input(
+        "Out Time",
+        value=out_default,
+        key=f"attendance_out_time{widget_suffix}",
+        placeholder="5 or 17:00",
+    )
     break_time = d3.number_input(
         "Break Hours",
         min_value=0.0,
@@ -1810,6 +1912,10 @@ def page_attendance():
         key=f"attendance_break_hours{widget_suffix}",
     )
     remarks = d4.text_input("Remarks", value=remarks_default, key=f"attendance_remarks{widget_suffix}")
+    st.caption(
+        "Default shift: 8:00 AM to 5:00 PM (1 hr break). "
+        "Type shorthand — In: **8**, **8.30**, **830** · Out: **5** (= 5 PM), **17**, **17.30** — saved as 24-hour time."
+    )
 
     fixed_working_hours = 8.0
     applied_rate = float(employee.get("salary_amount") or 0)
@@ -1821,7 +1927,9 @@ def page_attendance():
         else ""
     )
 
+    rate_card = None
     if employee.get("employee_type") == "Sub Contractor Worker":
+        sub_contractor = resolve_subcontractor_name(sub_contractor or employee.get("company_or_subcontractor") or "")
         working_hours = st.selectbox(
             "Working Hours",
             ["8 Hours", "10 Hours", "12 Hours"],
@@ -1839,21 +1947,67 @@ def page_attendance():
         ot_allowed = str(rate_card.get("ot_applicable") or "No").lower() == "yes" if rate_card else ot_allowed
         applied_ot_rate = float(rate_card.get("ot_rate") or 0) if rate_card else (applied_rate / fixed_working_hours if ot_allowed and fixed_working_hours else 0.0)
 
+    st.session_state.pop("attendance_hours_error", None)
     total_hours, ot_hours = _safe_attendance_hours(
         in_time, out_time, break_time, fixed_working_hours, ot_allowed
     )
+    if st.session_state.get("attendance_hours_error"):
+        st.warning(st.session_state["attendance_hours_error"])
     attendance_category, payment_type, holiday_name = infer_attendance_category(employee, attendance_date, status)
     if attendance_category == "Holiday Worked":
         st.info(f"Holiday worked: {holiday_name or 'Paid holiday'} — OT calculated automatically.")
     elif attendance_category == "Weekly Off Worked":
         st.info("Weekly off day with attendance — counted as Weekly Off Worked with OT.")
 
-    h1, h2 = st.columns(2)
-    h1.text_input("Worked Hours", value=str(total_hours), disabled=True)
-    h2.text_input("OT Hours", value=str(ot_hours), disabled=True)
+    h1, h2, h3 = st.columns(3)
+    h1.text_input("Worked Hours", value=f"{total_hours:.2f}", disabled=True, key=f"att_show_worked{widget_suffix}")
+    h2.text_input("OT Hours", value=f"{ot_hours:.2f}", disabled=True, key=f"att_show_ot{widget_suffix}")
+    day_labour, day_ot, day_total = subcontractor_timesheet_day_amount(
+        status, applied_rate, ot_hours, applied_ot_rate, ot_allowed
+    )
+    h3.text_input(
+        "Day Total (Rs)",
+        value=f"{day_total:,.2f}" if employee.get("employee_type") == "Sub Contractor Worker" else "",
+        disabled=True,
+        key=f"att_show_pay{widget_suffix}",
+    )
+    try:
+        preview_in, preview_out = _normalize_attendance_times(in_time, out_time)
+        if preview_in or preview_out:
+            st.caption(f"Saved as: In **{preview_in or '—'}** · Out **{preview_out or '—'}**")
+    except ValueError as exc:
+        st.warning(str(exc))
+
+    if employee.get("employee_type") == "Sub Contractor Worker":
+        _render_subcontractor_payment_panel(
+            sub_contractor,
+            project_name,
+            employee.get("designation", ""),
+            working_hours,
+            status,
+            total_hours,
+            ot_hours,
+            applied_rate,
+            applied_ot_rate,
+            ot_allowed,
+            rate_card,
+            attendance_date,
+            fixed_working_hours,
+        )
 
     save_label = f"UPDATE TIMESHEET (#{edit_id})" if edit_id else "SAVE ATTENDANCE"
     if st.button(save_label, type="primary", width="stretch", key=f"attendance_save_btn{widget_suffix}"):
+        try:
+            in_time, out_time = _normalize_attendance_times(in_time, out_time)
+        except ValueError as exc:
+            st.error(str(exc))
+            st.stop()
+        if status in ("Present", "Half Day") and (not in_time or not out_time):
+            st.error("In Time and Out Time are required for Present / Half Day.")
+            st.stop()
+        total_hours, ot_hours = _safe_attendance_hours(
+            in_time, out_time, break_time, fixed_working_hours, ot_allowed
+        )
         conn = get_conn()
         attendance_date_str = attendance_date.strftime(DATE_FMT)
         if not edit_id:
@@ -1874,6 +2028,10 @@ def page_attendance():
                 conn.close()
                 st.error("Another timesheet already exists for this date.")
                 st.stop()
+        if employee.get("employee_type") == "Sub Contractor Worker":
+            sub_contractor = resolve_subcontractor_name(
+                sub_contractor or employee.get("company_or_subcontractor") or ""
+            )
         fields = {
             "project_name": project_name,
             "attendance_date": attendance_date_str,
@@ -1895,12 +2053,26 @@ def page_attendance():
             "applied_rate": applied_rate,
             "applied_ot_rate": applied_ot_rate,
         }
+        day_labour, day_ot, day_total = subcontractor_timesheet_day_amount(
+            status, applied_rate, ot_hours, applied_ot_rate, ot_allowed
+        )
         if edit_id:
             update_attendance_record(edit_id, fields)
             conn.close()
             st.session_state.pop("attendance_edit_id", None)
-            st.success("Timesheet updated.")
+            if employee.get("employee_type") == "Sub Contractor Worker":
+                st.success(
+                    f"Timesheet updated. Worked {total_hours:.2f}h · OT {ot_hours:.2f}h · Pay Rs {day_total:,.2f}."
+                )
+            else:
+                st.success("Timesheet updated.")
             st.rerun()
+        success_msg = (
+            f"Attendance saved. Worked {total_hours:.2f}h · OT {ot_hours:.2f}h · "
+            f"Pay Rs {day_total:,.2f} (day Rs {day_labour:,.2f} + OT Rs {day_ot:,.2f})."
+            if employee.get("employee_type") == "Sub Contractor Worker"
+            else "Attendance saved."
+        )
         conn.execute(
             """
             INSERT INTO attendance(
@@ -1944,7 +2116,7 @@ def page_attendance():
         )
         conn.commit()
         conn.close()
-        st.success("Attendance saved.")
+        st.success(success_msg)
         st.rerun()
 
 
@@ -1954,7 +2126,7 @@ def _render_attendance_timesheet_list(employee_id, employee):
     history_df = pd.read_sql_query(
         """
         SELECT id, attendance_date, project_name, in_time, out_time, break_hours,
-               total_hours, ot_hours, attendance_category, status, remarks
+               total_hours, ot_hours, applied_rate, applied_ot_rate, attendance_category, status, remarks
         FROM attendance
         WHERE employee_id = ?
         ORDER BY id DESC
@@ -1967,8 +2139,50 @@ def _render_attendance_timesheet_list(employee_id, employee):
         st.caption("No timesheet entries for this employee yet.")
         return
 
+    if str(employee.get("employee_type") or "") == "Sub Contractor Worker":
+        display_rows = []
+        for _, row in history_df.iterrows():
+            ot_allowed_row = float(row.get("applied_ot_rate") or 0) > 0
+            labour, ot_pay, total = subcontractor_timesheet_day_amount(
+                row["status"],
+                row.get("applied_rate"),
+                row.get("ot_hours"),
+                row.get("applied_ot_rate"),
+                ot_allowed_row,
+            )
+            display_rows.append(
+                {
+                    **row.to_dict(),
+                    "ot_pay": ot_pay,
+                    "day_pay": total,
+                }
+            )
+        show_df = pd.DataFrame(display_rows)
+        st.dataframe(
+            show_df[
+                [
+                    "attendance_date",
+                    "status",
+                    "project_name",
+                    "in_time",
+                    "out_time",
+                    "total_hours",
+                    "ot_hours",
+                    "applied_rate",
+                    "applied_ot_rate",
+                    "ot_pay",
+                    "day_pay",
+                    "remarks",
+                ]
+            ],
+            width="stretch",
+            hide_index=True,
+        )
+    else:
+        st.dataframe(history_df.drop(columns=["id"], errors="ignore"), width="stretch", hide_index=True)
+
     options = {
-        f"{row['attendance_date']} | {row['status']} | {row['project_name'] or '—'} | {row['total_hours']}h": int(row["id"])
+        f"{row['attendance_date']} | {row['status']} | {row['project_name'] or '—'} | {row['total_hours']}h | OT {row['ot_hours']}h": int(row["id"])
         for _, row in history_df.iterrows()
     }
     pick_key = "attendance_ts_pick"
@@ -1995,12 +2209,6 @@ def _render_attendance_timesheet_list(employee_id, employee):
         st.rerun()
 
     render_delete_confirm_dialog("attendance_ts", _do_delete_ts, message="Delete this timesheet entry?")
-
-    st.dataframe(
-        history_df.drop(columns=["id"]),
-        width="stretch",
-        hide_index=True,
-    )
 
 
 def _payroll_grid_cell(label, value):
@@ -2245,6 +2453,7 @@ def _render_delete_saved_payroll(employee_id=None, key_prefix="payroll_del"):
 
 def page_payroll():
     st.subheader("Payroll")
+    role = st.session_state.get("user_role", "Admin")
     hr_tab, md_tab, accounts_tab, advance_tab = st.tabs(
         ["HR Payroll", "MD Approval", "Accounts Payment", "Sub Contractor Advances"]
     )
@@ -2334,48 +2543,51 @@ def page_payroll():
             _render_delete_saved_payroll(employee_id, key_prefix="hr_payroll_del")
 
     with md_tab:
-        pending = list_payroll_by_workflow("Submitted to MD")
-        if pending.empty:
-            st.info("No payroll pending MD approval.")
+        if not is_management(role):
+            st.info("MD / Super Admin approval is required here.")
         else:
-            labels = {
-                f"{row['employee_name']} | {row['payroll_month']} | Rs {row['net_salary']:,.2f}": row["payroll_id"]
-                for _, row in pending.iterrows()
-            }
-            pick = st.selectbox("Select payroll", list(labels.keys()), key="md_payroll_pick")
-            payroll_id = labels[pick]
-            row = pending[pending["payroll_id"] == payroll_id].iloc[0]
-            st.markdown(f"**Employee:** {row['employee_name']}  |  **Month:** {row['payroll_month']}")
-            md_summary = build_month_attendance_summary(row["employee_id"], row["payroll_month"])
-            if md_summary:
-                _render_payroll_summary(
-                    md_summary,
-                    net_salary=float(row.get("net_salary") or 0),
-                    deductions=float(row.get("deductions") or 0),
-                )
+            pending = list_payroll_by_workflow("Submitted to MD")
+            if pending.empty:
+                st.info("No payroll pending MD approval.")
             else:
-                m1, m2, m3, m4 = st.columns(4)
-                m1.metric("Worked Days", int(row.get("worked_days") or 0))
-                m2.metric("Paid WO Days", int(row.get("paid_weekly_off_days") or 0))
-                m3.metric("Paid Holidays", int(row.get("paid_holiday_days") or 0))
-                m4.metric("OT Hours", row.get("total_ot_hours") or 0)
-                m5, m6 = st.columns(2)
-                m5.metric("OT Amount", f"Rs {row.get('ot_amount', 0):,.2f}")
-                m6.metric("Net Salary", f"Rs {row.get('net_salary', 0):,.2f}")
-            md_remarks = st.text_input("MD Remarks", key="md_payroll_remarks")
-            a1, a2, a3 = st.columns(3)
-            if a1.button("APPROVE", type="primary", width="stretch"):
-                update_payroll_workflow(payroll_id, "MD Approved", md_remarks)
-                st.success("Payroll MD Approved.")
-                st.rerun()
-            if a2.button("REJECT", width="stretch"):
-                update_payroll_workflow(payroll_id, "Rejected", md_remarks)
-                st.warning("Payroll rejected.")
-                st.rerun()
-            if a3.button("SEND BACK", width="stretch"):
-                update_payroll_workflow(payroll_id, "Sent Back", md_remarks)
-                st.info("Payroll sent back to HR.")
-                st.rerun()
+                labels = {
+                    f"{row['employee_name']} | {row['payroll_month']} | Rs {row['net_salary']:,.2f}": row["payroll_id"]
+                    for _, row in pending.iterrows()
+                }
+                pick = st.selectbox("Select payroll", list(labels.keys()), key="md_payroll_pick")
+                payroll_id = labels[pick]
+                row = pending[pending["payroll_id"] == payroll_id].iloc[0]
+                st.markdown(f"**Employee:** {row['employee_name']}  |  **Month:** {row['payroll_month']}")
+                md_summary = build_month_attendance_summary(row["employee_id"], row["payroll_month"])
+                if md_summary:
+                    _render_payroll_summary(
+                        md_summary,
+                        net_salary=float(row.get("net_salary") or 0),
+                        deductions=float(row.get("deductions") or 0),
+                    )
+                else:
+                    m1, m2, m3, m4 = st.columns(4)
+                    m1.metric("Worked Days", int(row.get("worked_days") or 0))
+                    m2.metric("Paid WO Days", int(row.get("paid_weekly_off_days") or 0))
+                    m3.metric("Paid Holidays", int(row.get("paid_holiday_days") or 0))
+                    m4.metric("OT Hours", row.get("total_ot_hours") or 0)
+                    m5, m6 = st.columns(2)
+                    m5.metric("OT Amount", f"Rs {row.get('ot_amount', 0):,.2f}")
+                    m6.metric("Net Salary", f"Rs {row.get('net_salary', 0):,.2f}")
+                md_remarks = st.text_input("MD Remarks", key="md_payroll_remarks")
+                a1, a2, a3 = st.columns(3)
+                if a1.button("APPROVE", type="primary", width="stretch"):
+                    update_payroll_workflow(payroll_id, "MD Approved", md_remarks)
+                    st.success("Payroll MD Approved.")
+                    st.rerun()
+                if a2.button("REJECT", width="stretch"):
+                    update_payroll_workflow(payroll_id, "Rejected", md_remarks)
+                    st.warning("Payroll rejected.")
+                    st.rerun()
+                if a3.button("SEND BACK", width="stretch"):
+                    update_payroll_workflow(payroll_id, "Sent Back", md_remarks)
+                    st.info("Payroll sent back to HR.")
+                    st.rerun()
 
     with accounts_tab:
         approved = list_payroll_by_workflow("MD Approved", payment_status="Pending")
@@ -3038,7 +3250,7 @@ def _reset_project_draft_boq():
 
 
 def _insert_project_boq_item(conn, project_id, project_name, client_name, row):
-    boq_item_id = generate_id("PB", "project_boq_items")
+    boq_item_id = generate_id("PB", "project_boq_items", conn=conn)
     quantity = float(row["quantity"])
     approved_rate = float(row["approved_rate"])
     amount = float(row.get("amount", quantity * approved_rate))
@@ -3591,11 +3803,21 @@ def _render_projects_tab():
 
 def page_clients_projects():
     st.subheader("Clients & Projects")
-    tab_clients, tab_projects = st.tabs(["Clients", "Projects"])
-    with tab_clients:
-        _render_clients_tab()
-    with tab_projects:
+    focus = st.session_state.pop("clients_projects_tab", None)
+    if focus == "projects":
         _render_projects_tab()
+        with st.expander("Clients", expanded=False):
+            _render_clients_tab()
+    elif focus == "clients":
+        _render_clients_tab()
+        with st.expander("Projects", expanded=False):
+            _render_projects_tab()
+    else:
+        tab_clients, tab_projects = st.tabs(["Clients", "Projects"])
+        with tab_clients:
+            _render_clients_tab()
+        with tab_projects:
+            _render_projects_tab()
 
 
 def page_reports():
@@ -3714,52 +3936,61 @@ def page_reports():
 
 def page_settings():
     st.subheader("Settings & Masters")
-    tabs = st.tabs(
-        [
-            "Dashboard",
-            "Users",
-            "Countries",
-            "Regions",
-            "Districts",
-            "Holidays",
-            "Weekly Offs",
-            "Departments",
-            "Designations",
-            "Payment Heads",
-            "Expense Heads",
-            "Salary Rules",
-            "OT Rules",
-            "Managers",
-        ]
-    )
-    with tabs[0]:
-        _settings_dashboard()
-    with tabs[1]:
-        _settings_users()
-    with tabs[2]:
-        _settings_lookup("countries", "country_name", "Country")
-    with tabs[3]:
-        _settings_regions()
-    with tabs[4]:
-        _settings_districts()
-    with tabs[5]:
-        _settings_holidays()
-    with tabs[6]:
-        _settings_weekly_offs()
-    with tabs[7]:
-        _settings_lookup("departments", "department_name", "Department")
-    with tabs[8]:
-        _settings_lookup("designations", "designation_name", "Designation")
-    with tabs[9]:
-        _settings_lookup("payment_heads", "head_name", "Payment Head")
-    with tabs[10]:
-        _settings_lookup("expense_heads", "head_name", "Expense Head")
-    with tabs[11]:
-        _settings_rule_table("salary_rules", "Salary Rule")
-    with tabs[12]:
-        _settings_rule_table("ot_rules", "OT Rule")
-    with tabs[13]:
-        _settings_managers()
+    tab_labels = [
+        "Dashboard",
+        "Users",
+        "Countries",
+        "Regions",
+        "Districts",
+        "Holidays",
+        "Weekly Offs",
+        "Departments",
+        "Designations",
+        "Payment Heads",
+        "Expense Heads",
+        "Salary Rules",
+        "OT Rules",
+        "Managers",
+    ]
+    focus = st.session_state.pop("settings_focus", None)
+    focus_index = {
+        "dashboard": 0,
+        "users": 1,
+        "accounts": 9,
+        "company": 0,
+    }.get(focus or "", None)
+
+    tabs = st.tabs(tab_labels)
+    tab_handlers = [
+        _settings_dashboard,
+        _settings_users,
+        lambda: _settings_lookup("countries", "country_name", "Country"),
+        _settings_regions,
+        _settings_districts,
+        _settings_holidays,
+        _settings_weekly_offs,
+        lambda: _settings_lookup("departments", "department_name", "Department"),
+        lambda: _settings_lookup("designations", "designation_name", "Designation"),
+        lambda: _settings_lookup("payment_heads", "head_name", "Payment Head"),
+        lambda: _settings_lookup("expense_heads", "head_name", "Expense Head"),
+        lambda: _settings_rule_table("salary_rules", "Salary Rule"),
+        lambda: _settings_rule_table("ot_rules", "OT Rule"),
+        _settings_managers,
+    ]
+    if focus == "accounts":
+        st.caption("Payment heads and expense heads (accounts master).")
+        with tabs[9]:
+            tab_handlers[9]()
+        with tabs[10]:
+            tab_handlers[10]()
+        return
+    if focus_index is not None:
+        with tabs[focus_index]:
+            tab_handlers[focus_index]()
+        return
+    for tab, handler in zip(tabs, tab_handlers):
+        with tab:
+            handler()
 
 
 def _settings_dashboard():
@@ -4286,9 +4517,19 @@ def _settings_managers():
     conn.close()
 
 
+def page_masters_users():
+    st.subheader("User Management")
+    if not can_manage_users(st.session_state.get("user_role", "Admin")):
+        st.error("Only Super Admin (Owner / MD) can create and manage users.")
+        return
+    _settings_users()
+
+
 def _settings_users():
     st.markdown("### User Creation")
-    st.caption("Create login users for Admin, MD, HR, Accountant, Project Manager, and Site Engineer.")
+    st.caption(
+        "Create login users for Super Admin, System Admin, HR, Accounts, Project Manager, and Site Engineer."
+    )
 
     with st.form("users_form", clear_on_submit=True):
         c1, c2, c3 = st.columns(3)
@@ -4297,7 +4538,7 @@ def _settings_users():
         password = c3.text_input("Password", type="password")
         role = c1.selectbox(
             "Role",
-            ["Admin", "MD", "HR", "Accountant", "Project Manager", "Site Engineer"],
+            ERP_USER_ROLES,
         )
         mobile = c2.text_input("Mobile")
         confirm_password = c3.text_input("Confirm Password", type="password")
@@ -4355,6 +4596,9 @@ def _settings_users():
         params = (search_value, search_value, search_value)
     query += " ORDER BY id DESC"
     users_df = pd.read_sql_query(query, conn, params=params)
+    if not users_df.empty and "role" in users_df.columns:
+        users_df = users_df.copy()
+        users_df["role"] = users_df["role"].map(lambda r: display_role_name(str(r)))
     st.dataframe(users_df, width="stretch", hide_index=True)
     conn.close()
 

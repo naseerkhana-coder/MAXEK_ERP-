@@ -11,6 +11,18 @@ streamlit run web_app.py
 
 Or double-click `start_web.bat`.
 
+## Recommended folder structure (in-progress)
+
+```text
+erp-project/
+├── backend/     # Streamlit ERP UI (currently still uses root web_app.py)
+├── api/         # FastAPI layer for mobile app
+├── frontend/    # Future React/web frontend (optional)
+├── mobile/      # Capacitor / Android / iOS wrapper
+├── uploads/     # user uploads (files/photos)
+└── database/    # SQLite db file lives here (not in git)
+```
+
 ## Stack (current)
 
 | Layer | Technology |

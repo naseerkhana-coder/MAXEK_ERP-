@@ -25,20 +25,13 @@ THEME_CSS_PATH = os.path.join(BASE_DIR, "styles", "theme.css")
 LOGO_SVG_PATH = os.path.join(BASE_DIR, "assets", "logo", "maxek_logo.svg")
 LOGO_PNG_PATH = os.path.join(BASE_DIR, "assets", "logo", "maxek_logo.png")
 
-NAV_ITEMS = [
-    ("dashboard", "Dashboard", "🏠"),
-    ("employee_management", "Employee Management", "👥"),
-    ("attendance", "Attendance", "🕒"),
-    ("dpr", "DPR", "📋"),
-    ("billing", "Billing", "🧾"),
-    ("payroll", "Payroll", "💰"),
-    ("finance", "Finance", "💳"),
-    ("store", "Store", "🏬"),
-    ("clients_projects", "Clients & Projects", "🏢"),
-    ("subcontractors", "Sub Contractors", "🧱"),
-    ("reports", "Reports", "📊"),
-    ("settings", "Settings", "⚙️"),
-]
+from modules.navigation import (
+    MENU_DASHBOARD,
+    MENU_SECTIONS,
+    page_label,
+    section_for_page,
+)
+from modules.roles import display_role_name
 
 
 def _logo_data_uri():
@@ -84,14 +77,55 @@ def _select_index(options, default_value):
     return options.index(default_value) if default_value in options else 0
 
 
+def start_delete_confirm(confirm_key, item_label, payload=None):
+    st.session_state[f"del_confirm_{confirm_key}"] = True
+    st.session_state[f"del_confirm_{confirm_key}_label"] = item_label
+    if payload is not None:
+        st.session_state[f"del_confirm_{confirm_key}_payload"] = payload
+    st.rerun()
+
+
+def cancel_delete_confirm(confirm_key):
+    st.session_state.pop(f"del_confirm_{confirm_key}", None)
+    st.session_state.pop(f"del_confirm_{confirm_key}_label", None)
+    st.session_state.pop(f"del_confirm_{confirm_key}_payload", None)
+
+
+def render_delete_confirm_dialog(confirm_key, on_yes, message="Do you want to delete?"):
+    if not st.session_state.get(f"del_confirm_{confirm_key}"):
+        return False
+    label = st.session_state.get(f"del_confirm_{confirm_key}_label", "this item")
+    st.warning(f"{message} **{label}**")
+    c_yes, c_no = st.columns(2)
+    if c_yes.button("Yes, delete", type="primary", width="stretch", key=f"del_confirm_{confirm_key}_yes"):
+        payload = st.session_state.pop(f"del_confirm_{confirm_key}_payload", None)
+        cancel_delete_confirm(confirm_key)
+        on_yes(payload)
+        return True
+    if c_no.button("No, cancel", width="stretch", key=f"del_confirm_{confirm_key}_no"):
+        cancel_delete_confirm(confirm_key)
+        st.rerun()
+    return True
+
+
 def location_dropdowns(
     key_prefix="loc",
     default_country="India",
     default_region=None,
     default_district=None,
     allow_blank=False,
+    show_region=True,
+    show_district=True,
 ):
-    c1, c2, c3 = st.columns(3)
+    if show_region and show_district:
+        c1, c2, c3 = st.columns(3)
+    elif show_region or show_district:
+        c1, c2 = st.columns(2)
+        c3 = None
+    else:
+        c1 = st.container()
+        c2 = None
+        c3 = None
     countries = load_countries() or ["India"]
     if allow_blank:
         countries = [""] + countries
@@ -99,21 +133,29 @@ def location_dropdowns(
     with c1:
         country = st.selectbox("Country", countries, index=country_index, key=f"{key_prefix}_country")
 
-    regions = load_regions(country) if country else []
-    if allow_blank:
-        regions = [""] + regions
-    regions = regions or [""]
-    region_index = _select_index(regions, default_region)
-    with c2:
-        region = st.selectbox("Region / State", regions, index=region_index, key=f"{key_prefix}_region")
+    region = ""
+    if show_region:
+        regions = load_regions(country) if country else []
+        if allow_blank:
+            regions = [""] + regions
+        regions = regions or [""]
+        region_index = _select_index(regions, default_region)
+        with c2:
+            region = st.selectbox("Region / State", regions, index=region_index, key=f"{key_prefix}_region")
+    else:
+        st.session_state.pop(f"{key_prefix}_region", None)
 
-    districts = load_districts(country, region) if country and region else []
-    if allow_blank:
-        districts = [""] + districts
-    districts = districts or [""]
-    district_index = _select_index(districts, default_district)
-    with c3:
-        district = st.selectbox("District", districts, index=district_index, key=f"{key_prefix}_district")
+    district = ""
+    if show_district:
+        districts = load_districts(country, region) if country and region else []
+        if allow_blank:
+            districts = [""] + districts
+        districts = districts or [""]
+        district_index = _select_index(districts, default_district)
+        with c3 if c3 is not None else st.container():
+            district = st.selectbox("District", districts, index=district_index, key=f"{key_prefix}_district")
+    else:
+        st.session_state.pop(f"{key_prefix}_district", None)
 
     return country, region, district
 
@@ -125,6 +167,7 @@ def render_sidebar(user_name: str, on_logout, allowed_pages=None):
     uri = _logo_data_uri()
     logo_img = f'<img src="{uri}" alt="MAXEK" />' if uri else ""
     user_role = st.session_state.get("user_role", "Admin")
+    user_role_label = display_role_name(user_role)
     st.markdown(
         f"""
         <div class="maxek-sidebar-shell">
@@ -141,18 +184,34 @@ def render_sidebar(user_name: str, on_logout, allowed_pages=None):
         unsafe_allow_html=True,
     )
 
-    allowed_pages = set(allowed_pages or [key for key, _, _ in NAV_ITEMS])
-    for key, label, icon in NAV_ITEMS:
-        if key not in allowed_pages:
-            continue
+    allowed_pages = set(allowed_pages or {MENU_DASHBOARD[0]})
+    dash_key, dash_label = MENU_DASHBOARD
+    if dash_key in allowed_pages:
         if st.button(
-            f"{icon}  {label}",
-            key=f"sidebar_{key}",
+            f"🏠  {dash_label}",
+            key=f"sidebar_{dash_key}",
             width="stretch",
-            type="primary" if page == key else "secondary",
+            type="primary" if page == dash_key else "secondary",
         ):
-            st.session_state.page = key
+            st.session_state.page = dash_key
             st.rerun()
+
+    current_section = section_for_page(page)
+    for section_id, section_label, items in MENU_SECTIONS:
+        visible = [(k, lbl) for k, lbl in items if k in allowed_pages]
+        if not visible:
+            continue
+        expanded = current_section == section_id
+        with st.expander(section_label, expanded=expanded):
+            for key, label in visible:
+                if st.button(
+                    label,
+                    key=f"sidebar_{key}",
+                    width="stretch",
+                    type="primary" if page == key else "secondary",
+                ):
+                    st.session_state.page = key
+                    st.rerun()
 
     if dashboard_settings.get("show_sidebar_cashflow", True):
         st.markdown(
@@ -182,8 +241,13 @@ def render_sidebar(user_name: str, on_logout, allowed_pages=None):
 
 def render_page_header(user_name: str):
     left, middle, right = st.columns([1.1, 2.2, 1.5])
-    current_page = st.session_state.get("page", "dashboard").replace("_", " ").title()
+    current_page = page_label(st.session_state.get("page", "dashboard"))
+    section = section_for_page(st.session_state.get("page", ""))
+    if section:
+        section_title = next(lbl for sid, lbl, _ in MENU_SECTIONS if sid == section)
+        current_page = f"{section_title} · {current_page}"
     user_role = st.session_state.get("user_role", "Admin")
+    user_role_label = display_role_name(user_role)
     with left:
         st.markdown(
             f"""
@@ -255,7 +319,11 @@ def _render_dashboard_kpis(stats):
         ("📁", "Active Projects", stats["active_projects"], "Running sites"),
         ("🏢", "Total Clients", stats["clients"], "Business accounts"),
         ("💰", "Pending Salary", stats["pending_salary"], "Needs action"),
-        ("🧾", "Monthly Expenses", f"Rs {stats['monthly_expense']:,.0f}", "Current month"),
+        ("🧾", "Monthly Expenses", f"Rs {stats.get('monthly_expense', 0):,.0f}", "Current month"),
+        ("💵", "Cash Balance", f"Rs {stats.get('cash_balance', 0):,.0f}", "Finance"),
+        ("🏦", "Bank Balance", f"Rs {stats.get('bank_balance', 0):,.0f}", "Finance"),
+        ("📉", "Creditors", f"Rs {stats.get('creditors', 0):,.0f}", "Outstanding payables"),
+        ("📈", "Debtors", f"Rs {stats.get('debtors', 0):,.0f}", "Outstanding receivables"),
     ]
     html_parts = ['<div class="maxek-kpi-grid">']
     for icon, label, value, helper in cards:
@@ -303,6 +371,9 @@ def _render_dashboard_overviews(stats, dashboard_settings):
                     ("Cash In", f"Rs {stats['cash_in']:,.2f}"),
                     ("Cash Out", f"Rs {stats['cash_out']:,.2f}"),
                     ("Cash In Hand", f"Rs {stats['cash_in_hand']:,.2f}"),
+                    ("Petty Issued", f"Rs {stats.get('petty_issued', 0):,.2f}"),
+                    ("Petty Utilized", f"Rs {stats.get('petty_utilized', 0):,.2f}"),
+                    ("Pending Verify", stats.get("petty_pending_verify", 0)),
                 ],
             )
         )
@@ -344,6 +415,7 @@ def render_dashboard_home(user_name: str):
     dashboard_settings = get_dashboard_settings()
     role_visibility = get_dashboard_role_visibility()
     user_role = st.session_state.get("user_role", "Admin")
+    user_role_label = display_role_name(user_role)
     rendered_any = False
 
     section_visibility = role_visibility.get(
@@ -395,11 +467,11 @@ body.maxek-login-page section.main {
   padding-top: 0 !important;
 }
 body.maxek-login-page section.main .block-container {
-  max-width: 360px !important;
-  width: 360px !important;
+  max-width: min(92vw, 380px) !important;
+  width: min(92vw, 380px) !important;
   margin-left: auto !important;
   margin-right: auto !important;
-  padding: 2rem 1.5rem 1.25rem !important;
+  padding: 1.6rem 1.25rem 1.1rem !important;
   background: rgba(255, 255, 255, 0.96) !important;
   border-radius: 18px !important;
   border: 1px solid #e5e7eb !important;
@@ -408,28 +480,28 @@ body.maxek-login-page section.main .block-container {
 body.maxek-login-page [data-testid="stTextInput"],
 body.maxek-login-page [data-testid="stTextInput"] > div,
 body.maxek-login-page [data-testid="stTextInput"] > div > div {
-  width: 280px !important;
-  max-width: 280px !important;
+  width: 100% !important;
+  max-width: 100% !important;
   margin-left: auto !important;
   margin-right: auto !important;
 }
 body.maxek-login-page [data-testid="stTextInput"] input {
-  width: 280px !important;
-  max-width: 280px !important;
+  width: 100% !important;
+  max-width: 100% !important;
   min-width: 0 !important;
   height: 42px !important;
   font-size: 0.95rem !important;
   box-sizing: border-box !important;
 }
 body.maxek-login-page div.stButton {
-  width: 280px !important;
-  max-width: 280px !important;
+  width: 100% !important;
+  max-width: 100% !important;
   margin-left: auto !important;
   margin-right: auto !important;
 }
 body.maxek-login-page div.stButton button {
-  width: 280px !important;
-  max-width: 280px !important;
+  width: 100% !important;
+  max-width: 100% !important;
   height: 42px !important;
 }
 body.maxek-login-page input:-webkit-autofill {
@@ -444,6 +516,12 @@ body.maxek-login-page input:-webkit-autofill {
   overflow: hidden;
   opacity: 0;
   pointer-events: none;
+}
+
+@media (max-width: 420px) {
+  body.maxek-login-page section.main .block-container {
+    padding: 1.35rem 1rem 0.95rem !important;
+  }
 }
 """
 
