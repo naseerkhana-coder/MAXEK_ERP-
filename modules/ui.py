@@ -4,19 +4,23 @@ import base64
 import os
 from datetime import datetime
 
+import pandas as pd
 import streamlit as st
 
 from modules.database import (
     DASHBOARD_SECTION_ORDER_DEFAULT,
+    dashboard_monthly_revenue_series,
     dashboard_notifications,
+    dashboard_project_progress_series,
     dashboard_recent_transactions,
     get_dashboard_settings,
     get_conn,
     get_dashboard_role_visibility,
+    kpi_stats,
     load_countries,
     load_districts,
-    kpi_stats,
     load_managers,
+    load_project_names,
     load_regions,
 )
 
@@ -37,9 +41,14 @@ LOGO_SVG_PATH = os.path.join(BASE_DIR, "assets", "logo", "maxek_logo.svg")
 LOGO_PNG_PATH = os.path.join(BASE_DIR, "assets", "logo", "maxek_logo.png")
 
 from modules.navigation import (
+    MENU_DASHBOARD,
     MENU_SECTIONS,
+    QUICK_ADD_ACTIONS,
+    TOP_NAV_ITEMS,
+    default_page_for_section,
     page_label,
     section_for_page,
+    top_nav_section_active,
 )
 from modules.roles import display_role_name
 
@@ -176,50 +185,118 @@ def render_sidebar(user_name: str, on_logout, allowed_pages=None):
     render_erp_sidebar(user_name, allowed_pages)
 
 
-def render_page_header(user_name: str, on_logout=None):
-    left, middle, right = st.columns([1.15, 2.15, 1.35])
-    current_page = page_label(st.session_state.get("page", "dash_mgmt"))
-    section = section_for_page(st.session_state.get("page", ""))
+def _navigate_to(page_key: str) -> None:
+    from modules.navigation import section_for_page as _section_for_page
+
+    section = _section_for_page(page_key)
     if section:
-        section_title = next(lbl for sid, lbl, _icon, _ in MENU_SECTIONS if sid == section)
-        current_page = f"{section_title} · {current_page}"
+        st.session_state.sidebar_open_section = section
+    st.session_state.page = page_key
+    st.rerun()
+
+
+def render_page_header(user_name: str, on_logout=None, allowed_pages=None):
+    allowed = set(allowed_pages or {MENU_DASHBOARD[0]})
+    page_key = st.session_state.get("page", MENU_DASHBOARD[0])
     user_role = st.session_state.get("user_role", "Admin")
     user_role_label = display_role_name(user_role)
     today = datetime.now()
-    with left:
-        st.markdown(
-            f"""
-            <div class="maxek-header-pill">
-              <div class="maxek-header-page">{current_page}</div>
-              <div class="maxek-header-caption">{ERP_SYSTEM_LABEL}</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    with middle:
-        st.text_input(
-            "Search",
-            key="global_search",
+    logo_uri = _logo_data_uri()
+
+    st.markdown('<div class="maxek-top-bar">', unsafe_allow_html=True)
+
+    brand_col, search_col, nav_col, actions_col = st.columns([0.9, 1.6, 3.2, 1.5])
+
+    with brand_col:
+        if logo_uri:
+            st.markdown(
+                f'<img src="{logo_uri}" class="maxek-header-logo" alt="{ERP_BRAND}" />',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(f'<div class="maxek-header-logo-text">{ERP_BRAND}</div>', unsafe_allow_html=True)
+
+    with search_col:
+        projects = [""] + load_project_names()
+        st.selectbox(
+            "Project search",
+            projects,
+            key="header_project_search",
             label_visibility="collapsed",
-            placeholder="Search anything...",
+            placeholder="Search project…",
         )
-    with right:
-        st.markdown(
-            f"""
-            <div class="maxek-header-user-block">
-              <div class="maxek-header-user-name">{user_name}</div>
-              <div class="maxek-header-user-meta">{user_role_label} · {today.strftime('%d %b %Y')}</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        if on_logout and st.button(
-            "Log out",
-            key="header_logout",
-            type="secondary",
-            use_container_width=True,
-        ):
-            on_logout()
+
+    with nav_col:
+        visible_nav = []
+        for section_id, label, icon in TOP_NAV_ITEMS:
+            target = default_page_for_section(section_id)
+            if section_id == "dashboard" or target in allowed:
+                visible_nav.append((section_id, label, icon, target))
+        nav_slots = st.columns(max(len(visible_nav), 1))
+        for slot, (section_id, label, icon, target) in zip(nav_slots, visible_nav):
+            active = top_nav_section_active(section_id, page_key)
+            with slot:
+                if st.button(
+                    f"{icon} {label}",
+                    key=f"top_nav_{section_id}",
+                    width="stretch",
+                    type="primary" if active else "secondary",
+                ):
+                    _navigate_to(target)
+
+    with actions_col:
+        act1, act2, act3, act4 = st.columns(4)
+        with act1:
+            if st.button("🔔", key="header_notifications", help="Notifications"):
+                if "dash_notifications" in allowed:
+                    _navigate_to("dash_notifications")
+        with act2:
+            quick_open = st.session_state.get("header_quick_add_open", False)
+            if st.button("＋", key="header_quick_add_toggle", help="Quick add"):
+                st.session_state.header_quick_add_open = not quick_open
+                st.rerun()
+        with act3:
+            st.markdown(
+                f"""
+                <div class="maxek-header-profile" title="{user_name}">
+                  <span class="maxek-header-avatar">{user_name[:1].upper()}</span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with act4:
+            if on_logout and st.button("⎋", key="header_logout", help="Log out"):
+                on_logout()
+
+    if st.session_state.get("header_quick_add_open"):
+        st.markdown('<div class="maxek-quick-add-panel">', unsafe_allow_html=True)
+        qcols = st.columns(min(4, len(QUICK_ADD_ACTIONS)))
+        for col, (key, label, icon) in zip(qcols, QUICK_ADD_ACTIONS):
+            if key not in allowed:
+                continue
+            with col:
+                if st.button(f"{icon} {label}", key=f"quick_add_{key}", width="stretch"):
+                    st.session_state.header_quick_add_open = False
+                    _navigate_to(key)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    current_page = page_label(page_key)
+    section = section_for_page(page_key)
+    if section and section != "dashboard":
+        section_title = next((lbl for sid, lbl, _ in MENU_SECTIONS if sid == section), "")
+        if section_title:
+            current_page = f"{section_title} · {current_page}"
+
+    st.markdown(
+        f"""
+        <div class="maxek-header-breadcrumb">
+          <span class="maxek-header-page">{current_page}</span>
+          <span class="maxek-header-caption">{ERP_SYSTEM_LABEL} · {user_role_label} · {today.strftime('%d %b %Y')}</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
 def _overview_panel(title, items):
@@ -240,7 +317,7 @@ def _render_dashboard_welcome(user_name: str):
         <div class="maxek-dashboard-intro">
           <div>
             <h1>Welcome back, {user_name}</h1>
-            <p>Here's what's happening with your business today.</p>
+            <p>Projects · Procurement · Inventory · Subcontractor billing · Petty cash · Letters</p>
           </div>
           <div class="maxek-dashboard-date">
             <div>{datetime.now().strftime('%d %b %Y')}</div>
@@ -254,16 +331,12 @@ def _render_dashboard_welcome(user_name: str):
 
 def _render_dashboard_kpis(stats):
     cards = [
-        ("👥", "Total Employees", stats["employees"], "Workforce"),
-        ("👷", "Total Workers", stats["total_workers"], "Field teams"),
-        ("📁", "Active Projects", stats["active_projects"], "Running sites"),
-        ("🏢", "Total Clients", stats["clients"], "Business accounts"),
-        ("💰", "Pending Salary", stats["pending_salary"], "Needs action"),
-        ("🧾", "Monthly Expenses", f"Rs {stats.get('monthly_expense', 0):,.0f}", "Current month"),
-        ("💵", "Cash Balance", f"Rs {stats.get('cash_balance', 0):,.0f}", "Finance"),
-        ("🏦", "Bank Balance", f"Rs {stats.get('bank_balance', 0):,.0f}", "Finance"),
-        ("📉", "Creditors", f"Rs {stats.get('creditors', 0):,.0f}", "Outstanding payables"),
-        ("📈", "Debtors", f"Rs {stats.get('debtors', 0):,.0f}", "Outstanding receivables"),
+        ("📁", "Total Projects", stats.get("total_projects", stats["active_projects"]), "All sites"),
+        ("🏗️", "Active Projects", stats["active_projects"], "On site now"),
+        ("🧾", "Pending Bills", stats.get("pending_bills", 0), "Awaiting payment"),
+        ("🛒", "Pending PO", stats.get("pending_po", 0), "Purchase orders"),
+        ("💵", "Cash Balance", f"Rs {stats.get('cash_balance', 0):,.0f}", "Petty + cash book"),
+        ("📋", "Material Requests", stats.get("material_requests_open", 0), "Open MRs"),
     ]
     html_parts = ['<div class="maxek-kpi-grid">']
     for icon, label, value, helper in cards:
@@ -279,18 +352,36 @@ def _render_dashboard_kpis(stats):
     st.markdown("".join(html_parts), unsafe_allow_html=True)
 
 
+def _render_dashboard_charts(stats):
+    st.markdown('<div class="maxek-section-title">Operations snapshot</div>', unsafe_allow_html=True)
+    c1, c2, c3 = st.columns(3)
+    progress_df = dashboard_project_progress_series()
+    with c1:
+        st.markdown("**Project Progress**")
+        if progress_df.empty:
+            st.caption("Add projects to see progress.")
+        else:
+            chart_df = progress_df.set_index("project")[["progress"]]
+            st.bar_chart(chart_df, height=220)
+    with c2:
+        st.markdown("**Cash Flow**")
+        flow = {
+            "Cash In": float(stats.get("cash_in", 0) or 0),
+            "Cash Out": float(stats.get("cash_out", 0) or 0),
+            "Balance": float(stats.get("cash_in_hand", 0) or 0),
+        }
+        st.bar_chart(pd.DataFrame(flow, index=["Today"]).T, height=220)
+    with c3:
+        st.markdown("**Monthly Revenue**")
+        revenue_df = dashboard_monthly_revenue_series()
+        if revenue_df.empty:
+            st.caption("Record client receipts to build revenue trend.")
+        else:
+            st.line_chart(revenue_df.set_index("month")[["revenue"]], height=220)
+
+
 def _render_dashboard_cash_flow(stats):
-    st.markdown(
-        """
-        <div class="maxek-section-title">Daily Cash Flow</div>
-        """,
-        unsafe_allow_html=True,
-    )
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Opening Balance", "Rs 0.00")
-    c2.metric("Cash In", f"Rs {stats['cash_in']:,.2f}")
-    c3.metric("Cash Out", f"Rs {stats['cash_out']:,.2f}")
-    c4.metric("Closing Balance", f"Rs {stats['cash_in_hand']:,.2f}")
+    _render_dashboard_charts(stats)
 
 
 def _render_dashboard_overviews(stats, dashboard_settings):
@@ -339,13 +430,38 @@ def _render_dashboard_overviews(stats, dashboard_settings):
     return True
 
 
-def _render_dashboard_recent_payments():
-    st.subheader("Recent Payments")
-    payments_df = dashboard_recent_transactions()
+def _render_dashboard_pending_approvals():
+    from modules.finance_workflow import render_approval_inbox
+
+    st.subheader("Pending Approvals")
+    render_approval_inbox("Pending", ["Submitted", "Verified", "PM Approved"])
+
+
+def _render_dashboard_recent_activities():
+    st.subheader("Recent Activities")
+    payments_df = dashboard_recent_transactions(limit=8)
     if payments_df.empty:
-        st.info("No payments or payroll transactions available yet.")
+        st.info("No recent transactions yet.")
     else:
         st.dataframe(payments_df, width="stretch", hide_index=True)
+
+
+def _render_dashboard_site_updates():
+    st.subheader("Site Updates")
+    progress_df = dashboard_project_progress_series(limit=5)
+    if progress_df.empty:
+        st.caption("Daily reports and site photos will appear here.")
+        return
+    for _, row in progress_df.iterrows():
+        st.markdown(
+            f"""
+            <div class="maxek-note-item">
+              <strong>{row['project']}</strong>
+              <span>Progress {float(row.get('progress', 0) or 0):.0f}% · check DPR for latest site update</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
 
 def _render_dashboard_notifications():
@@ -381,25 +497,25 @@ def render_dashboard_home(user_name: str):
         "kpis": lambda: _render_dashboard_kpis(stats),
         "cash_flow": lambda: _render_dashboard_cash_flow(stats),
         "overviews": lambda: _render_dashboard_overviews(stats, dashboard_settings),
-        "recent_payments": _render_dashboard_recent_payments,
+        "pending_approvals": _render_dashboard_pending_approvals,
+        "recent_activities": _render_dashboard_recent_activities,
+        "site_updates": _render_dashboard_site_updates,
         "notifications": _render_dashboard_notifications,
     }
     section_enabled = {
         "welcome": dashboard_settings.get("show_welcome", True),
         "kpis": dashboard_settings.get("show_kpis", True),
         "cash_flow": dashboard_settings.get("show_sidebar_cashflow", True),
-        "overviews": any(
-            [
-                dashboard_settings.get("show_attendance_overview", True),
-                dashboard_settings.get("show_project_overview", True),
-                dashboard_settings.get("show_expense_overview", True),
-            ]
-        ),
-        "recent_payments": dashboard_settings.get("show_recent_payments", True),
+        "overviews": dashboard_settings.get("show_attendance_overview", False),
+        "pending_approvals": dashboard_settings.get("show_recent_payments", True),
+        "recent_activities": dashboard_settings.get("show_recent_payments", True),
+        "site_updates": dashboard_settings.get("show_project_overview", True),
         "notifications": dashboard_settings.get("show_notifications", True),
     }
 
     for section_key in section_order:
+        if section_key in ("pending_approvals", "recent_activities", "site_updates"):
+            continue
         if not section_enabled.get(section_key, False):
             continue
         if not section_visibility.get(section_key, True):
@@ -407,6 +523,20 @@ def render_dashboard_home(user_name: str):
         result = section_renderers[section_key]()
         if result is not False:
             rendered_any = True
+
+    st.markdown('<div class="maxek-section-title">Action centre</div>', unsafe_allow_html=True)
+    b1, b2 = st.columns(2)
+    with b1:
+        if section_enabled.get("pending_approvals", True):
+            _render_dashboard_pending_approvals()
+        if section_enabled.get("site_updates", True):
+            _render_dashboard_site_updates()
+    with b2:
+        if section_enabled.get("recent_activities", True):
+            _render_dashboard_recent_activities()
+        if section_enabled.get("notifications", True):
+            _render_dashboard_notifications()
+    rendered_any = True
 
     if not rendered_any:
         st.info("All dashboard sections are hidden. Enable them from Settings > Dashboard.")

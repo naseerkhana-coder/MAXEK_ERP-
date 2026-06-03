@@ -334,6 +334,100 @@ section[data-testid="stSidebar"] div.stTextInput > div > div > input::placeholde
   font-size: 0.76rem;
 }
 
+/* —— Top application bar (logo, project search, 7 modules, actions) —— */
+.maxek-top-bar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 0.55rem 0.65rem 0.35rem;
+  margin-bottom: 0.75rem;
+  box-shadow: var(--shadow);
+}
+
+.maxek-header-logo {
+  display: block;
+  width: 42px;
+  height: 42px;
+  object-fit: contain;
+  border-radius: 10px;
+  background: #fff;
+  border: 1px solid var(--border);
+  padding: 0.2rem;
+}
+
+.maxek-header-logo-text {
+  font-weight: 800;
+  font-size: 0.85rem;
+  color: var(--primary);
+  letter-spacing: 0.04em;
+}
+
+.maxek-top-bar div.stButton > button {
+  font-size: 0.72rem !important;
+  min-height: 2.15rem !important;
+  height: 2.15rem !important;
+  padding: 0.25rem 0.35rem !important;
+  border-radius: 8px !important;
+  white-space: nowrap;
+}
+
+.maxek-top-bar div.stButton > button[kind="primary"] {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8) !important;
+  color: #fff !important;
+  border: none !important;
+  font-weight: 700 !important;
+}
+
+.maxek-header-profile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 2.15rem;
+}
+
+.maxek-header-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.15rem;
+  height: 2.15rem;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #0f172a, #1e3a5f);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.maxek-quick-add-panel {
+  border-top: 1px dashed var(--border);
+  margin-top: 0.35rem;
+  padding-top: 0.45rem;
+}
+
+.maxek-header-breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.75rem;
+  padding: 0.35rem 0.15rem 0.1rem;
+  border-top: 1px solid var(--border);
+  margin-top: 0.35rem;
+}
+
+.maxek-header-breadcrumb .maxek-header-page {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.maxek-header-breadcrumb .maxek-header-caption {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
 .maxek-header-pill,
 .maxek-header-user,
 .maxek-panel,
@@ -1041,6 +1135,29 @@ div[data-testid="stForm"] h3 {
 }
 
 @media (max-width: 768px) {
+  .maxek-top-bar {
+    position: static;
+    padding: 0.45rem 0.5rem;
+  }
+
+  .maxek-top-bar div.stButton > button {
+    font-size: 0.65rem !important;
+    min-height: 2.5rem !important;
+    height: 2.5rem !important;
+  }
+
+  .maxek-header-breadcrumb {
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+
+  body.maxek-sidebar-collapsed section[data-testid="stSidebar"] {
+    width: 0 !important;
+    min-width: 0 !important;
+    max-width: 0 !important;
+    overflow: hidden !important;
+  }
+
   .maxek-dashboard-intro {
     flex-direction: column;
   }

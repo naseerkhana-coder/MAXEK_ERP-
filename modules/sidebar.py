@@ -168,7 +168,7 @@ def _render_search_box() -> str:
     return st.text_input(
         "Search menu",
         key="sidebar_menu_search",
-        placeholder="Purchase Invoice, BOQ, Payroll…",
+        placeholder="BOQ, Purchase Order, DPR, Petty Cash…",
         label_visibility="collapsed",
     ).strip()
 

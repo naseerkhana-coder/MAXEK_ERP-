@@ -294,13 +294,15 @@ def page_pay_attendance():
 
 
 def page_pay_payroll():
-    page_payroll()
+    from modules.worker_payroll import page_worker_payroll
+
+    page_worker_payroll()
 
 
 def page_pay_payslips():
-    st.subheader("Payslips")
-    st.caption("Payroll run and payslip view.")
-    page_payroll()
+    from modules.worker_payroll import page_worker_payroll
+
+    page_worker_payroll()
 
 
 # —— Projects ——

@@ -96,7 +96,11 @@ def main():
             _logout,
             _allowed_pages(),
         )
-    render_page_header(st.session_state.get("user_name", "User"), _logout)
+    render_page_header(
+        st.session_state.get("user_name", "User"),
+        _logout,
+        _allowed_pages(),
+    )
     _render_current_page()
     st.markdown("</div>", unsafe_allow_html=True)
 

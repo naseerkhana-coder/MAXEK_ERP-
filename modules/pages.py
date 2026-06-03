@@ -19,6 +19,7 @@ from modules.database import (
     ATTENDANCE_DEFAULT_IN_TIME,
     ATTENDANCE_DEFAULT_OUT_TIME,
     calculate_hours,
+    format_decimal_hours,
     parse_flexible_time,
     ensure_district,
     ensure_region,
@@ -1690,6 +1691,17 @@ def _attendance_widget_suffix(edit_id):
     return f"_e{int(edit_id)}" if edit_id else "_new"
 
 
+def _format_attendance_hours_df(df: pd.DataFrame) -> pd.DataFrame:
+    """Show total_hours / ot_hours as HH:MM in grids and Excel exports."""
+    if df is None or df.empty:
+        return df
+    out = df.copy()
+    for col in ("total_hours", "ot_hours", "worked_hours", "overtime"):
+        if col in out.columns:
+            out[col] = out[col].apply(format_decimal_hours)
+    return out
+
+
 def _normalize_attendance_times(in_time, out_time):
     """Parse flexible in/out times; returns (HH:MM, HH:MM) or raises ValueError."""
     in_raw = str(in_time or "").strip()
@@ -1757,8 +1769,8 @@ def _render_subcontractor_payment_panel(
         status, applied_rate, ot_hours, applied_ot_rate, ot_allowed
     )
     p1, p2, p3, p4, p5 = st.columns(5)
-    p1.metric("Worked Hours", f"{total_hours:,.2f}")
-    p2.metric("OT Hours", f"{ot_hours:,.2f}")
+    p1.metric("Worked Hours", format_decimal_hours(total_hours))
+    p2.metric("OT Hours", format_decimal_hours(ot_hours))
     p3.metric("Day Pay", f"Rs {labour_pay:,.2f}")
     p4.metric("OT Pay", f"Rs {ot_pay:,.2f}")
     p5.metric("Total Pay", f"Rs {total_pay:,.2f}")
@@ -1960,8 +1972,20 @@ def page_attendance():
         st.info("Weekly off day with attendance — counted as Weekly Off Worked with OT.")
 
     h1, h2, h3 = st.columns(3)
-    h1.text_input("Worked Hours", value=f"{total_hours:.2f}", disabled=True, key=f"att_show_worked{widget_suffix}")
-    h2.text_input("OT Hours", value=f"{ot_hours:.2f}", disabled=True, key=f"att_show_ot{widget_suffix}")
+    h1.text_input(
+        "Worked Hours",
+        value=format_decimal_hours(total_hours),
+        disabled=True,
+        key=f"att_show_worked{widget_suffix}",
+        help="Duration as HH:MM (hours:minutes)",
+    )
+    h2.text_input(
+        "OT Hours",
+        value=format_decimal_hours(ot_hours),
+        disabled=True,
+        key=f"att_show_ot{widget_suffix}",
+        help="Duration as HH:MM (hours:minutes)",
+    )
     day_labour, day_ot, day_total = subcontractor_timesheet_day_amount(
         status, applied_rate, ot_hours, applied_ot_rate, ot_allowed
     )
@@ -1970,6 +1994,9 @@ def page_attendance():
         value=f"{day_total:,.2f}" if employee.get("employee_type") == "Sub Contractor Worker" else "",
         disabled=True,
         key=f"att_show_pay{widget_suffix}",
+    )
+    st.caption(
+        "Worked Hours and OT Hours use **HH:MM** duration (e.g. 8h 30m → **08:30**), matching In/Out time style."
     )
     try:
         preview_in, preview_out = _normalize_attendance_times(in_time, out_time)
@@ -2062,16 +2089,24 @@ def page_attendance():
             st.session_state.pop("attendance_edit_id", None)
             if employee.get("employee_type") == "Sub Contractor Worker":
                 st.success(
-                    f"Timesheet updated. Worked {total_hours:.2f}h · OT {ot_hours:.2f}h · Pay Rs {day_total:,.2f}."
+                    f"Timesheet updated. Worked {format_decimal_hours(total_hours)} · "
+                    f"OT {format_decimal_hours(ot_hours)} · Pay Rs {day_total:,.2f}."
                 )
             else:
-                st.success("Timesheet updated.")
+                st.success(
+                    f"Timesheet updated. Worked {format_decimal_hours(total_hours)} · "
+                    f"OT {format_decimal_hours(ot_hours)}."
+                )
             st.rerun()
         success_msg = (
-            f"Attendance saved. Worked {total_hours:.2f}h · OT {ot_hours:.2f}h · "
+            f"Attendance saved. Worked {format_decimal_hours(total_hours)} · "
+            f"OT {format_decimal_hours(ot_hours)} · "
             f"Pay Rs {day_total:,.2f} (day Rs {day_labour:,.2f} + OT Rs {day_ot:,.2f})."
             if employee.get("employee_type") == "Sub Contractor Worker"
-            else "Attendance saved."
+            else (
+                f"Attendance saved. Worked {format_decimal_hours(total_hours)} · "
+                f"OT {format_decimal_hours(ot_hours)}."
+            )
         )
         conn.execute(
             """
@@ -2159,30 +2194,37 @@ def _render_attendance_timesheet_list(employee_id, employee):
             )
         show_df = pd.DataFrame(display_rows)
         st.dataframe(
-            show_df[
-                [
-                    "attendance_date",
-                    "status",
-                    "project_name",
-                    "in_time",
-                    "out_time",
-                    "total_hours",
-                    "ot_hours",
-                    "applied_rate",
-                    "applied_ot_rate",
-                    "ot_pay",
-                    "day_pay",
-                    "remarks",
+            _format_attendance_hours_df(
+                show_df[
+                    [
+                        "attendance_date",
+                        "status",
+                        "project_name",
+                        "in_time",
+                        "out_time",
+                        "total_hours",
+                        "ot_hours",
+                        "applied_rate",
+                        "applied_ot_rate",
+                        "ot_pay",
+                        "day_pay",
+                        "remarks",
+                    ]
                 ]
-            ],
+            ),
             width="stretch",
             hide_index=True,
         )
     else:
-        st.dataframe(history_df.drop(columns=["id"], errors="ignore"), width="stretch", hide_index=True)
+        st.dataframe(
+            _format_attendance_hours_df(history_df.drop(columns=["id"], errors="ignore")),
+            width="stretch",
+            hide_index=True,
+        )
 
     options = {
-        f"{row['attendance_date']} | {row['status']} | {row['project_name'] or '—'} | {row['total_hours']}h | OT {row['ot_hours']}h": int(row["id"])
+        f"{row['attendance_date']} | {row['status']} | {row['project_name'] or '—'} | "
+        f"{format_decimal_hours(row['total_hours'])} worked | OT {format_decimal_hours(row['ot_hours'])}": int(row["id"])
         for _, row in history_df.iterrows()
     }
     pick_key = "attendance_ts_pick"
@@ -3915,13 +3957,15 @@ def page_reports():
             "BOQ Measurement Summary",
         ]
     )
+    attendance_display_df = _format_attendance_hours_df(attendance_df)
+    ot_report_display_df = _format_attendance_hours_df(ot_report_df)
     reports = [
-        ("attendance_report.xlsx", attendance_df),
+        ("attendance_report.xlsx", attendance_display_df),
         ("salary_report.xlsx", payroll_df),
         ("expense_report.xlsx", expense_df),
         ("client_payment_report.xlsx", payment_df),
         ("finance_register.xlsx", finance_df),
-        ("ot_report.xlsx", ot_report_df),
+        ("ot_report.xlsx", ot_report_display_df),
         ("employee_joining_report.xlsx", employee_df[["employee_id", "employee_name", "joining_date", "status"]] if not employee_df.empty else employee_df),
         ("employee_exit_report.xlsx", employee_df[["employee_id", "employee_name", "leaving_date", "status"]] if not employee_df.empty else employee_df),
         ("project_wise_labour_report.xlsx", project_labor_df),

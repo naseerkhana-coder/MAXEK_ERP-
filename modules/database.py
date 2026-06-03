@@ -171,6 +171,14 @@ def init_db():
             setting_key TEXT PRIMARY KEY,
             setting_value TEXT
         );
+        CREATE TABLE IF NOT EXISTS login_history(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT,
+            success INTEGER DEFAULT 0,
+            login_at TEXT,
+            ip_address TEXT,
+            user_agent TEXT
+        );
         CREATE TABLE IF NOT EXISTS countries(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             country_name TEXT UNIQUE
@@ -4761,6 +4769,18 @@ def calculate_hours(start, end, break_hr, fixed_hours=8.0, ot_allowed=True):
     return round(worked, 2), round(overtime, 2)
 
 
+def format_decimal_hours(hours) -> str:
+    """Format decimal hours as HH:MM duration (e.g. 8.5 -> 08:30, 1.25 -> 01:15)."""
+    try:
+        total_minutes = int(round(float(hours or 0) * 60))
+    except (TypeError, ValueError):
+        return "00:00"
+    if total_minutes < 0:
+        total_minutes = 0
+    h, m = divmod(total_minutes, 60)
+    return f"{h:02d}:{m:02d}"
+
+
 def _employee_applicable_for(employee):
     return "Company Staff" if employee.get("employee_type") == "Company Staff" else "Sub Contractor Workers"
 
@@ -5377,13 +5397,42 @@ def kpi_stats():
         )
         + sum_query("SELECT COALESCE(SUM(amount),0) FROM subcontractor_advance")
     )
+    total_projects = table_count("projects")
+    pending_bills = scalar_query(
+        """
+        SELECT COUNT(*) FROM finance_transactions
+        WHERE transaction_type IN ('payment_out', 'purchase_invoice')
+          AND UPPER(COALESCE(status,'')) NOT IN ('SETTLED', 'PAID', 'APPROVED')
+        """
+    ) or scalar_query(
+        "SELECT COUNT(*) FROM expenses WHERE UPPER(COALESCE(status,'')) IN ('PENDING', 'SUBMITTED')"
+    )
+    material_requests_open = scalar_query(
+        "SELECT COUNT(*) FROM material_requests WHERE UPPER(COALESCE(status,'')) IN ('PENDING', 'SUBMITTED', 'OPEN', 'DRAFT')"
+    )
+    pending_po = 0
+    try:
+        pending_po = scalar_query(
+            """
+            SELECT COUNT(*) FROM purchase_orders
+            WHERE UPPER(COALESCE(status,'')) IN ('PENDING', 'DRAFT', 'SUBMITTED', 'OPEN')
+            """
+        )
+    except Exception:
+        pending_po = scalar_query(
+            "SELECT COUNT(*) FROM material_requests WHERE UPPER(COALESCE(status,'')) IN ('PENDING', 'SUBMITTED', 'OPEN')"
+        )
     return {
         "employees": employee_count,
         "total_workers": worker_count,
         "active_workers": active_workers,
-        "projects": active_projects or table_count("projects"),
-        "active_projects": active_projects or table_count("projects"),
+        "projects": active_projects or total_projects,
+        "total_projects": total_projects,
+        "active_projects": active_projects or total_projects,
         "pending_salary": pending_salary,
+        "pending_bills": int(pending_bills or 0),
+        "pending_po": int(pending_po or 0),
+        "material_requests_open": int(material_requests_open or 0),
         "attendance_today": attendance_today,
         "clients": table_count("clients"),
         "subcontractors": table_count("subcontractors"),
@@ -5401,6 +5450,73 @@ def kpi_stats():
         "petty_utilized": fk.get("petty_utilized", 0),
         "petty_pending_verify": fk.get("petty_pending_verify", 0),
     }
+
+
+def load_project_names(limit=200):
+    conn = get_conn()
+    df = pd.read_sql_query(
+        """
+        SELECT project_name FROM projects
+        WHERE COALESCE(project_name, '') != ''
+        ORDER BY project_name
+        LIMIT ?
+        """,
+        conn,
+        params=(int(limit),),
+    )
+    conn.close()
+    if df.empty:
+        return []
+    return df["project_name"].astype(str).tolist()
+
+
+def dashboard_monthly_revenue_series(months=6):
+    conn = get_conn()
+    df = pd.read_sql_query(
+        f"""
+        SELECT strftime('%Y-%m', payment_date) AS month,
+               COALESCE(SUM(amount), 0) AS revenue
+        FROM payments
+        WHERE payment_date IS NOT NULL AND payment_date != ''
+        GROUP BY 1
+        ORDER BY 1 DESC
+        LIMIT {int(months)}
+        """,
+        conn,
+    )
+    conn.close()
+    if df.empty:
+        return pd.DataFrame({"month": [], "revenue": []})
+    return df.sort_values("month")
+
+
+def dashboard_project_progress_series(limit=8):
+    conn = get_conn()
+    try:
+        df = pd.read_sql_query(
+            f"""
+            SELECT COALESCE(project_name, 'Unnamed') AS project,
+                   COALESCE(progress_percent, 0) AS progress
+            FROM projects
+            WHERE COALESCE(project_name, '') != ''
+            ORDER BY progress DESC, project_name
+            LIMIT {int(limit)}
+            """,
+            conn,
+        )
+    except Exception:
+        df = pd.read_sql_query(
+            f"""
+            SELECT COALESCE(project_name, 'Unnamed') AS project, 0 AS progress
+            FROM projects
+            WHERE COALESCE(project_name, '') != ''
+            ORDER BY project_name
+            LIMIT {int(limit)}
+            """,
+            conn,
+        )
+    conn.close()
+    return df
 
 
 def dashboard_recent_transactions(limit=5):
