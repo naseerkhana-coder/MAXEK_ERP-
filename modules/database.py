@@ -7,6 +7,7 @@ from datetime import datetime
 
 import pandas as pd
 
+from modules.branding import ERP_LEGAL_NAME
 from modules.regions import DEFAULT_LOCATION_TREE
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -1679,6 +1680,7 @@ def init_db():
 
     _seed_chart_of_accounts(conn)
     _seed_default_company(conn)
+    _fix_legacy_maxel_branding(conn)
     _sync_vendors_from_subcontractors(cur)
 
     from modules.correspondence_data import ensure_correspondence_tables
@@ -2009,7 +2011,7 @@ def _seed_default_company(conn):
             """,
             (
                 "CMP101",
-                "MAXEL PRIVATE LIMITED",
+                ERP_LEGAL_NAME,
                 "",
                 "",
                 "",
@@ -2017,6 +2019,21 @@ def _seed_default_company(conn):
                 f"{datetime.now().year}-{datetime.now().year + 1}",
             ),
         )
+
+
+def _fix_legacy_maxel_branding(conn):
+    """Rename legacy MAXEL strings seeded in older databases."""
+    legacy = "MAXEL PRIVATE LIMITED"
+    if legacy == ERP_LEGAL_NAME:
+        return
+    conn.execute(
+        "UPDATE company_master SET company_name = ? WHERE company_name = ?",
+        (ERP_LEGAL_NAME, legacy),
+    )
+    conn.execute(
+        "UPDATE employees SET company_or_subcontractor = ? WHERE company_or_subcontractor = ?",
+        (ERP_LEGAL_NAME, legacy),
+    )
 
 
 def _sync_vendors_from_subcontractors(cur):
@@ -4612,21 +4629,88 @@ def load_employee_options():
     return [(row.employee_id, row.employee_name) for _, row in df.iterrows()]
 
 
+PAYROLL_ENTRY_EMPLOYEE_TYPES = (
+    "Monthly Staff",
+    "Daily Wage Staff",
+    "Company Staff",
+    "Sub Contractor Worker",
+)
+
+
 def load_payroll_staff_options():
-    conn = get_conn()
-    df = pd.read_sql_query(
-        """
-        SELECT employee_id, employee_name, employee_type
-        FROM employees
-        WHERE COALESCE(employee_id, '') != ''
-          AND employee_type IN ('Monthly Staff', 'Daily Wage Staff')
-          AND UPPER(COALESCE(payroll_status, status, 'Active')) NOT IN ('RESIGNED', 'TERMINATED', 'INACTIVE', 'LEFT')
-        ORDER BY employee_type, employee_name
-        """,
-        conn,
+    """Monthly / daily staff only (staff advances, legacy callers)."""
+    return load_payroll_employee_options(
+        employee_type_filter=None,
+        staff_only=True,
+        include_site_workers=False,
     )
+
+
+def load_payroll_employee_options(
+    employee_type_filter=None,
+    staff_only=False,
+    include_site_workers=True,
+):
+    """
+    Employees eligible for unified payroll processing.
+    Optionally includes active site workers from the workers table.
+    """
+    conn = get_conn()
+    type_clause = ""
+    params = []
+    if staff_only:
+        types = ("Monthly Staff", "Daily Wage Staff")
+    else:
+        types = PAYROLL_ENTRY_EMPLOYEE_TYPES
+    if employee_type_filter and str(employee_type_filter).strip() not in ("", "All"):
+        filt = str(employee_type_filter).strip()
+        if filt == "Site Worker":
+            types = ()
+        else:
+            types = (filt,)
+    if types:
+        placeholders = ",".join("?" for _ in types)
+        type_clause = f" AND employee_type IN ({placeholders})"
+        params.extend(types)
+
+    rows = []
+    if types or not employee_type_filter or str(employee_type_filter).strip() in ("", "All"):
+        df = pd.read_sql_query(
+            f"""
+            SELECT employee_id, employee_name, employee_type
+            FROM employees
+            WHERE COALESCE(employee_id, '') != ''
+              {type_clause}
+              AND UPPER(COALESCE(payroll_status, status, 'Active'))
+                  NOT IN ('RESIGNED', 'TERMINATED', 'INACTIVE', 'LEFT')
+            ORDER BY employee_type, employee_name
+            """,
+            conn,
+            params=params or None,
+        )
+        rows.extend(
+            [(row.employee_id, row.employee_name, row.employee_type) for _, row in df.iterrows()]
+        )
+
+    if include_site_workers and (
+        not staff_only
+        and (not employee_type_filter or str(employee_type_filter).strip() in ("", "All", "Site Worker"))
+    ):
+        worker_df = pd.read_sql_query(
+            """
+            SELECT worker_id, worker_name
+            FROM workers
+            WHERE COALESCE(worker_id, '') != ''
+              AND UPPER(COALESCE(status, 'Active')) IN ('ACTIVE', 'Active', '')
+            ORDER BY worker_name
+            """,
+            conn,
+        )
+        for _, row in worker_df.iterrows():
+            rows.append((row.worker_id, row.worker_name, "Site Worker"))
+
     conn.close()
-    return [(row.employee_id, row.employee_name, row.employee_type) for _, row in df.iterrows()]
+    return rows
 
 
 def load_project_staff_options(project_name=None):
@@ -4779,6 +4863,69 @@ def format_decimal_hours(hours) -> str:
         total_minutes = 0
     h, m = divmod(total_minutes, 60)
     return f"{h:02d}:{m:02d}"
+
+
+def get_today_attendance_kpis(target_date=None):
+    """Dashboard KPIs for attendance entry: present, absent, late, OT, attendance %."""
+    day = target_date or datetime.now().strftime(DATE_FMT)
+    conn = get_conn()
+    total_workers = int(
+        scalar_query(
+            """
+            SELECT COUNT(*) FROM employees
+            WHERE UPPER(COALESCE(status, 'ACTIVE')) = 'ACTIVE'
+               OR TRIM(COALESCE(status, '')) = ''
+            """
+        )
+        or 0
+    )
+    df = pd.read_sql_query(
+        """
+        SELECT employee_id, status, in_time, COALESCE(ot_hours, 0) AS ot_hours
+        FROM attendance
+        WHERE attendance_date = ?
+        """,
+        conn,
+        params=(day,),
+    )
+    conn.close()
+
+    present = absent = late = ot_workers = 0
+    late_cutoff = "08:30"
+    if not df.empty:
+        for _, row in df.iterrows():
+            status_u = str(row.get("status") or "").strip().upper()
+            if status_u == "PRESENT":
+                present += 1
+            elif status_u == "ABSENT":
+                absent += 1
+            elif status_u == "HALF DAY":
+                present += 1
+
+            if float(row.get("ot_hours") or 0) > 0:
+                ot_workers += 1
+
+            if status_u in {"PRESENT", "HALF DAY"}:
+                in_raw = str(row.get("in_time") or "").strip()
+                if in_raw:
+                    try:
+                        norm = parse_flexible_time(in_raw, is_out_time=False)
+                        if norm and norm > late_cutoff:
+                            late += 1
+                    except ValueError:
+                        pass
+
+    attendance_pct = round(min(100.0, (present / total_workers) * 100), 1) if total_workers else 0.0
+    return {
+        "date": day,
+        "total_workers": total_workers,
+        "present": present,
+        "absent": absent,
+        "late": late,
+        "ot_workers": ot_workers,
+        "attendance_pct": attendance_pct,
+        "entries_today": len(df) if not df.empty else 0,
+    }
 
 
 def _employee_applicable_for(employee):
