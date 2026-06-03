@@ -1,0 +1,450 @@
+/* MAXEK ERP — Premium split-screen login */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@500;600;700&display=swap');
+
+:root {
+  --login-primary: #2563eb;
+  --login-primary-dark: #1d4ed8;
+  --login-navy: #0f172a;
+  --login-navy-mid: #1e293b;
+  --login-bg: #eef1f6;
+  --login-card: #ffffff;
+  --login-muted: #64748b;
+  --login-border: #e2e8f0;
+}
+
+body.maxek-login-page {
+  background: var(--login-bg) !important;
+  font-family: 'Inter', 'Poppins', 'Segoe UI', sans-serif !important;
+}
+
+body.maxek-login-page .maxek-watermark,
+body.maxek-login-page header[data-testid="stHeader"],
+body.maxek-login-page #MainMenu,
+body.maxek-login-page footer {
+  display: none !important;
+  visibility: hidden !important;
+}
+
+body.maxek-login-page section.main {
+  padding: 0 !important;
+  min-height: 100vh !important;
+  max-width: 100% !important;
+}
+
+body.maxek-login-page section.main > div.block-container {
+  max-width: 100% !important;
+  width: 100% !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+body.maxek-login-page [data-testid="stHorizontalBlock"].maxek-login-split {
+  min-height: 100vh !important;
+  align-items: stretch !important;
+  gap: 0 !important;
+}
+
+body.maxek-login-page [data-testid="stHorizontalBlock"].maxek-login-split > [data-testid="column"] {
+  min-height: 100vh !important;
+  padding: 0 !important;
+}
+
+body.maxek-login-page [data-testid="stHorizontalBlock"].maxek-login-split > [data-testid="column"]:first-child {
+  flex: 1 1 50% !important;
+  min-width: 0 !important;
+}
+
+body.maxek-login-page [data-testid="stHorizontalBlock"].maxek-login-split > [data-testid="column"]:last-child {
+  flex: 1 1 50% !important;
+  min-width: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: var(--login-bg) !important;
+  padding: 1.5rem 1.25rem 4.5rem !important;
+}
+
+/* —— Left hero panel —— */
+.maxek-login-hero {
+  position: relative;
+  min-height: 100vh;
+  height: 100%;
+  overflow: hidden;
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 2.5rem 2.25rem 2.75rem;
+  box-sizing: border-box;
+}
+
+.maxek-login-hero-slider {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-size: cover;
+  background-position: center;
+  animation: maxekHeroSlide 21s ease-in-out infinite;
+}
+
+.maxek-login-hero-slider::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(15, 23, 42, 0.55) 0%,
+    rgba(15, 23, 42, 0.72) 45%,
+    rgba(15, 23, 42, 0.88) 100%
+  );
+  z-index: 1;
+}
+
+.maxek-login-hero-content {
+  position: relative;
+  z-index: 2;
+  max-width: 520px;
+}
+
+.maxek-login-hero-badge {
+  display: inline-block;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.25);
+  border: 1px solid rgba(147, 197, 253, 0.35);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 1rem;
+}
+
+.maxek-login-hero-title {
+  font-family: 'Poppins', 'Inter', sans-serif;
+  font-size: clamp(1.65rem, 3vw, 2.15rem);
+  font-weight: 700;
+  line-height: 1.2;
+  margin: 0 0 0.45rem;
+  letter-spacing: -0.02em;
+}
+
+.maxek-login-hero-subtitle {
+  font-size: clamp(1rem, 2vw, 1.15rem);
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.88);
+  margin: 0 0 1.75rem;
+}
+
+.maxek-login-hero-modules {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem 1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.maxek-login-hero-modules li {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.maxek-login-hero-modules li::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #60a5fa;
+  flex-shrink: 0;
+}
+
+@keyframes maxekHeroSlide {
+  0%, 30% {
+    background-image: url("https://images.unsplash.com/photo-1541888946425-d81bb19240f5?auto=format&fit=crop&w=1400&q=80");
+  }
+  33%, 63% {
+    background-image: url("https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=1400&q=80");
+  }
+  66%, 96% {
+    background-image: url("https://images.unsplash.com/photo-1486406146927-c627a92ad1ab?auto=format&fit=crop&w=1400&q=80");
+  }
+  100% {
+    background-image: url("https://images.unsplash.com/photo-1541888946425-d81bb19240f5?auto=format&fit=crop&w=1400&q=80");
+  }
+}
+
+/* —— Right login card —— */
+.maxek-login-card-shell {
+  width: min(92vw, 420px);
+  margin: 0 auto;
+}
+
+.maxek-login-card {
+  background: var(--login-card);
+  border-radius: 14px;
+  border: 1px solid var(--login-border);
+  box-shadow: 0 22px 50px rgba(15, 23, 42, 0.1), 0 4px 14px rgba(15, 23, 42, 0.06);
+  padding: 2rem 2rem 1.35rem;
+  box-sizing: border-box;
+}
+
+.maxek-login-card-logo {
+  display: block;
+  width: 88px;
+  height: auto;
+  margin: 0 auto 1rem;
+  object-fit: contain;
+}
+
+.maxek-login-card-title {
+  text-align: center;
+  font-family: 'Poppins', 'Inter', sans-serif;
+  font-size: 1.65rem;
+  font-weight: 700;
+  color: var(--login-navy);
+  margin: 0 0 0.25rem;
+  letter-spacing: -0.02em;
+}
+
+.maxek-login-card-subtitle {
+  text-align: center;
+  color: var(--login-muted);
+  font-size: 0.9rem;
+  font-weight: 500;
+  margin: 0 0 1.35rem;
+}
+
+.maxek-login-card-divider {
+  height: 1px;
+  background: var(--login-border);
+  margin: 0 0 1.15rem;
+}
+
+/* Streamlit widgets inside login card */
+body.maxek-login-page .maxek-login-card-shell [data-testid="stTextInput"],
+body.maxek-login-page .maxek-login-card-shell [data-testid="stTextInput"] > div,
+body.maxek-login-page .maxek-login-card-shell [data-testid="stTextInput"] > div > div {
+  width: 100% !important;
+}
+
+body.maxek-login-page .maxek-login-card-shell [data-testid="stTextInput"] label {
+  font-size: 0.82rem !important;
+  font-weight: 600 !important;
+  color: #334155 !important;
+}
+
+body.maxek-login-page .maxek-login-card-shell [data-testid="stTextInput"] input {
+  width: 100% !important;
+  min-height: 46px !important;
+  height: 46px !important;
+  font-size: 0.94rem !important;
+  border-radius: 10px !important;
+  border: 1px solid #cbd5e1 !important;
+  padding: 0.5rem 0.75rem !important;
+  box-sizing: border-box !important;
+}
+
+body.maxek-login-page .maxek-login-card-shell [data-testid="stTextInput"] input:focus {
+  border-color: var(--login-primary) !important;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15) !important;
+}
+
+body.maxek-login-page .maxek-login-card-shell [data-testid="stCheckbox"] label {
+  font-size: 0.84rem !important;
+  color: #475569 !important;
+}
+
+body.maxek-login-page .maxek-login-card-shell div.stButton > button[kind="secondary"] {
+  min-height: 2.35rem !important;
+  height: 2.35rem !important;
+  font-size: 0.78rem !important;
+  border-radius: 8px !important;
+  padding: 0.2rem 0.45rem !important;
+}
+
+body.maxek-login-page .maxek-login-card-shell div.stButton > button[kind="primary"],
+body.maxek-login-page .maxek-login-card-shell div.stButton > button[data-testid="stBaseButton-primary"] {
+  width: 100% !important;
+  min-height: 50px !important;
+  height: 50px !important;
+  font-size: 0.95rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.05em !important;
+  text-transform: uppercase;
+  border-radius: 10px !important;
+  background: linear-gradient(135deg, var(--login-primary) 0%, var(--login-primary-dark) 100%) !important;
+  color: #fff !important;
+  border: none !important;
+  transition: transform 0.15s ease, box-shadow 0.15s ease !important;
+}
+
+body.maxek-login-page .maxek-login-card-shell div.stButton > button[kind="primary"]:hover,
+body.maxek-login-page .maxek-login-card-shell div.stButton > button[data-testid="stBaseButton-primary"]:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.38) !important;
+}
+
+.maxek-login-forgot-link {
+  text-align: right;
+  margin: -0.15rem 0 0.65rem;
+}
+
+.maxek-login-forgot-link button {
+  background: transparent !important;
+  border: none !important;
+  color: var(--login-primary) !important;
+  font-size: 0.82rem !important;
+  font-weight: 600 !important;
+  padding: 0 !important;
+  min-height: auto !important;
+  height: auto !important;
+  box-shadow: none !important;
+}
+
+.maxek-login-security-strip {
+  margin-top: 1.15rem;
+  padding-top: 0.95rem;
+  border-top: 1px dashed var(--login-border);
+}
+
+.maxek-login-security-strip p {
+  margin: 0 0 0.55rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.maxek-login-security-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.maxek-login-security-badges span {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #64748b;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  padding: 0.22rem 0.55rem;
+}
+
+.maxek-login-otp-soon {
+  text-align: center;
+  margin-top: 0.75rem;
+  font-size: 0.78rem;
+  color: #94a3b8;
+}
+
+.maxek-login-page-footer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  text-align: center;
+  padding: 0.85rem 1rem 1rem;
+  background: linear-gradient(180deg, transparent, rgba(238, 241, 246, 0.96) 40%);
+  pointer-events: none;
+  z-index: 5;
+}
+
+.maxek-login-page-footer strong {
+  display: block;
+  color: var(--login-navy);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.maxek-login-page-footer span {
+  display: block;
+  color: var(--login-muted);
+  font-size: 0.74rem;
+  margin-top: 0.15rem;
+}
+
+.maxek-login-page-footer em {
+  display: block;
+  color: #94a3b8;
+  font-size: 0.7rem;
+  font-style: normal;
+  margin-top: 0.25rem;
+}
+
+.maxek-login-decoy {
+  position: absolute;
+  left: -9999px;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+body.maxek-login-page input:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0 1000px #ffffff inset !important;
+  box-shadow: 0 0 0 1000px #ffffff inset !important;
+}
+
+/* Tablet */
+@media (max-width: 992px) {
+  body.maxek-login-page [data-testid="stHorizontalBlock"].maxek-login-split {
+    flex-direction: column !important;
+    min-height: auto !important;
+  }
+
+  body.maxek-login-page [data-testid="stHorizontalBlock"].maxek-login-split > [data-testid="column"] {
+    min-height: auto !important;
+    width: 100% !important;
+    flex: 1 1 100% !important;
+  }
+
+  .maxek-login-hero {
+    min-height: 42vh;
+    padding: 1.75rem 1.5rem 2rem;
+  }
+
+  .maxek-login-hero-modules {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  body.maxek-login-page [data-testid="stHorizontalBlock"].maxek-login-split > [data-testid="column"]:last-child {
+    padding: 1.25rem 1rem 4.5rem !important;
+  }
+}
+
+/* Mobile */
+@media (max-width: 576px) {
+  .maxek-login-hero {
+    min-height: 36vh;
+    padding: 1.35rem 1.15rem 1.5rem;
+  }
+
+  .maxek-login-hero-modules {
+    grid-template-columns: 1fr;
+    gap: 0.4rem;
+  }
+
+  .maxek-login-card {
+    padding: 1.5rem 1.25rem 1.15rem;
+    border-radius: 12px;
+  }
+
+  .maxek-login-card-logo {
+    width: 72px;
+  }
+
+  .maxek-login-card-title {
+    font-size: 1.45rem;
+  }
+}
