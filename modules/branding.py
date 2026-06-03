@@ -1,0 +1,13 @@
+"""Product branding — single source for display names shown in the UI."""
+
+ERP_BRAND = "MAXEK"
+ERP_DISPLAY_NAME = "MAXEK ERP"
+ERP_SYSTEM_LABEL = "MAXEK ERP System"
+ERP_LOGIN_TITLE = "MAXEK ERP"
+ERP_TAGLINE = "Construction Management System"
+ERP_LOGIN_HERO_LINE = "Construction Management ERP"
+ERP_SIDEBAR_TAGLINE = "Construction Management System"
+ERP_LOGIN_FOOTER = "Construction ERP Platform"
+ERP_LEGAL_NAME = "MAXEK PRIVATE LIMITED"
+ERP_API_TITLE = "MAXEK ERP API"
+ERP_VERSION = "1.0"
