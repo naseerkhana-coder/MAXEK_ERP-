@@ -1,4 +1,4 @@
-# MAXEK ERP SYSTEM
+# MAXEL ERP SYSTEM
 
 ## Run locally
 
@@ -10,6 +10,18 @@ streamlit run web_app.py
 ```
 
 Or double-click `start_web.bat`.
+
+## Recommended folder structure (in-progress)
+
+```text
+erp-project/
+├── backend/     # Streamlit ERP UI (currently still uses root web_app.py)
+├── api/         # FastAPI layer for mobile app
+├── frontend/    # Future React/web frontend (optional)
+├── mobile/      # Capacitor / Android / iOS wrapper
+├── uploads/     # user uploads (files/photos)
+└── database/    # SQLite db file lives here (not in git)
+```
 
 ## Stack (current)
 
@@ -43,18 +55,34 @@ The system should support daily business operations with a clean modern UI, role
 - SQLite for the initial version
 - Easily upgradeable to PostgreSQL later
 
-## Main Menu Structure
-1. Dashboard
-2. Employee Management
-3. Attendance
-4. Payroll
-5. Payments
-6. Expenses
-7. Clients
-8. Projects
-9. Sub Contractors
-10. Reports
-11. Settings
+## Main Menu Structure (14 modules)
+
+The Streamlit sidebar is defined in `modules/navigation.py` with collapsible sub-groups.
+
+1. **Dashboard** — Management, Project, Accounts, HR, Store dashboards; Pending Approvals; Notifications; Calendar
+2. **Master Management** — Client, Contractor, Vendor, Employee, Material, Equipment, Vehicle, Location masters
+3. **Project Management** — Project setup, Site, BOQ, Work orders, DPR, Billing, Project costing
+4. **Purchase Management** — Requisition → RFQ → Quotation → PO → GRN → Invoice → Vendor payment
+5. **Store & Inventory** — Receipt, Issue, Return, Transfer, Adjustment, Site stock, Alerts, Valuation
+6. **HR & Payroll** — Attendance, Leave, Transfer, Overtime, Payroll, Salary slip, Labour attendance
+7. **Accounts & Finance** — COA, Vouchers, Banking, GST, Cash/Bank books, TB, P&L, Balance sheet
+8. **Petty Cash Management** — Request → Allocation → Expense → Verification → Approval → Settlement
+9. **Asset & Equipment Management** — Register, Allocation, Fuel, Maintenance, Breakdown, Costing
+10. **Vehicle Management** — Allocation, Trip sheet, Fuel, Service, Insurance, Cost reports
+11. **Document & Letter Management** — Incoming/outgoing letters, Document control (contracts, drawings, site, legal)
+12. **Approval Center** — Purchase, Payment, Petty cash, Leave, Work order, Vendor, Client, Project
+13. **Reports & MIS** — Project, Accounts, Store, HR, Management profitability and cash flow
+14. **Settings & Administration** — Users, Roles, Email, WhatsApp, Number series, Backup, Audit, ERP config
+
+### Business workflow
+
+```
+Client → Project → Site → BOQ → Work Order → Purchase → Store → Accounts → Billing → Reports
+Sub Contractor → Work Order → Attendance → Billing → Payment
+Site Petty Cash → Expense Entry → Invoice Upload → Accounts Verification → Approval → Settlement
+```
+
+Screen routing: `modules/erp_router.py` · New module screens: `modules/erp_screens.py` · Data layer: `modules/erp_data.py`
 
 ## Important UI Requirements
 - Modern clean UI

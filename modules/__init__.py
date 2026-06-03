@@ -1,1 +1,1 @@
-"""MAXEK ERP web application modules."""
+"""MAXEL ERP web application modules."""

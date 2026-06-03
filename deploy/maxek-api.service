@@ -1,0 +1,15 @@
+[Unit]
+Description=MAXEK ERP Mobile API (FastAPI)
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/var/www/maxek-erp
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/var/www/maxek-erp/.venv/bin/python -m uvicorn api_app:app --host 0.0.0.0 --port 8001
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
