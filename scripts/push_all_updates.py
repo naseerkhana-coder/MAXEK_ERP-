@@ -11,20 +11,26 @@ from pathlib import Path
 import paramiko
 
 ROOT = Path(__file__).resolve().parents[1]
-FILES = (
-    ("modules/database.py", "modules/database.py"),
-    ("modules/pages.py", "modules/pages.py"),
-    ("modules/dpr.py", "modules/dpr.py"),
-    ("modules/dpr_measurements.py", "modules/dpr_measurements.py"),
-    ("modules/dpr_steel_shapes.py", "modules/dpr_steel_shapes.py"),
-    ("modules/dpr_boq_lines.py", "modules/dpr_boq_lines.py"),
-    ("modules/billing.py", "modules/billing.py"),
-    ("styles/theme.css", "styles/theme.css"),
-    ("api_app.py", "api_app.py"),
-    ("scripts/repair_project_boq_links.py", "scripts/repair_project_boq_links.py"),
-    ("assets/dpr_steel/chair.png", "assets/dpr_steel/chair.png"),
-    ("assets/dpr_steel/ring.png", "assets/dpr_steel/ring.png"),
-    ("assets/dpr_steel/starter.png", "assets/dpr_steel/starter.png"),
+
+# Core entry + every module (avoids missing-file errors like modules.roles on VPS).
+_EXTRA_FILES = (
+    "web_app.py",
+    "database/migrate.py",
+)
+_MODULE_FILES = tuple(
+    f"modules/{p.name}" for p in sorted((ROOT / "modules").glob("*.py"))
+)
+FILES = tuple(
+    (rel, rel)
+    for rel in (
+        *_MODULE_FILES,
+        *_EXTRA_FILES,
+        "styles/theme.css",
+        "scripts/repair_project_boq_links.py",
+        "assets/dpr_steel/chair.png",
+        "assets/dpr_steel/ring.png",
+        "assets/dpr_steel/starter.png",
+    )
 )
 
 

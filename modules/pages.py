@@ -325,7 +325,7 @@ def _load_employee_into_form(row):
     st.session_state.employee_location_region = row.get("region") or ""
     st.session_state.employee_location_district = row.get("district") or ""
     if _is_internal_staff(st.session_state.get("employee_type")):
-        st.session_state.employee_company = "MAXEK PRIVATE LIMITED"
+        st.session_state.employee_company = "MAXEL PRIVATE LIMITED"
     else:
         st.session_state.employee_company = row.get("company_or_subcontractor") or ""
     st.session_state.employee_project = row.get("project_name") or ""
@@ -726,7 +726,7 @@ def page_employee_management():
         "Monthly Staff",
     )
     if _is_internal_staff(st.session_state.get("employee_type")):
-        _ensure_session_select("employee_company", ["MAXEK PRIVATE LIMITED"], "MAXEK PRIVATE LIMITED")
+        _ensure_session_select("employee_company", ["MAXEL PRIVATE LIMITED"], "MAXEL PRIVATE LIMITED")
         _ensure_session_select("employee_weekly_off", WEEKDAY_NAMES, "Sunday")
         _ensure_session_select("employee_paid_holiday", ["Yes", "No"], "Yes")
         _ensure_session_select(
@@ -772,7 +772,7 @@ def page_employee_management():
     if employee_type == "Sub Contractor Worker":
         company_or_sub = c2.selectbox("Select Subcontractor", subcontractors, index=0, key="employee_company")
     else:
-        company_or_sub = c2.selectbox("Company", ["MAXEK PRIVATE LIMITED"], key="employee_company")
+        company_or_sub = c2.selectbox("Company", ["MAXEL PRIVATE LIMITED"], key="employee_company")
 
     employee_name = c3.text_input("Worker Name" if employee_type == "Sub Contractor Worker" else "Employee Name", key="employee_name")
 

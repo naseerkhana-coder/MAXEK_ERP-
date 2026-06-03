@@ -28,18 +28,18 @@ STORE_KEEPER_ROLES = frozenset({"Store Keeper"})
 HR_PAYROLL_ROLES = frozenset({"HR & Payroll", "HR"})
 
 COMPANY_FINANCIAL_REPORT_PAGES = frozenset(
-    {"rpt_financial", "rpt_profit_loss", "rpt_balance_sheet"}
+    {"acc_trial_balance", "acc_pl", "acc_balance_sheet", "rpt_cash_flow"}
 )
 SUPPLIER_PAYMENT_PAGES = frozenset(
     {
-        "fin_payments",
-        "fin_purchase_invoice",
-        "fin_creditors",
-        "sub_payments",
-        "sub_bill_entry",
+        "acc_payment",
+        "purch_invoice",
+        "acc_outstanding",
+        "purch_vendor_payment",
+        "proj_wo_sub",
     }
 )
-FINANCE_MODULE_SECTIONS = frozenset({"finance", "gst_tds"})
+FINANCE_MODULE_SECTIONS = frozenset({"accounts", "petty_cash", "purchase"})
 
 ROLE_DISPLAY_NAMES = {
     "Super Admin": "Super Admin (Owner / MD)",

@@ -1805,7 +1805,7 @@ def _render_finance_toolbar():
     if st.session_state.get("finance_view") not in keys:
         st.session_state.finance_view = keys[0] if keys else "expense"
 
-    st.markdown('<div class="maxek-finance-toolbar">', unsafe_allow_html=True)
+    st.markdown('<div class="maxek-finance-toolbar-start" aria-hidden="true"></div>', unsafe_allow_html=True)
     row_size = 5
     for start in range(0, len(items), row_size):
         row = items[start : start + row_size]
@@ -1821,7 +1821,24 @@ def _render_finance_toolbar():
                     if st.session_state.finance_view != key:
                         st.session_state.finance_view = key
                         st.rerun()
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown('<div class="maxek-finance-toolbar-end" aria-hidden="true"></div>', unsafe_allow_html=True)
+    st.markdown(
+        """
+        <script>
+        (function () {
+          var start = document.querySelector(".maxek-finance-toolbar-start");
+          var end = document.querySelector(".maxek-finance-toolbar-end");
+          if (!start || !end) return;
+          var el = start.nextElementSibling;
+          while (el && el !== end) {
+            el.classList.add("maxek-finance-toolbar-row");
+            el = el.nextElementSibling;
+          }
+        })();
+        </script>
+        """,
+        unsafe_allow_html=True,
+    )
     st.divider()
 
 
@@ -1890,7 +1907,36 @@ def render_budget_panel():
     if df.empty:
         st.info("No budget lines for this project yet. Configure in Reports & Controls → Budget vs Actual.")
         return
-    st.dataframe(df, width="stretch", hide_index=True)
+    row = df.iloc[0]
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Budget", f"Rs {float(row['budget'] or 0):,.2f}")
+    c2.metric("Actual spend", f"Rs {float(row['actual_total'] or 0):,.2f}")
+    c3.metric("Variance", f"Rs {float(row['variance'] or 0):,.2f}")
+    c4.metric("Utilization", f"{float(row['utilization_pct'] or 0):.1f}%")
+    show = df[
+        [
+            "project_name",
+            "budget",
+            "site_expenses",
+            "direct_payments",
+            "legacy_finance",
+            "actual_total",
+            "variance",
+            "utilization_pct",
+        ]
+    ].rename(
+        columns={
+            "project_name": "Project",
+            "budget": "Budget (Rs)",
+            "site_expenses": "Expenses (Rs)",
+            "direct_payments": "Direct Payments (Rs)",
+            "legacy_finance": "Legacy Finance (Rs)",
+            "actual_total": "Actual Total (Rs)",
+            "variance": "Variance (Rs)",
+            "utilization_pct": "Utilization %",
+        }
+    )
+    st.dataframe(show, width="stretch", hide_index=True)
 
 
 def render_approval_inbox(title: str, statuses: list[str]):

@@ -1,9 +1,10 @@
-"""Master data entry screens for MAXEK ERP."""
+"""Master data entry screens for MAXEL ERP."""
 
 from datetime import datetime
 
 import streamlit as st
 
+from modules.branding import ERP_LEGAL_NAME
 from modules.database import (
     DATE_FMT,
     load_chart_of_accounts,
@@ -27,7 +28,7 @@ def page_masters_company():
     company = load_company_master()
     with st.form("company_master_form"):
         c1, c2 = st.columns(2)
-        company_name = c1.text_input("Company Name", value=company.get("company_name", "MAXEK PRIVATE LIMITED"))
+        company_name = c1.text_input("Company Name", value=company.get("company_name", ERP_LEGAL_NAME))
         gst_number = c2.text_input("GST Number", value=company.get("gst_number", ""))
         phone = c1.text_input("Phone", value=company.get("phone", ""))
         email = c2.text_input("Email", value=company.get("email", ""))

@@ -16,6 +16,7 @@ DATE_INPUT_FMT = "DD/MM/YYYY"
 DASHBOARD_SECTION_ORDER_DEFAULT = [
     "welcome",
     "kpis",
+    "cash_flow",
     "overviews",
     "recent_payments",
     "notifications",
@@ -23,6 +24,7 @@ DASHBOARD_SECTION_ORDER_DEFAULT = [
 DASHBOARD_SECTION_LABELS = {
     "welcome": "Welcome Header",
     "kpis": "KPI Cards",
+    "cash_flow": "Daily Cash Flow",
     "overviews": "Overview Panels",
     "recent_payments": "Recent Payments",
     "notifications": "Notifications",
@@ -64,6 +66,8 @@ DOCUMENT_PREFIXES = {
     "petty_cash_issue": "PCI",
     "material_request": "MR",
     "subcontractor_bill": "SCB",
+    "inward_letter": "INW",
+    "outward_letter": "OUT",
 }
 
 DEFAULT_LEDGER_ACCOUNTS = {
@@ -1669,6 +1673,23 @@ def init_db():
     _seed_default_company(conn)
     _sync_vendors_from_subcontractors(cur)
 
+    from modules.correspondence_data import ensure_correspondence_tables
+
+    ensure_correspondence_tables(conn)
+    for key, val in [
+        ("corr_imap_enabled", "0"),
+        ("corr_imap_host", "imap.gmail.com"),
+        ("corr_imap_user", "info@maxexinindia.com"),
+    ]:
+        cur.execute(
+            "INSERT OR IGNORE INTO app_settings(setting_key, setting_value) VALUES(?, ?)",
+            (key, val),
+        )
+
+    from modules.erp_data import ensure_erp_extension_tables
+
+    ensure_erp_extension_tables(conn)
+
     conn.commit()
     conn.close()
 
@@ -1980,7 +2001,7 @@ def _seed_default_company(conn):
             """,
             (
                 "CMP101",
-                "MAXEK PRIVATE LIMITED",
+                "MAXEL PRIVATE LIMITED",
                 "",
                 "",
                 "",
@@ -2003,26 +2024,29 @@ def _sync_vendors_from_subcontractors(cur):
         cur.execute("SELECT COUNT(*) FROM vendors WHERE subcontractor_id = ?", (sub_id,))
         if cur.fetchone()[0] == 0:
             vendor_id = generate_id("VND", "vendors", id_column="vendor_id")
-            cur.execute(
-                """
-                INSERT INTO vendors(
-                    vendor_id, vendor_type, supplier_name, gst_number, contact_person,
-                    mobile, address, subcontractor_id, status, created_at
-                ) VALUES(?,?,?,?,?,?,?,?,?,?)
-                """,
-                (
-                    vendor_id,
-                    vtype or "Subcontractor",
-                    name or "",
-                    gst or "",
-                    contact or "",
-                    mobile or "",
-                    address or "",
-                    sub_id,
-                    "Active",
-                    _finance_timestamp(),
-                ),
-            )
+            try:
+                cur.execute(
+                    """
+                    INSERT INTO vendors(
+                        vendor_id, vendor_type, supplier_name, gst_number, contact_person,
+                        mobile, address, subcontractor_id, status, created_at
+                    ) VALUES(?,?,?,?,?,?,?,?,?,?)
+                    """,
+                    (
+                        vendor_id,
+                        vtype or "Subcontractor",
+                        name or "",
+                        gst or "",
+                        contact or "",
+                        mobile or "",
+                        address or "",
+                        sub_id,
+                        "Active",
+                        _finance_timestamp(),
+                    ),
+                )
+            except sqlite3.IntegrityError:
+                pass
 
 
 def _expense_category_ledger_account(category):
@@ -3771,10 +3795,15 @@ def check_petty_cash_limit(project_name, extra_amount=0.0):
     return True, ""
 
 
-def load_budget_vs_actual():
+def load_budget_vs_actual(project_name=None):
     conn = get_conn()
+    params = []
+    project_filter = ""
+    if project_name:
+        project_filter = " AND p.project_name = ?"
+        params.append(project_name)
     df = pd.read_sql_query(
-        """
+        f"""
         SELECT p.project_name,
                COALESCE(NULLIF(pfs.expense_budget, 0), COALESCE(p.budget, 0)) AS budget,
                COALESCE(se.actual_expense, 0) AS site_expenses,
@@ -3800,10 +3829,11 @@ def load_budget_vs_actual():
               AND transaction_type IN ('expense_voucher', 'payment_out')
             GROUP BY project_name
         ) ft ON ft.project_name = p.project_name
-        WHERE COALESCE(p.project_name, '') != ''
+        WHERE COALESCE(p.project_name, '') != ''{project_filter}
         ORDER BY p.project_name
         """,
         conn,
+        params=params or None,
     )
     conn.close()
     if df.empty:

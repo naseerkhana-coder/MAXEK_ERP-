@@ -5,6 +5,7 @@ from datetime import datetime
 import pandas as pd
 import streamlit as st
 
+from modules.branding import ERP_LEGAL_NAME
 from modules.database import (
     DATE_FMT,
     generate_id,
@@ -47,7 +48,7 @@ def _bill_html(title, header_rows, line_rows, totals, footer=""):
       .totals td {{ border: none; }}
       @media print {{ button {{ display: none; }} }}
     </style></head><body>
-    <h2>MAXEK PRIVATE LIMITED</h2>
+    <h2>{ERP_LEGAL_NAME}</h2>
     <h3>{title}</h3>
     <table>{header_html}</table>
     <table>{lines_html}</table>

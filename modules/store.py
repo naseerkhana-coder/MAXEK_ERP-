@@ -6,6 +6,7 @@ import streamlit as st
 
 from modules.database import (
     DATE_FMT,
+    DATE_INPUT_FMT,
     generate_id,
     get_conn,
     load_material_requests,
@@ -45,7 +46,7 @@ def _render_new_request_tab(projects):
         c3, c4, c5 = st.columns(3)
         quantity = c3.number_input("Quantity", min_value=0.01, step=1.0, value=1.0)
         unit = c4.selectbox("Unit", MATERIAL_UNITS, index=0)
-        required_date = c5.date_input("Required date", value=datetime.now().date(), format=DATE_FMT)
+        required_date = c5.date_input("Required date", value=datetime.now().date(), format=DATE_INPUT_FMT)
         remarks = st.text_input("Remarks")
         if st.form_submit_button("SUBMIT REQUEST", type="primary", width="stretch"):
             if not item_name.strip():

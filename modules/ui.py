@@ -22,11 +22,21 @@ from modules.database import (
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 THEME_CSS_PATH = os.path.join(BASE_DIR, "styles", "theme.css")
+from modules.branding import (
+    ERP_BRAND,
+    ERP_DISPLAY_NAME,
+    ERP_LEGAL_NAME,
+    ERP_LOGIN_FOOTER,
+    ERP_LOGIN_TITLE,
+    ERP_SYSTEM_LABEL,
+    ERP_TAGLINE,
+    ERP_VERSION,
+)
+
 LOGO_SVG_PATH = os.path.join(BASE_DIR, "assets", "logo", "maxek_logo.svg")
 LOGO_PNG_PATH = os.path.join(BASE_DIR, "assets", "logo", "maxek_logo.png")
 
 from modules.navigation import (
-    MENU_DASHBOARD,
     MENU_SECTIONS,
     page_label,
     section_for_page,
@@ -161,99 +171,27 @@ def location_dropdowns(
 
 
 def render_sidebar(user_name: str, on_logout, allowed_pages=None):
-    page = st.session_state.get("page", "dashboard")
-    stats = kpi_stats()
-    dashboard_settings = get_dashboard_settings()
-    uri = _logo_data_uri()
-    logo_img = f'<img src="{uri}" alt="MAXEK" />' if uri else ""
-    user_role = st.session_state.get("user_role", "Admin")
-    user_role_label = display_role_name(user_role)
-    st.markdown(
-        f"""
-        <div class="maxek-sidebar-shell">
-          <div class="maxek-sidebar-brand">
-            {logo_img}
-            <div>
-              <div class="maxek-sidebar-title">MAXEK ERP</div>
-              <div class="maxek-sidebar-subtitle">Construction ERP System</div>
-            </div>
-          </div>
-          <div class="maxek-sidebar-section">Main Menu</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    from modules.sidebar import render_erp_sidebar
 
-    allowed_pages = set(allowed_pages or {MENU_DASHBOARD[0]})
-    dash_key, dash_label = MENU_DASHBOARD
-    if dash_key in allowed_pages:
-        if st.button(
-            f"🏠  {dash_label}",
-            key=f"sidebar_{dash_key}",
-            width="stretch",
-            type="primary" if page == dash_key else "secondary",
-        ):
-            st.session_state.page = dash_key
-            st.rerun()
-
-    current_section = section_for_page(page)
-    for section_id, section_label, items in MENU_SECTIONS:
-        visible = [(k, lbl) for k, lbl in items if k in allowed_pages]
-        if not visible:
-            continue
-        expanded = current_section == section_id
-        with st.expander(section_label, expanded=expanded):
-            for key, label in visible:
-                if st.button(
-                    label,
-                    key=f"sidebar_{key}",
-                    width="stretch",
-                    type="primary" if page == key else "secondary",
-                ):
-                    st.session_state.page = key
-                    st.rerun()
-
-    if dashboard_settings.get("show_sidebar_cashflow", True):
-        st.markdown(
-            f"""
-            <div class="maxek-cash-card">
-              <div class="maxek-cash-title">Daily Cash Flow</div>
-              <div class="maxek-cash-row"><span>Opening Balance</span><strong>Rs 0.00</strong></div>
-              <div class="maxek-cash-row"><span>Cash In</span><strong>Rs {stats['cash_in']:,.2f}</strong></div>
-              <div class="maxek-cash-row"><span>Cash Out</span><strong>Rs {stats['cash_out']:,.2f}</strong></div>
-              <div class="maxek-cash-row maxek-cash-total"><span>Closing Balance</span><strong>Rs {stats['cash_in_hand']:,.2f}</strong></div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    st.markdown(
-        f"""
-        <div class="maxek-sidebar-user">
-          <strong>{user_name}</strong>
-          <span>{user_role}</span>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    if st.button("Logout", key="sidebar_logout", width="stretch"):
-        on_logout()
+    render_erp_sidebar(user_name, allowed_pages)
 
 
-def render_page_header(user_name: str):
-    left, middle, right = st.columns([1.1, 2.2, 1.5])
-    current_page = page_label(st.session_state.get("page", "dashboard"))
+def render_page_header(user_name: str, on_logout=None):
+    left, middle, right = st.columns([1.15, 2.15, 1.35])
+    current_page = page_label(st.session_state.get("page", "dash_mgmt"))
     section = section_for_page(st.session_state.get("page", ""))
     if section:
-        section_title = next(lbl for sid, lbl, _ in MENU_SECTIONS if sid == section)
+        section_title = next(lbl for sid, lbl, _icon, _ in MENU_SECTIONS if sid == section)
         current_page = f"{section_title} · {current_page}"
     user_role = st.session_state.get("user_role", "Admin")
     user_role_label = display_role_name(user_role)
+    today = datetime.now()
     with left:
         st.markdown(
             f"""
             <div class="maxek-header-pill">
               <div class="maxek-header-page">{current_page}</div>
-              <div class="maxek-header-caption">MAXEK ERP System</div>
+              <div class="maxek-header-caption">{ERP_SYSTEM_LABEL}</div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -266,20 +204,22 @@ def render_page_header(user_name: str):
             placeholder="Search anything...",
         )
     with right:
-        today = datetime.now()
         st.markdown(
             f"""
-            <div class="maxek-header-actions">
-              <div class="maxek-header-chip">Calendar</div>
-              <div class="maxek-header-chip">Alerts</div>
-              <div class="maxek-header-user">
-                <div class="maxek-header-user-name">{user_name}</div>
-                <div class="maxek-header-user-meta">{user_role} · {today.strftime('%d %b %Y')}</div>
-              </div>
+            <div class="maxek-header-user-block">
+              <div class="maxek-header-user-name">{user_name}</div>
+              <div class="maxek-header-user-meta">{user_role_label} · {today.strftime('%d %b %Y')}</div>
             </div>
             """,
             unsafe_allow_html=True,
         )
+        if on_logout and st.button(
+            "Log out",
+            key="header_logout",
+            type="secondary",
+            use_container_width=True,
+        ):
+            on_logout()
 
 
 def _overview_panel(title, items):
@@ -339,6 +279,20 @@ def _render_dashboard_kpis(stats):
     st.markdown("".join(html_parts), unsafe_allow_html=True)
 
 
+def _render_dashboard_cash_flow(stats):
+    st.markdown(
+        """
+        <div class="maxek-section-title">Daily Cash Flow</div>
+        """,
+        unsafe_allow_html=True,
+    )
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Opening Balance", "Rs 0.00")
+    c2.metric("Cash In", f"Rs {stats['cash_in']:,.2f}")
+    c3.metric("Cash Out", f"Rs {stats['cash_out']:,.2f}")
+    c4.metric("Closing Balance", f"Rs {stats['cash_in_hand']:,.2f}")
+
+
 def _render_dashboard_overviews(stats, dashboard_settings):
     panels = []
     if dashboard_settings.get("show_attendance_overview", True):
@@ -366,14 +320,12 @@ def _render_dashboard_overviews(stats, dashboard_settings):
     if dashboard_settings.get("show_expense_overview", True):
         panels.append(
             (
-                "Expenses Overview",
+                "Petty Cash & Expenses",
                 [
-                    ("Cash In", f"Rs {stats['cash_in']:,.2f}"),
-                    ("Cash Out", f"Rs {stats['cash_out']:,.2f}"),
-                    ("Cash In Hand", f"Rs {stats['cash_in_hand']:,.2f}"),
                     ("Petty Issued", f"Rs {stats.get('petty_issued', 0):,.2f}"),
                     ("Petty Utilized", f"Rs {stats.get('petty_utilized', 0):,.2f}"),
-                    ("Pending Verify", stats.get("petty_pending_verify", 0)),
+                    ("Pending Verification", stats.get("petty_pending_verify", 0)),
+                    ("Monthly Expenses", f"Rs {stats.get('monthly_expense', 0):,.2f}"),
                 ],
             )
         )
@@ -427,6 +379,7 @@ def render_dashboard_home(user_name: str):
     section_renderers = {
         "welcome": lambda: _render_dashboard_welcome(user_name),
         "kpis": lambda: _render_dashboard_kpis(stats),
+        "cash_flow": lambda: _render_dashboard_cash_flow(stats),
         "overviews": lambda: _render_dashboard_overviews(stats, dashboard_settings),
         "recent_payments": _render_dashboard_recent_payments,
         "notifications": _render_dashboard_notifications,
@@ -434,6 +387,7 @@ def render_dashboard_home(user_name: str):
     section_enabled = {
         "welcome": dashboard_settings.get("show_welcome", True),
         "kpis": dashboard_settings.get("show_kpis", True),
+        "cash_flow": dashboard_settings.get("show_sidebar_cashflow", True),
         "overviews": any(
             [
                 dashboard_settings.get("show_attendance_overview", True),
@@ -459,50 +413,138 @@ def render_dashboard_home(user_name: str):
 
 
 _LOGIN_PAGE_CSS = """
+body.maxek-login-page {
+  background: #eef1f6 !important;
+}
+body.maxek-login-page .maxek-watermark {
+  opacity: 0.13 !important;
+  width: min(58vw, 540px) !important;
+  filter: saturate(1.1);
+}
 body.maxek-login-page section.main {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  min-height: calc(100vh - 1rem);
-  padding-top: 0 !important;
+  align-items: center;
+  min-height: 100vh;
+  padding: 1.5rem 1rem 5rem !important;
 }
 body.maxek-login-page section.main .block-container {
-  max-width: min(92vw, 380px) !important;
-  width: min(92vw, 380px) !important;
+  max-width: min(92vw, 480px) !important;
+  width: min(92vw, 480px) !important;
   margin-left: auto !important;
   margin-right: auto !important;
-  padding: 1.6rem 1.25rem 1.1rem !important;
-  background: rgba(255, 255, 255, 0.96) !important;
-  border-radius: 18px !important;
-  border: 1px solid #e5e7eb !important;
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08) !important;
+  padding: 2rem 2rem 1.5rem !important;
+  background: #ffffff !important;
+  border-radius: 16px !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.12) !important;
+}
+body.maxek-login-page .maxek-login-logo {
+  display: block;
+  width: 120px;
+  height: auto;
+  margin: 0 auto 1rem;
+  object-fit: contain;
+}
+body.maxek-login-page .maxek-login-title {
+  text-align: center;
+  color: #0f172a;
+  font-size: 1.55rem;
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+  letter-spacing: -0.02em;
+}
+body.maxek-login-page .maxek-login-subtitle {
+  text-align: center;
+  color: #64748b;
+  font-size: 0.9rem;
+  margin-bottom: 1.35rem;
 }
 body.maxek-login-page [data-testid="stTextInput"],
 body.maxek-login-page [data-testid="stTextInput"] > div,
 body.maxek-login-page [data-testid="stTextInput"] > div > div {
   width: 100% !important;
   max-width: 100% !important;
-  margin-left: auto !important;
-  margin-right: auto !important;
+}
+body.maxek-login-page [data-testid="stTextInput"] label {
+  font-size: 0.85rem !important;
+  font-weight: 600 !important;
+  color: #334155 !important;
 }
 body.maxek-login-page [data-testid="stTextInput"] input {
   width: 100% !important;
   max-width: 100% !important;
   min-width: 0 !important;
-  height: 42px !important;
+  height: 44px !important;
   font-size: 0.95rem !important;
   box-sizing: border-box !important;
+  border-radius: 10px !important;
+}
+body.maxek-login-page [data-testid="stCheckbox"] label {
+  font-size: 0.85rem !important;
+  color: #475569 !important;
 }
 body.maxek-login-page div.stButton {
   width: 100% !important;
-  max-width: 100% !important;
-  margin-left: auto !important;
-  margin-right: auto !important;
+  margin-top: 0.35rem !important;
 }
 body.maxek-login-page div.stButton button {
   width: 100% !important;
-  max-width: 100% !important;
-  height: 42px !important;
+  height: 45px !important;
+  min-height: 45px !important;
+  font-size: 0.95rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.06em !important;
+  border-radius: 10px !important;
+  background: linear-gradient(135deg, #2563eb, #1d4ed8) !important;
+  color: #fff !important;
+  border: none !important;
+}
+body.maxek-login-page div.stButton button:hover {
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.35) !important;
+}
+body.maxek-login-page .maxek-login-forgot {
+  text-align: center;
+  margin-top: 0.85rem;
+  font-size: 0.82rem;
+  color: #64748b;
+}
+body.maxek-login-page .maxek-login-forgot a {
+  color: #2563eb;
+  text-decoration: none;
+  font-weight: 600;
+}
+body.maxek-login-page .maxek-login-page-footer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  text-align: center;
+  padding: 1rem 1rem 1.25rem;
+  background: linear-gradient(180deg, transparent, rgba(238, 241, 246, 0.92) 35%);
+  pointer-events: none;
+  z-index: 2;
+}
+body.maxek-login-page .maxek-login-page-footer strong {
+  display: block;
+  color: #0f172a;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+body.maxek-login-page .maxek-login-page-footer span {
+  display: block;
+  color: #64748b;
+  font-size: 0.76rem;
+  margin-top: 0.2rem;
+}
+body.maxek-login-page .maxek-login-page-footer em {
+  display: block;
+  color: #94a3b8;
+  font-size: 0.72rem;
+  font-style: normal;
+  margin-top: 0.35rem;
 }
 body.maxek-login-page input:-webkit-autofill {
   -webkit-box-shadow: 0 0 0 1000px #ffffff inset !important;
@@ -517,10 +559,9 @@ body.maxek-login-page input:-webkit-autofill {
   opacity: 0;
   pointer-events: none;
 }
-
-@media (max-width: 420px) {
+@media (max-width: 520px) {
   body.maxek-login-page section.main .block-container {
-    padding: 1.35rem 1rem 0.95rem !important;
+    padding: 1.5rem 1.25rem 1.25rem !important;
   }
 }
 """
@@ -539,21 +580,10 @@ def show_login_page():
         </div>
         <script>
         function maxekApplyLoginPage() {
-            var onLogin = !!document.querySelector('.maxek-login-marker');
-            document.body.classList.toggle('maxek-login-page', onLogin);
-            if (!onLogin) return;
-            document.querySelectorAll('section.main input[type="text"], section.main input[type="password"]').forEach(function (el) {
-                if (el.closest('.maxek-login-decoy')) return;
-                el.style.width = '280px';
-                el.style.maxWidth = '280px';
-                el.setAttribute('autocomplete', el.type === 'password' ? 'new-password' : 'off');
-                el.setAttribute('data-lpignore', 'true');
-                el.setAttribute('data-1p-ignore', 'true');
-            });
+            document.body.classList.toggle('maxek-login-page', !!document.querySelector('.maxek-login-marker'));
         }
         maxekApplyLoginPage();
         setTimeout(maxekApplyLoginPage, 80);
-        setTimeout(maxekApplyLoginPage, 400);
         </script>
         """,
         unsafe_allow_html=True,
@@ -562,19 +592,34 @@ def show_login_page():
     uri = _logo_data_uri()
     if uri:
         st.markdown(
-            f'<img src="{uri}" class="maxek-login-logo" alt="MAXEK" />',
+            f'<img src="{uri}" class="maxek-login-logo" alt="{ERP_BRAND}" />',
             unsafe_allow_html=True,
         )
     st.markdown(
-        """
-        <div class="maxek-login-title">MAXEK ERP Login</div>
-        <div class="maxek-login-subtitle">Construction company operations dashboard</div>
+        f"""
+        <div class="maxek-login-title">{ERP_LOGIN_TITLE}</div>
+        <div class="maxek-login-subtitle">{ERP_TAGLINE}</div>
         """,
         unsafe_allow_html=True,
     )
-    username = st.text_input("Username", key="login_user", placeholder="Enter username")
+
+    remembered = st.session_state.get("login_remember_user", False)
+    saved_user = st.session_state.get("login_saved_username", "")
+    if remembered and saved_user and "login_user" not in st.session_state:
+        st.session_state.login_user = saved_user
+    username = st.text_input(
+        "Username",
+        key="login_user",
+        placeholder="Enter username",
+    )
     password = st.text_input("Password", type="password", key="login_pass", placeholder="Enter password")
-    login_clicked = st.button("Login", type="primary", key="login_btn")
+    remember = st.checkbox("Remember me", value=remembered, key="login_remember")
+    login_clicked = st.button("LOGIN", type="primary", key="login_btn")
+
+    st.markdown(
+        '<div class="maxek-login-forgot">Forgot password? Contact your system administrator.</div>',
+        unsafe_allow_html=True,
+    )
 
     if login_clicked:
         conn = get_conn()
@@ -589,10 +634,22 @@ def show_login_page():
             st.session_state.logged_in = True
             st.session_state.user_name = row[0]
             st.session_state.user_role = row[1] or "Admin"
-            st.session_state.page = "dashboard"
+            st.session_state.page = "dash_mgmt"
+            st.session_state.login_remember_user = remember
+            st.session_state.login_saved_username = username.strip() if remember else ""
             st.rerun()
         st.error("Invalid username or password.")
-    st.caption("Default login: admin / 1234")
+
+    st.markdown(
+        f"""
+        <div class="maxek-login-page-footer">
+          <strong>{ERP_LEGAL_NAME}</strong>
+          <span>{ERP_LOGIN_FOOTER}</span>
+          <em>Version {ERP_VERSION}</em>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def wrap_page(content_fn):

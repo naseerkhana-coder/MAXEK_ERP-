@@ -1,0 +1,12 @@
+"""Product branding — single source for display names shown in the UI."""
+
+ERP_BRAND = "MAXEL"
+ERP_DISPLAY_NAME = "MAXEL ERP"
+ERP_SYSTEM_LABEL = "MAXEL ERP System"
+ERP_LOGIN_TITLE = "MAXEL ERP"
+ERP_TAGLINE = "Construction Management System"
+ERP_SIDEBAR_TAGLINE = "Construction Management System"
+ERP_LOGIN_FOOTER = "Construction ERP Management System"
+ERP_LEGAL_NAME = "MAXEL PRIVATE LIMITED"
+ERP_API_TITLE = "MAXEL ERP API"
+ERP_VERSION = "1.0"

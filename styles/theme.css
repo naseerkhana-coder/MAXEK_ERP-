@@ -23,17 +23,67 @@ body {
 
 section[data-testid="stSidebar"] {
   display: block !important;
-  background: linear-gradient(180deg, #0d2a5c 0%, #081d42 100%) !important;
-  border-right: none !important;
+  width: 260px !important;
+  min-width: 260px !important;
+  max-width: 260px !important;
+  background: linear-gradient(180deg, #0b2348 0%, #061528 100%) !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.06) !important;
+  transition: width 0.2s ease, min-width 0.2s ease, max-width 0.2s ease !important;
+}
+
+body.maxek-sidebar-collapsed section[data-testid="stSidebar"] {
+  width: 70px !important;
+  min-width: 70px !important;
+  max-width: 70px !important;
+}
+
+body.maxek-sidebar-collapsed [data-testid="stSidebar"] .maxek-sidebar-block-title,
+body.maxek-sidebar-collapsed [data-testid="stSidebar"] .maxek-sidebar-menu-title,
+body.maxek-sidebar-collapsed [data-testid="stSidebar"] .maxek-sidebar-search-label,
+body.maxek-sidebar-collapsed [data-testid="stSidebar"] .maxek-sidebar-footer,
+body.maxek-sidebar-collapsed [data-testid="stSidebar"] .stCaption,
+body.maxek-sidebar-collapsed [data-testid="stSidebar"] div[data-testid="stHorizontalBlock"]:has([data-testid="column"]:nth-child(2)) {
+  display: none !important;
+}
+
+body.maxek-sidebar-collapsed [data-testid="stSidebar"] div.stButton > button {
+  justify-content: center !important;
+  text-align: center !important;
+  padding-left: 0.35rem !important;
+  padding-right: 0.35rem !important;
+  font-size: 1.15rem !important;
 }
 
 section[data-testid="stSidebar"] > div {
   background: transparent !important;
+  height: 100%;
+}
+
+section[data-testid="stSidebar"] [data-testid="stSidebarContent"] {
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+  padding-right: 0.15rem !important;
+}
+
+section[data-testid="stSidebar"] [data-testid="stSidebarContent"]::-webkit-scrollbar {
+  width: 5px;
+}
+
+section[data-testid="stSidebar"] [data-testid="stSidebarContent"]::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+}
+
+section[data-testid="stSidebar"] [data-testid="stSidebarContent"]::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 section[data-testid="stSidebar"] .block-container {
-  padding-top: 1rem !important;
-  padding-bottom: 1rem !important;
+  padding: 0.65rem 0.55rem 0.85rem !important;
+  max-width: 100% !important;
 }
 
 header[data-testid="stHeader"] {
@@ -64,44 +114,193 @@ header[data-testid="stHeader"] {
 }
 
 .maxek-sidebar-shell {
-  padding-bottom: 0.25rem;
+  padding-bottom: 0.15rem;
 }
 
 .maxek-sidebar-brand {
   display: flex;
   align-items: center;
-  gap: 0.8rem;
+  gap: 0.65rem;
   color: #fff;
-  margin-bottom: 1rem;
+  margin-bottom: 0.65rem;
+  padding: 0.15rem 0.1rem 0.55rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-/* Sidebar buttons: consistent spacing + readable */
+.maxek-sidebar-search-label,
+.maxek-sidebar-block-title,
+.maxek-sidebar-menu-title {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  margin: 0.45rem 0 0.25rem;
+  padding: 0 0.15rem;
+}
+
+.maxek-sidebar-footer {
+  margin-top: 0.75rem;
+  padding: 0.55rem 0.45rem 0.15rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.maxek-sidebar-user-name {
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.maxek-sidebar-user-hint {
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 0.65rem;
+  margin-top: 0.15rem;
+}
+
+/* Sidebar search input */
+section[data-testid="stSidebar"] div.stTextInput > div > div > input {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  color: #fff !important;
+  font-size: 13px !important;
+  min-height: 2.15rem !important;
+  border-radius: 8px !important;
+  padding: 0.4rem 0.6rem !important;
+}
+
+section[data-testid="stSidebar"] div.stTextInput > div > div > input::placeholder {
+  color: rgba(255, 255, 255, 0.42) !important;
+}
+
+/* Sidebar buttons: uniform ERP menu */
+[data-testid="stSidebar"] div.stButton {
+  margin-bottom: 0.12rem !important;
+}
+
 [data-testid="stSidebar"] div.stButton > button {
-  font-size: 0.9rem !important;
-  line-height: 1.2 !important;
-  padding-top: 0.55rem !important;
-  padding-bottom: 0.55rem !important;
+  position: relative !important;
+  font-size: 14px !important;
+  line-height: 1.25 !important;
+  font-weight: 600 !important;
+  min-height: 2.5rem !important;
+  height: 2.5rem !important;
+  padding: 0.4rem 0.65rem !important;
+  border-radius: 8px !important;
+  text-align: left !important;
+  justify-content: flex-start !important;
+  width: 100% !important;
+  color: #f8fafc !important;
+  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease, transform 0.12s ease !important;
+}
+
+[data-testid="stSidebar"] div.stButton > button[kind="secondary"],
+[data-testid="stSidebar"] div.stButton > button[data-testid="stBaseButton-secondary"] {
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: #f1f5f9 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+[data-testid="stSidebar"] div.stButton > button[kind="secondary"]:hover,
+[data-testid="stSidebar"] div.stButton > button[data-testid="stBaseButton-secondary"]:hover {
+  background: rgba(255, 255, 255, 0.14) !important;
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.18) !important;
+  transform: translateX(1px);
+}
+
+[data-testid="stSidebar"] div.stButton > button[kind="primary"],
+[data-testid="stSidebar"] div.stButton > button[data-testid="stBaseButton-primary"] {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8) !important;
+  color: #ffffff !important;
+  border: none !important;
+  font-weight: 700 !important;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.32) !important;
+  padding-left: 0.85rem !important;
+}
+
+[data-testid="stSidebar"] div.stButton > button[kind="primary"]::before,
+[data-testid="stSidebar"] div.stButton > button[data-testid="stBaseButton-primary"]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: #93c5fd;
+}
+
+/* Sub-menu rows (label + star) */
+[data-testid="stSidebar"] div[data-testid="stHorizontalBlock"]:has([data-testid="column"]:nth-child(2)) {
+  margin-bottom: 0.08rem !important;
+  gap: 0.2rem !important;
+}
+
+[data-testid="stSidebar"] div[data-testid="stHorizontalBlock"]:has([data-testid="column"]:nth-child(2)) [data-testid="column"]:first-child div.stButton > button {
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  min-height: 2.15rem !important;
+  height: 2.15rem !important;
+  padding-left: 1.25rem !important;
+  color: #e2e8f0 !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-color: rgba(255, 255, 255, 0.06) !important;
+}
+
+[data-testid="stSidebar"] div[data-testid="stHorizontalBlock"]:has([data-testid="column"]:nth-child(2)) [data-testid="column"]:first-child div.stButton > button[kind="primary"],
+[data-testid="stSidebar"] div[data-testid="stHorizontalBlock"]:has([data-testid="column"]:nth-child(2)) [data-testid="column"]:first-child div.stButton > button[data-testid="stBaseButton-primary"] {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8) !important;
+  font-weight: 700 !important;
+}
+
+[data-testid="stSidebar"] div[data-testid="stHorizontalBlock"]:has([data-testid="column"]:nth-child(2)) [data-testid="column"]:last-child div.stButton > button {
+  min-height: 2rem !important;
+  height: 2rem !important;
+  font-size: 0.85rem !important;
+  padding: 0.2rem !important;
+  background: transparent !important;
+  border: none !important;
+  color: rgba(255, 255, 255, 0.75) !important;
+}
+
+[data-testid="stSidebar"] div[data-testid="stHorizontalBlock"]:has([data-testid="column"]:nth-child(2)) [data-testid="column"]:last-child div.stButton > button:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #fff !important;
 }
 
 .maxek-sidebar-brand img {
-  width: 56px;
-  height: 56px;
+  width: 44px;
+  height: 44px;
   object-fit: contain;
   background: rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
-  padding: 0.35rem;
+  border-radius: 10px;
+  padding: 0.3rem;
+  flex-shrink: 0;
+}
+
+.maxek-sidebar-brand-collapsed {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 0.35rem;
+}
+
+.maxek-sidebar-brand-collapsed img {
+  width: 38px;
+  height: 38px;
 }
 
 .maxek-sidebar-title {
   font-weight: 700;
-  font-size: 1rem;
+  font-size: 1.02rem;
   line-height: 1.2;
+  color: #fff;
 }
 
 .maxek-sidebar-subtitle {
-  color: rgba(255, 255, 255, 0.72);
-  font-size: 0.74rem;
-  margin-top: 0.15rem;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 0.76rem;
+  margin-top: 0.12rem;
+  line-height: 1.25;
 }
 
 .maxek-sidebar-section {
@@ -185,6 +384,48 @@ header[data-testid="stHeader"] {
   gap: 0.65rem;
 }
 
+.maxek-header-user-block {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  border-radius: 14px;
+  padding: 0.55rem 0.85rem;
+  margin-bottom: 0.45rem;
+  text-align: right;
+}
+
+.maxek-header-user-block .maxek-header-user-name {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--primary);
+  line-height: 1.2;
+}
+
+.maxek-header-user-block .maxek-header-user-meta {
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin-top: 0.15rem;
+}
+
+/* Top-right logout — compact red, bold white text */
+div[data-testid="column"]:has(.maxek-header-user-block) div.stButton > button {
+  background: #ef4444 !important;
+  border: 1px solid #dc2626 !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+  font-size: 0.75rem !important;
+  border-radius: 8px !important;
+  min-height: 1.85rem !important;
+  padding: 0.25rem 0.55rem !important;
+  box-shadow: 0 2px 8px rgba(220, 38, 38, 0.25) !important;
+}
+
+div[data-testid="column"]:has(.maxek-header-user-block) div.stButton > button:hover {
+  background: #dc2626 !important;
+  border-color: #b91c1c !important;
+  color: #ffffff !important;
+}
+
 .maxek-header-chip {
   padding: 0.6rem 0.75rem;
   border-radius: 12px;
@@ -214,6 +455,13 @@ header[data-testid="stHeader"] {
 .maxek-dashboard-intro p {
   margin: 0.35rem 0 0;
   color: var(--muted);
+}
+
+.maxek-section-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--primary);
+  margin: 0.75rem 0 0.35rem;
 }
 
 .maxek-dashboard-date {
@@ -379,7 +627,8 @@ header[data-testid="stHeader"] {
   padding-top: 0.8rem;
 }
 
-div.stButton > button[kind="primary"] {
+div.stButton > button[kind="primary"],
+div.stButton > button[data-testid="stBaseButton-primary"] {
   background: linear-gradient(135deg, var(--secondary), var(--secondary-dark)) !important;
   border: none !important;
   border-radius: 10px !important;
@@ -388,31 +637,31 @@ div.stButton > button[kind="primary"] {
   min-height: 2.8rem !important;
 }
 
-div.stButton > button[kind="primary"]:hover {
+div.stButton > button[kind="primary"]:hover,
+div.stButton > button[data-testid="stBaseButton-primary"]:hover {
   transform: translateY(-1px);
   box-shadow: 0 6px 14px rgba(37, 99, 235, 0.28);
 }
 
-[data-testid="stSidebar"] div.stButton > button[kind="secondary"] {
-  background: rgba(255, 255, 255, 0.04) !important;
-  color: rgba(255, 255, 255, 0.92) !important;
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+section.main div.stButton > button[kind="secondary"],
+section.main div.stButton > button[data-testid="stBaseButton-secondary"] {
+  background: #f8fafc !important;
+  border: 1px solid var(--border) !important;
+  color: var(--primary) !important;
   border-radius: 10px !important;
+  font-weight: 600 !important;
   min-height: 2.8rem !important;
 }
 
-[data-testid="stSidebar"] div.stButton > button[kind="primary"] {
-  background: linear-gradient(135deg, var(--secondary), var(--secondary-dark)) !important;
-  border-radius: 10px !important;
-  min-height: 2.8rem !important;
-}
-
-[data-testid="stSidebar"] div.stButton {
-  margin-bottom: 0.3rem;
+section.main div.stButton > button[kind="secondary"]:hover,
+section.main div.stButton > button[data-testid="stBaseButton-secondary"]:hover {
+  background: #eef2f7 !important;
+  border-color: #cbd5e1 !important;
 }
 
 [data-testid="stSidebar"] .stCaption {
-  color: rgba(255, 255, 255, 0.72) !important;
+  color: rgba(255, 255, 255, 0.62) !important;
+  font-size: 0.75rem !important;
 }
 
 div.stTextInput > div > div > input,
@@ -422,6 +671,18 @@ div.stTextArea textarea {
   border-radius: 12px !important;
   border: 1px solid var(--border) !important;
   background: #fff !important;
+}
+
+/* Header / main area search: force readable dark text */
+section.main div.stTextInput input,
+section.main div.stNumberInput input,
+section.main div[data-baseweb="select"] input,
+section.main div.stTextArea textarea {
+  color: #0f172a !important;
+}
+
+section.main div.stTextInput input::placeholder {
+  color: #64748b !important;
 }
 
 div.stTextArea textarea {
@@ -861,15 +1122,16 @@ div[data-testid="stForm"] h3 {
 }
 
 /* Finance module — horizontal toolbar (replaces cramped tabs) */
-.maxek-finance-toolbar {
-  margin: 0.15rem 0 0.35rem;
+.maxek-finance-toolbar-start,
+.maxek-finance-toolbar-end {
+  display: none;
 }
 
-.maxek-finance-toolbar [data-testid="column"] {
+.maxek-finance-toolbar-row [data-testid="column"] {
   padding: 0 0.2rem !important;
 }
 
-.maxek-finance-toolbar [data-testid="column"] button {
+.maxek-finance-toolbar-row [data-testid="column"] button {
   font-size: 0.78rem !important;
   font-weight: 600 !important;
   padding: 0.4rem 0.45rem !important;
@@ -879,40 +1141,30 @@ div[data-testid="stForm"] h3 {
   border-radius: 8px !important;
 }
 
-.maxek-finance-toolbar [data-testid="column"] button[kind="primary"] {
+.maxek-finance-toolbar-row [data-testid="column"] button[kind="primary"],
+.maxek-finance-toolbar-row [data-testid="column"] button[data-testid="stBaseButton-primary"] {
   background: linear-gradient(135deg, var(--secondary), var(--secondary-dark)) !important;
   border: none !important;
   color: #fff !important;
 }
 
-.maxek-finance-toolbar [data-testid="column"] button[kind="secondary"] {
-  background: var(--panel) !important;
+.maxek-finance-toolbar-row [data-testid="column"] button[kind="secondary"],
+.maxek-finance-toolbar-row [data-testid="column"] button[data-testid="stBaseButton-secondary"] {
+  background: #f8fafc !important;
   border: 1px solid var(--border) !important;
   color: var(--primary) !important;
 }
 
-/* Sidebar — grouped menu (Masters, Finance, …) */
+/* Responsive sidebar */
+@media (max-width: 1024px) {
+  section[data-testid="stSidebar"]:not(body.maxek-sidebar-collapsed section[data-testid="stSidebar"]) {
+    width: 240px !important;
+    min-width: 240px !important;
+    max-width: 240px !important;
+  }
+}
+
+/* Legacy expander overrides (unused — accordion uses buttons) */
 section[data-testid="stSidebar"] [data-testid="stExpander"] {
-  border: none !important;
-  background: transparent !important;
-  margin-bottom: 0.15rem !important;
-}
-
-section[data-testid="stSidebar"] [data-testid="stExpander"] summary {
-  color: rgba(255, 255, 255, 0.92) !important;
-  font-size: 0.82rem !important;
-  font-weight: 600 !important;
-  padding: 0.35rem 0.5rem !important;
-}
-
-section[data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stVerticalBlock"] {
-  padding-left: 0.15rem !important;
-  padding-right: 0 !important;
-}
-
-section[data-testid="stSidebar"] [data-testid="stExpander"] button {
-  font-size: 0.78rem !important;
-  min-height: 2rem !important;
-  padding: 0.3rem 0.5rem !important;
-  margin-bottom: 0.2rem !important;
+  display: none !important;
 }
