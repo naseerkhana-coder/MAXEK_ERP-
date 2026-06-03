@@ -1,4 +1,4 @@
-"""MAXEL ERP Streamlit entry point."""
+"""MAXEK ERP Streamlit entry point."""
 
 import streamlit as st
 

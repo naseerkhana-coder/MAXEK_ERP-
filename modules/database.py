@@ -1703,6 +1703,10 @@ def init_db():
     conn.commit()
     conn.close()
 
+    from modules.worker_payroll_db import ensure_worker_payroll_schema
+
+    ensure_worker_payroll_schema()
+
 
 def _sync_legacy_to_employees(cur):
     employee_cols = _columns(cur, "employees")

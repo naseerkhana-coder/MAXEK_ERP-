@@ -20,7 +20,6 @@ from modules.database import (
     load_countries,
     load_districts,
     load_managers,
-    load_project_names,
     load_regions,
 )
 
@@ -32,7 +31,6 @@ from modules.branding import (
     ERP_LEGAL_NAME,
     ERP_LOGIN_FOOTER,
     ERP_LOGIN_TITLE,
-    ERP_SYSTEM_LABEL,
     ERP_TAGLINE,
     ERP_VERSION,
 )
@@ -42,12 +40,8 @@ LOGO_PNG_PATH = os.path.join(BASE_DIR, "assets", "logo", "maxek_logo.png")
 
 from modules.navigation import (
     MENU_DASHBOARD,
-    MENU_SECTIONS,
-    QUICK_ADD_ACTIONS,
     TOP_NAV_ITEMS,
     default_page_for_section,
-    page_label,
-    section_for_page,
     top_nav_section_active,
 )
 from modules.roles import display_role_name
@@ -195,6 +189,22 @@ def _navigate_to(page_key: str) -> None:
     st.rerun()
 
 
+def render_page_breadcrumbs(*crumbs: str, title: str = "", subtitle: str = ""):
+    """Render breadcrumb trail and page title block (mockup main-area header)."""
+    trail = " › ".join(crumbs) if crumbs else ""
+    subtitle_html = f'<p class="maxek-page-subtitle">{subtitle}</p>' if subtitle else ""
+    st.markdown(
+        f"""
+        <div class="maxek-page-head">
+          <div class="maxek-breadcrumbs">{trail}</div>
+          <h1 class="maxek-page-title">{title}</h1>
+          {subtitle_html}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def render_page_header(user_name: str, on_logout=None, allowed_pages=None):
     allowed = set(allowed_pages or {MENU_DASHBOARD[0]})
     page_key = st.session_state.get("page", MENU_DASHBOARD[0])
@@ -202,10 +212,11 @@ def render_page_header(user_name: str, on_logout=None, allowed_pages=None):
     user_role_label = display_role_name(user_role)
     today = datetime.now()
     logo_uri = _logo_data_uri()
+    notif_count = len(dashboard_notifications())
 
     st.markdown('<div class="maxek-top-bar">', unsafe_allow_html=True)
 
-    brand_col, search_col, nav_col, actions_col = st.columns([0.9, 1.6, 3.2, 1.5])
+    brand_col, search_col, date_col, bell_col, profile_col = st.columns([0.75, 2.2, 1.1, 0.45, 1.3])
 
     with brand_col:
         if logo_uri:
@@ -217,85 +228,65 @@ def render_page_header(user_name: str, on_logout=None, allowed_pages=None):
             st.markdown(f'<div class="maxek-header-logo-text">{ERP_BRAND}</div>', unsafe_allow_html=True)
 
     with search_col:
-        projects = [""] + load_project_names()
-        st.selectbox(
-            "Project search",
-            projects,
-            key="header_project_search",
+        st.text_input(
+            "Global search",
+            key="header_global_search",
             label_visibility="collapsed",
-            placeholder="Search project…",
+            placeholder="Search anything…",
         )
 
-    with nav_col:
-        visible_nav = []
-        for section_id, label, icon in TOP_NAV_ITEMS:
-            target = default_page_for_section(section_id)
-            if section_id == "dashboard" or target in allowed:
-                visible_nav.append((section_id, label, icon, target))
-        nav_slots = st.columns(max(len(visible_nav), 1))
-        for slot, (section_id, label, icon, target) in zip(nav_slots, visible_nav):
-            active = top_nav_section_active(section_id, page_key)
-            with slot:
-                if st.button(
-                    f"{icon} {label}",
-                    key=f"top_nav_{section_id}",
-                    width="stretch",
-                    type="primary" if active else "secondary",
-                ):
-                    _navigate_to(target)
+    with date_col:
+        st.markdown(
+            f"""
+            <div class="maxek-header-date-chip">
+              <div>{today.strftime('%d %b %Y')}</div>
+              <span>{today.strftime('%a')}</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-    with actions_col:
-        act1, act2, act3, act4 = st.columns(4)
-        with act1:
-            if st.button("🔔", key="header_notifications", help="Notifications"):
-                if "dash_notifications" in allowed:
-                    _navigate_to("dash_notifications")
-        with act2:
-            quick_open = st.session_state.get("header_quick_add_open", False)
-            if st.button("＋", key="header_quick_add_toggle", help="Quick add"):
-                st.session_state.header_quick_add_open = not quick_open
-                st.rerun()
-        with act3:
-            st.markdown(
-                f"""
-                <div class="maxek-header-profile" title="{user_name}">
-                  <span class="maxek-header-avatar">{user_name[:1].upper()}</span>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-        with act4:
-            if on_logout and st.button("⎋", key="header_logout", help="Log out"):
-                on_logout()
+    with bell_col:
+        bell_label = f"🔔 {notif_count}" if notif_count else "🔔"
+        if st.button(bell_label, key="header_notifications", help="Notifications"):
+            if "dash_notifications" in allowed:
+                _navigate_to("dash_notifications")
 
-    if st.session_state.get("header_quick_add_open"):
-        st.markdown('<div class="maxek-quick-add-panel">', unsafe_allow_html=True)
-        qcols = st.columns(min(4, len(QUICK_ADD_ACTIONS)))
-        for col, (key, label, icon) in zip(qcols, QUICK_ADD_ACTIONS):
-            if key not in allowed:
-                continue
-            with col:
-                if st.button(f"{icon} {label}", key=f"quick_add_{key}", width="stretch"):
-                    st.session_state.header_quick_add_open = False
-                    _navigate_to(key)
-        st.markdown("</div>", unsafe_allow_html=True)
+    with profile_col:
+        st.markdown(
+            f"""
+            <div class="maxek-header-user-v2">
+              <span class="maxek-header-avatar">{user_name[:1].upper()}</span>
+              <div class="maxek-header-user-text">
+                <div class="maxek-header-user-name">{user_name}</div>
+                <div class="maxek-header-user-meta">{user_role_label}</div>
+              </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        if on_logout and st.button("Log out", key="header_logout", help="Log out"):
+            on_logout()
 
-    current_page = page_label(page_key)
-    section = section_for_page(page_key)
-    if section and section != "dashboard":
-        section_title = next((lbl for sid, lbl, _ in MENU_SECTIONS if sid == section), "")
-        if section_title:
-            current_page = f"{section_title} · {current_page}"
+    st.markdown('<div class="maxek-top-nav-row">', unsafe_allow_html=True)
+    visible_nav = []
+    for section_id, label, icon in TOP_NAV_ITEMS:
+        target = default_page_for_section(section_id)
+        if section_id == "dashboard" or target in allowed:
+            visible_nav.append((section_id, label, icon, target))
+    nav_slots = st.columns(max(len(visible_nav), 1))
+    for slot, (section_id, label, icon, target) in zip(nav_slots, visible_nav):
+        active = top_nav_section_active(section_id, page_key)
+        with slot:
+            if st.button(
+                f"{icon} {label}",
+                key=f"top_nav_{section_id}",
+                width="stretch",
+                type="primary" if active else "secondary",
+            ):
+                _navigate_to(target)
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown(
-        f"""
-        <div class="maxek-header-breadcrumb">
-          <span class="maxek-header-page">{current_page}</span>
-          <span class="maxek-header-caption">{ERP_SYSTEM_LABEL} · {user_role_label} · {today.strftime('%d %b %Y')}</span>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
     st.markdown("</div>", unsafe_allow_html=True)
 
 
@@ -312,36 +303,27 @@ def _overview_panel(title, items):
 
 
 def _render_dashboard_welcome(user_name: str):
-    st.markdown(
-        f"""
-        <div class="maxek-dashboard-intro">
-          <div>
-            <h1>Welcome back, {user_name}</h1>
-            <p>Projects · Procurement · Inventory · Subcontractor billing · Petty cash · Letters</p>
-          </div>
-          <div class="maxek-dashboard-date">
-            <div>{datetime.now().strftime('%d %b %Y')}</div>
-            <span>{datetime.now().strftime('%A, %I:%M %p')}</span>
-          </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    render_page_breadcrumbs(
+        "Home",
+        "Dashboard",
+        title=f"Welcome back, {user_name}",
+        subtitle="Projects · Procurement · Inventory · Subcontractor billing · Petty cash · Letters",
     )
 
 
 def _render_dashboard_kpis(stats):
     cards = [
-        ("📁", "Total Projects", stats.get("total_projects", stats["active_projects"]), "All sites"),
-        ("🏗️", "Active Projects", stats["active_projects"], "On site now"),
-        ("🧾", "Pending Bills", stats.get("pending_bills", 0), "Awaiting payment"),
-        ("🛒", "Pending PO", stats.get("pending_po", 0), "Purchase orders"),
-        ("💵", "Cash Balance", f"Rs {stats.get('cash_balance', 0):,.0f}", "Petty + cash book"),
-        ("📋", "Material Requests", stats.get("material_requests_open", 0), "Open MRs"),
+        ("📁", "Total Projects", stats.get("total_projects", stats["active_projects"]), "All sites", "accent-blue"),
+        ("🏗️", "Active Projects", stats["active_projects"], "On site now", "accent-green"),
+        ("🧾", "Pending Bills", stats.get("pending_bills", 0), "Awaiting payment", "accent-red"),
+        ("🛒", "Pending PO", stats.get("pending_po", 0), "Purchase orders", "accent-orange"),
+        ("💵", "Cash Balance", f"Rs {stats.get('cash_balance', 0):,.0f}", "Petty + cash book", "accent-purple"),
+        ("📋", "Material Requests", stats.get("material_requests_open", 0), "Open MRs", "accent-yellow"),
     ]
     html_parts = ['<div class="maxek-kpi-grid">']
-    for icon, label, value, helper in cards:
+    for icon, label, value, helper, accent in cards:
         html_parts.append(
-            f'<div class="maxek-kpi-card">'
+            f'<div class="maxek-kpi-card {accent}">'
             f'<div class="maxek-kpi-icon">{icon}</div>'
             f'<div class="maxek-kpi-label">{label}</div>'
             f'<div class="maxek-kpi-value">{value}</div>'

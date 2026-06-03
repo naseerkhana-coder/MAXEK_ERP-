@@ -343,6 +343,15 @@ def render_erp_sidebar(user_name: str, allowed_pages=None) -> None:
 
     if not _collapsed():
         st.markdown(
+            """
+            <div class="maxek-sidebar-help-card">
+              <strong>Need Help?</strong>
+              <span>Contact your system administrator or open Settings → Users for access requests.</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.markdown(
             f"""
             <div class="maxek-sidebar-footer">
               <div class="maxek-sidebar-user-name">{user_name}</div>

@@ -21,9 +21,11 @@ from modules.worker_payroll_db import (
     get_payroll_run,
     get_worker,
     list_active_workers,
+    list_all_workers,
     list_deductions,
     list_payroll_runs,
     load_worker_attendance,
+    recalculate_run_net,
     save_payment,
     save_payroll_run,
     save_worker_attendance,
@@ -34,14 +36,17 @@ from modules.worker_payroll_db import (
 from modules.worker_payroll_engine import (
     DEDUCTION_TYPES,
     PAYMENT_MODES,
-    WORKER_CATEGORIES,
     WORKFLOW_STATUSES,
+    WORKFLOW_STEPS,
     calculate_daily_pay,
     hourly_rate,
     ot_hourly_rate,
     standard_hours_for_category,
+    workflow_step_index,
 )
 from modules.worker_payroll_pdf import generate_worker_salary_slip_pdf
+
+WORKER_CATEGORY_OPTIONS = ("8 Hr", "10 Hr")
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -67,11 +72,23 @@ def _period_presets():
     }
 
 
+def _render_workflow_steps(workflow_status: str | None = None):
+    current = workflow_step_index(workflow_status or "Draft")
+    parts = []
+    for idx, label in enumerate(WORKFLOW_STEPS):
+        if idx < current:
+            parts.append(f"✓ {label}")
+        elif idx == current:
+            parts.append(f"**→ {label}**")
+        else:
+            parts.append(label)
+    st.caption(" · ".join(parts))
+
+
 def _render_workers_tab():
     st.markdown("#### Worker profiles")
     st.caption("Category A = 8 hours/day · Category B = 10 hours/day. OT rate defaults to Daily Wage ÷ standard hours.")
 
-    workers = list_active_workers()
     edit_id = st.session_state.get("wp_edit_worker")
 
     if edit_id:
@@ -93,7 +110,7 @@ def _render_workers_tab():
         worker_name = st.text_input("Name", value=w.get("worker_name") or "")
         hour_category = st.selectbox(
             "Category",
-            list(WORKER_CATEGORIES.keys()),
+            WORKER_CATEGORY_OPTIONS,
             index=0 if (w.get("hour_category") or "8 Hr") in ("8 Hr", "Category A") else 1,
         )
     with c2:
@@ -129,6 +146,8 @@ def _render_workers_tab():
         st.rerun()
 
     st.divider()
+    show_inactive = st.checkbox("Show inactive workers", key="wp_show_inactive")
+    workers = list_all_workers(active_only=not show_inactive)
     if workers.empty:
         st.info("No workers yet. Save a profile above.")
         return
@@ -261,6 +280,7 @@ def _render_attendance_tab():
 
 def _render_salary_tab():
     st.markdown("#### Salary period")
+    _render_workflow_steps("Draft")
     workers = list_active_workers()
     if workers.empty:
         st.warning("Add workers first.")
@@ -289,29 +309,54 @@ def _render_salary_tab():
             return
 
         st.session_state["wp_last_summary"] = summary
-        deductions = list_deductions(summary.get("run_id") or "")
+        run_id = summary.get("run_id")
+        deductions = list_deductions(run_id) if run_id else []
+        total_ded = sum(float(d.get("amount") or 0) for d in deductions)
+        gross = float(summary.get("gross_salary") or 0)
+        ot_amt = float(summary.get("ot_amount") or 0)
+        base_gross = round(gross - ot_amt, 2)
+        net = max(0.0, gross - total_ded)
 
         st.markdown("##### Earnings")
-        e1, e2, e3, e4 = st.columns(4)
+        e1, e2, e3, e4, e5 = st.columns(5)
         e1.metric("Worked days", summary.get("worked_days"))
         e2.metric("Worked hours", f"{summary.get('worked_hours', 0):g}")
         e3.metric("OT hours", f"{summary.get('ot_hours', 0):g}")
-        e4.metric("Gross", f"₹{summary.get('gross_salary', 0):,.2f}")
+        e4.metric("Base gross", f"₹{base_gross:,.2f}")
+        e5.metric("Gross + OT", f"₹{gross:,.2f}")
 
         if summary.get("day_lines"):
             st.dataframe(pd.DataFrame(summary["day_lines"]), width="stretch", hide_index=True)
 
-        run_id = summary.get("run_id")
-        if generate and not run_id:
-            rid = save_payroll_run(summary, 0.0, "Draft")
+        if generate:
+            status = "Calculated"
+            rid = save_payroll_run(summary, total_ded, status)
             summary["run_id"] = rid
             run_id = rid
+            st.session_state["wp_active_run"] = rid
+            st.success(f"Salary generated — Run ID **{rid}** · Status **{status}**")
+            st.rerun()
 
         if run_id:
             st.markdown("##### Deductions")
             deductions = list_deductions(run_id)
             if deductions:
-                st.dataframe(pd.DataFrame(deductions), width="stretch", hide_index=True)
+                st.dataframe(
+                    pd.DataFrame(deductions)[
+                        ["deduction_type", "deduction_date", "amount", "remarks", "deduction_id"]
+                    ],
+                    width="stretch",
+                    hide_index=True,
+                )
+                del_labels = {
+                    f"{d['deduction_type']} · {d['deduction_date']} · ₹{float(d['amount']):,.0f}": d["deduction_id"]
+                    for d in deductions
+                }
+                del_pick = st.selectbox("Remove deduction", [""] + list(del_labels.keys()), key="wp_del_ded")
+                if del_pick and st.button("Delete deduction", key="wp_del_ded_btn"):
+                    delete_deduction(del_labels[del_pick])
+                    st.success("Deduction removed.")
+                    st.rerun()
             with st.form("wp_add_ded", clear_on_submit=True):
                 d1, d2, d3 = st.columns(3)
                 dtype = d1.selectbox("Type", DEDUCTION_TYPES)
@@ -321,27 +366,24 @@ def _render_salary_tab():
                 if st.form_submit_button("Add deduction"):
                     add_deduction(run_id, worker_id, dtype, _parse_date(ddate), damt, drem)
                     st.rerun()
-            total_ded = sum(float(d.get("amount") or 0) for d in deductions)
+            total_ded = sum(float(d.get("amount") or 0) for d in list_deductions(run_id))
+            net = recalculate_run_net(run_id)
+            if st.button("Recalculate net", key="wp_recalc_net"):
+                st.rerun()
         else:
-            total_ded = 0.0
-            st.caption("Save payroll to add deductions.")
+            st.caption("Click **Generate Salary** to save this period and add deductions.")
 
-        net = max(0.0, float(summary.get("gross_salary") or 0) - total_ded)
         st.markdown(f"### Net payable: **₹{net:,.2f}**")
+        st.caption(f"Gross ₹{gross:,.2f} (base ₹{base_gross:,.2f} + OT ₹{ot_amt:,.2f}) − deductions ₹{total_ded:,.2f}")
 
-        if generate:
-            status = "Calculated"
-            rid = save_payroll_run(summary, total_ded, status)
-            st.success(f"Salary generated — Run ID **{rid}** · Status **{status}**")
-            st.session_state["wp_active_run"] = rid
-            st.rerun()
-        elif summary.get("workflow_status"):
-            st.caption(f"Saved status: **{summary.get('workflow_status')}**")
+        if summary.get("workflow_status"):
+            _render_workflow_steps(summary.get("workflow_status"))
+            st.caption(f"Saved status: **{summary.get('workflow_status')}** · Run **{run_id or '—'}**")
 
 
 def _render_review_tab():
     st.markdown("#### Salary review & approval")
-    st.caption("Workflow: Draft → Calculated → Approved → Paid")
+    _render_workflow_steps("Calculated")
 
     pending = list_payroll_runs(status=None)
     if pending.empty:
@@ -355,6 +397,7 @@ def _render_review_tab():
     pick = st.selectbox("Select payroll run", list(options.keys()), key="wp_review_pick")
     run_id = options[pick]
     run = get_payroll_run(run_id)
+    _render_workflow_steps(run.get("workflow_status"))
     st.dataframe(pd.DataFrame([run]), width="stretch", hide_index=True)
 
     deductions = list_deductions(run_id)
@@ -376,6 +419,8 @@ def _render_review_tab():
 
 def _render_payment_tab():
     st.markdown("#### Payment entry")
+    _render_workflow_steps("Approved")
+
     approved = list_payroll_runs(status="Approved")
     if approved.empty:
         st.info("No approved payroll awaiting payment.")
@@ -395,8 +440,8 @@ def _render_payment_tab():
     reference = st.text_input("Reference number")
     remarks = st.text_area("Remarks")
 
-    st.markdown("**Attachments**")
-    receipt = st.file_uploader("Payment receipt", key="wp_receipt")
+    st.markdown("**Attachments** (saved under `uploads/worker_payroll/`)")
+    receipt = st.file_uploader("Payment receipt / attachment", key="wp_receipt")
     bank = st.file_uploader("Bank transfer proof", key="wp_bank")
     sheet = st.file_uploader("Signed salary sheet", key="wp_sheet")
 
@@ -419,6 +464,13 @@ def _render_reports_tab():
         st.info("No payroll data in range.")
     else:
         st.dataframe(df, width="stretch", hide_index=True)
+        st.download_button(
+            "Export CSV",
+            data=df.to_csv(index=False).encode("utf-8"),
+            file_name=f"worker_salary_report_{_parse_date(from_d).replace('/', '-')}.csv",
+            mime="text/csv",
+            key="wp_rpt_csv",
+        )
 
 
 def _render_payslip_tab():

@@ -80,6 +80,7 @@ from modules.ui import (
     cancel_delete_confirm,
     location_dropdowns,
     render_delete_confirm_dialog,
+    render_page_breadcrumbs,
     start_delete_confirm,
 )
 from modules.worker_payroll_engine import calculate_daily_pay, hourly_rate
@@ -1697,12 +1698,12 @@ def _attendance_widget_suffix(edit_id):
 
 def _attendance_kpi_cards_html(kpis):
     cards = [
-        ("Total Workers Today", kpis.get("total_workers", 0), "Active employees", ""),
+        ("Total Workers", kpis.get("total_workers", 0), "Active employees", "accent-blue"),
         ("Present", kpis.get("present", 0), f"Entries on {kpis.get('date', '')}", "accent-green"),
-        ("Absent", kpis.get("absent", 0), "Marked absent today", "accent-slate"),
-        ("Late", kpis.get("late", 0), "In after 08:30", "accent-amber"),
-        ("OT Workers", kpis.get("ot_workers", 0), "OT hours recorded", ""),
-        ("Attendance %", f"{kpis.get('attendance_pct', 0):g}%", "Present vs active roster", "accent-green"),
+        ("Absent", kpis.get("absent", 0), "Marked absent today", "accent-red"),
+        ("OT Workers", kpis.get("ot_workers", 0), "OT hours recorded", "accent-purple"),
+        ("Late", kpis.get("late", 0), "In after 08:30", "accent-orange"),
+        ("Attendance %", f"{kpis.get('attendance_pct', 0):g}%", "Present vs active roster", "accent-yellow"),
     ]
     parts = ['<div class="maxek-attendance-kpi-grid">']
     for label, value, helper, accent in cards:
@@ -1770,7 +1771,7 @@ def _attendance_pay_preview(
     }
 
 
-def _render_attendance_salary_preview(employee, pay_preview, total_hours, ot_hours, attendance_date):
+def _attendance_salary_preview_html(employee, pay_preview, total_hours, ot_hours, attendance_date):
     adv = get_employee_advance_summary(employee.get("employee_id"), 0.0)
     advance_ded = min(float(adv.get("open_balance") or 0), float(pay_preview.get("gross") or 0))
     food_monthly = float(employee.get("food_allowance") or 0)
@@ -1789,25 +1790,26 @@ def _render_attendance_salary_preview(employee, pay_preview, total_hours, ot_hou
         _payroll_grid_cell("Food ded.", f"Rs {food_ded:,.2f}"),
         _payroll_grid_cell("Fine ded.", f"Rs {fine_ded:,.2f}"),
     ]
-    st.markdown(
-        f"""
-        <div class="maxek-attendance-salary-board">
-          <div class="maxek-attendance-salary-panel">
-            <h4>Salary preview · {attendance_date.strftime(DATE_FMT)}</h4>
-            <div class="maxek-attendance-salary-grid">
-              {''.join(cells)}
-              <div class="maxek-attendance-net">
-                <span>Net payable (estimate)</span>
-                <strong>Rs {net:,.2f}</strong>
-              </div>
+    return f"""
+        <div class="maxek-attendance-salary-panel">
+          <h4>Salary preview · {attendance_date.strftime(DATE_FMT)}</h4>
+          <div class="maxek-attendance-salary-grid">
+            {''.join(cells)}
+            <div class="maxek-attendance-net">
+              <span>Net payable (estimate)</span>
+              <strong>Rs {net:,.2f}</strong>
             </div>
           </div>
         </div>
-        """,
+        """
+
+
+def _render_attendance_salary_preview(employee, pay_preview, total_hours, ot_hours, attendance_date):
+    st.markdown(
+        _attendance_salary_preview_html(employee, pay_preview, total_hours, ot_hours, attendance_date),
         unsafe_allow_html=True,
     )
-    if fine_ded == 0:
-        st.caption("Fine deductions are applied in payroll when configured.")
+    st.caption("Fine deductions are applied in payroll when configured.")
 
 
 def _persist_attendance_entry(
@@ -2062,31 +2064,30 @@ def _render_subcontractor_payment_panel(
 def page_attendance():
     st.markdown('<div class="maxek-attendance-page">', unsafe_allow_html=True)
     kpis = get_today_attendance_kpis()
-    st.markdown(_attendance_kpi_cards_html(kpis), unsafe_allow_html=True)
 
-    title_l, title_r = st.columns([2.2, 1.8])
-    with title_l:
-        st.markdown(
-            """
-            <div class="maxek-attendance-title-wrap">
-              <h2>Attendance Entry</h2>
-              <p>Present · Absent · Leave · Half Day — weekly off and holidays flow to payroll automatically.</p>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    with title_r:
-        qa = st.columns(5)
-        stub_msg = "Not configured yet — use Submit to save attendance."
-        if qa[0].button("Save Draft", key="attendance_qa_draft", width="stretch"):
-            st.info(stub_msg)
-        submit_quick = qa[1].button("Submit", key="attendance_qa_submit", type="primary", width="stretch")
-        if qa[2].button("Approve", key="attendance_qa_approve", width="stretch"):
-            st.info("Approval workflow is managed under Payroll.")
-        if qa[3].button("Gen. Salary", key="attendance_qa_salary", width="stretch"):
-            st.info("Open **Payroll → Payroll** to generate salary for the period.")
-        if qa[4].button("Print", key="attendance_qa_print", width="stretch"):
-            st.info("Print/export will be available in a future update.")
+    render_page_breadcrumbs(
+        "Home",
+        "HR & Payroll",
+        "Attendance Entry",
+        title="Attendance Entry",
+        subtitle="Present · Absent · Leave · Half Day — weekly off and holidays flow to payroll automatically.",
+    )
+
+    st.markdown('<div class="maxek-page-toolbar-wrap maxek-toolbar-attendance">', unsafe_allow_html=True)
+    qa = st.columns(5)
+    stub_msg = "Not configured yet — use Submit to save attendance."
+    if qa[0].button("Save Draft", key="attendance_qa_draft", width="stretch"):
+        st.info(stub_msg)
+    submit_quick = qa[1].button("Submit", key="attendance_qa_submit", width="stretch")
+    if qa[2].button("Approve", key="attendance_qa_approve", width="stretch"):
+        st.info("Approval workflow is managed under Payroll.")
+    if qa[3].button("Generate Salary", key="attendance_qa_salary", width="stretch"):
+        st.info("Open **Payroll → Payroll** to generate salary for the period.")
+    if qa[4].button("Print", key="attendance_qa_print", width="stretch"):
+        st.info("Print/export will be available in a future update.")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown(_attendance_kpi_cards_html(kpis), unsafe_allow_html=True)
 
     employee_options = load_employee_options()
     employee_map = {f"{employee_id} - {employee_name}": employee_id for employee_id, employee_name in employee_options}
@@ -2107,131 +2108,134 @@ def page_attendance():
     st.markdown('<div class="maxek-attendance-card">', unsafe_allow_html=True)
     st.markdown('<div class="maxek-attendance-card-title">Timesheet entry</div>', unsafe_allow_html=True)
 
-    r1c1, r1c2, r1c3, r1c4 = st.columns(4)
-    selected = r1c1.selectbox("Employee", pick_labels, key="attendance_employee_pick")
-    employee_id = employee_map[selected]
-    previous_employee_id = st.session_state.get("attendance_active_employee_id")
-    if previous_employee_id is not None and previous_employee_id != employee_id:
-        st.session_state["attendance_active_employee_id"] = employee_id
-        st.session_state.pop("attendance_edit_id", None)
-        st.rerun()
-    st.session_state["attendance_active_employee_id"] = employee_id
+    form_col, preview_col = st.columns([2.8, 1.2], gap="medium")
 
-    employee = get_employee(employee_id)
-    if not employee:
-        st.error("Employee not found.")
-        st.markdown("</div></div>", unsafe_allow_html=True)
-        return
-
-    if edit_id:
-        edit_record = get_attendance_record(edit_id)
-        rec_emp = (edit_record or {}).get("employee_id") or (edit_record or {}).get("worker_id")
-        if not edit_record or str(rec_emp) != str(employee_id):
-            st.session_state.pop("attendance_edit_id", None)
-            edit_id = None
-            edit_record = None
-
-    project_names = [""] + load_project_names()
-    project_default = (
-        (edit_record.get("project_name") if edit_record else employee.get("project_name")) or ""
-    )
-    if project_default and project_default not in project_names:
-        project_names = project_names + [project_default]
-    project_index = project_names.index(project_default) if project_default in project_names else 0
-
-    status_default = (
-        edit_record.get("status") if edit_record else ATTENDANCE_STATUSES[0]
-    ) or ATTENDANCE_STATUSES[0]
-    status_index = ATTENDANCE_STATUSES.index(status_default) if status_default in ATTENDANCE_STATUSES else 0
-
-    date_default = (
-        _parse_db_date(edit_record.get("attendance_date"))
-        if edit_record
-        else date.today()
-    ) or date.today()
-
-    in_default = (
-        edit_record.get("in_time") or edit_record.get("start_time") or ""
-        if edit_record
-        else ATTENDANCE_DEFAULT_IN_TIME
-    )
-    out_default = (
-        edit_record.get("out_time") or edit_record.get("end_time") or ""
-        if edit_record
-        else ATTENDANCE_DEFAULT_OUT_TIME
-    )
-    break_default = (
-        float(edit_record.get("break_hours") or 0)
-        if edit_record
-        else ATTENDANCE_DEFAULT_BREAK_HOURS
-    )
-    remarks_default = (edit_record.get("remarks") or "") if edit_record else ""
-
-    fwh = float(edit_record.get("fixed_working_hours") or 8) if edit_record else 8.0
-    wh_default = f"{int(fwh)} Hours"
-    working_categories = ["8 Hours", "10 Hours"]
-    if wh_default == "12 Hours":
-        working_categories = ["8 Hours", "10 Hours", "12 Hours"]
-    if wh_default not in working_categories:
-        wh_default = "8 Hours"
-    wh_index = working_categories.index(wh_default)
-
-    widget_suffix = _attendance_widget_suffix(edit_id)
-    if edit_id:
-        st.markdown(
-            f'<div class="maxek-attendance-edit-banner">Editing timesheet #{edit_id} · '
-            f"{date_default.strftime(DATE_FMT)} · {status_default} · {project_default or '—'}"
-            f"</div>",
-            unsafe_allow_html=True,
-        )
-        if st.button("Cancel edit", key="attendance_cancel_edit", width="content"):
+    with form_col:
+        r1c1, r1c2, r1c3, r1c4 = st.columns(4)
+        selected = r1c1.selectbox("Employee", pick_labels, key="attendance_employee_pick")
+        employee_id = employee_map[selected]
+        previous_employee_id = st.session_state.get("attendance_active_employee_id")
+        if previous_employee_id is not None and previous_employee_id != employee_id:
+            st.session_state["attendance_active_employee_id"] = employee_id
             st.session_state.pop("attendance_edit_id", None)
             st.rerun()
+        st.session_state["attendance_active_employee_id"] = employee_id
 
-    project_name = r1c2.selectbox(
-        "Project",
-        project_names,
-        index=project_index,
-        key=f"attendance_project{widget_suffix}",
-    )
-    attendance_date = r1c3.date_input(
-        "Date",
-        value=date_default,
-        key=f"attendance_entry_date{widget_suffix}",
-    )
-    status = r1c4.selectbox(
-        "Status",
-        ATTENDANCE_STATUSES,
-        index=status_index,
-        key=f"attendance_entry_status{widget_suffix}",
-    )
+        employee = get_employee(employee_id)
+        if not employee:
+            st.error("Employee not found.")
+            st.markdown("</div></div>", unsafe_allow_html=True)
+            return
 
-    r2c1, r2c2, r2c3, r2c4 = st.columns(4)
-    in_time = r2c1.text_input(
-        "In Time",
-        value=in_default,
-        key=f"attendance_in_time{widget_suffix}",
-        placeholder="8 or 08:00",
-    )
-    out_time = r2c2.text_input(
-        "Out Time",
-        value=out_default,
-        key=f"attendance_out_time{widget_suffix}",
-        placeholder="5 or 17:00",
-    )
-    break_time = r2c3.number_input(
-        "Break Hours",
-        min_value=0.0,
-        step=0.5,
-        value=break_default,
-        key=f"attendance_break_hours{widget_suffix}",
-    )
-    working_hours = r2c4.selectbox(
-        "Working Category",
-        working_categories,
-        index=wh_index,
-        key=f"attendance_working_hours{widget_suffix}",
-    )
+        if edit_id:
+            edit_record = get_attendance_record(edit_id)
+            rec_emp = (edit_record or {}).get("employee_id") or (edit_record or {}).get("worker_id")
+            if not edit_record or str(rec_emp) != str(employee_id):
+                st.session_state.pop("attendance_edit_id", None)
+                edit_id = None
+                edit_record = None
+
+        project_names = [""] + load_project_names()
+        project_default = (
+            (edit_record.get("project_name") if edit_record else employee.get("project_name")) or ""
+        )
+        if project_default and project_default not in project_names:
+            project_names = project_names + [project_default]
+        project_index = project_names.index(project_default) if project_default in project_names else 0
+
+        status_default = (
+            edit_record.get("status") if edit_record else ATTENDANCE_STATUSES[0]
+        ) or ATTENDANCE_STATUSES[0]
+        status_index = ATTENDANCE_STATUSES.index(status_default) if status_default in ATTENDANCE_STATUSES else 0
+
+        date_default = (
+            _parse_db_date(edit_record.get("attendance_date"))
+            if edit_record
+            else date.today()
+        ) or date.today()
+
+        in_default = (
+            edit_record.get("in_time") or edit_record.get("start_time") or ""
+            if edit_record
+            else ATTENDANCE_DEFAULT_IN_TIME
+        )
+        out_default = (
+            edit_record.get("out_time") or edit_record.get("end_time") or ""
+            if edit_record
+            else ATTENDANCE_DEFAULT_OUT_TIME
+        )
+        break_default = (
+            float(edit_record.get("break_hours") or 0)
+            if edit_record
+            else ATTENDANCE_DEFAULT_BREAK_HOURS
+        )
+        remarks_default = (edit_record.get("remarks") or "") if edit_record else ""
+
+        fwh = float(edit_record.get("fixed_working_hours") or 8) if edit_record else 8.0
+        wh_default = f"{int(fwh)} Hours"
+        working_categories = ["8 Hours", "10 Hours"]
+        if wh_default == "12 Hours":
+            working_categories = ["8 Hours", "10 Hours", "12 Hours"]
+        if wh_default not in working_categories:
+            wh_default = "8 Hours"
+        wh_index = working_categories.index(wh_default)
+
+        widget_suffix = _attendance_widget_suffix(edit_id)
+        if edit_id:
+            st.markdown(
+                f'<div class="maxek-attendance-edit-banner">Editing timesheet #{edit_id} · '
+                f"{date_default.strftime(DATE_FMT)} · {status_default} · {project_default or '—'}"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+            if st.button("Cancel edit", key="attendance_cancel_edit", width="content"):
+                st.session_state.pop("attendance_edit_id", None)
+                st.rerun()
+
+        project_name = r1c2.selectbox(
+            "Project",
+            project_names,
+            index=project_index,
+            key=f"attendance_project{widget_suffix}",
+        )
+        attendance_date = r1c3.date_input(
+            "Date",
+            value=date_default,
+            key=f"attendance_entry_date{widget_suffix}",
+        )
+        status = r1c4.selectbox(
+            "Status",
+            ATTENDANCE_STATUSES,
+            index=status_index,
+            key=f"attendance_entry_status{widget_suffix}",
+        )
+
+        r2c1, r2c2, r2c3, r2c4 = st.columns(4)
+        in_time = r2c1.text_input(
+            "In Time",
+            value=in_default,
+            key=f"attendance_in_time{widget_suffix}",
+            placeholder="8 or 08:00",
+        )
+        out_time = r2c2.text_input(
+            "Out Time",
+            value=out_default,
+            key=f"attendance_out_time{widget_suffix}",
+            placeholder="5 or 17:00",
+        )
+        break_time = r2c3.number_input(
+            "Break Hours",
+            min_value=0.0,
+            step=0.5,
+            value=break_default,
+            key=f"attendance_break_hours{widget_suffix}",
+        )
+        working_hours = r2c4.selectbox(
+            "Working Category",
+            working_categories,
+            index=wh_index,
+            key=f"attendance_working_hours{widget_suffix}",
+        )
 
     fixed_working_hours = _attendance_standard_hours(working_hours, 8.0)
     applied_rate = float(employee.get("salary_amount") or 0)
@@ -2293,78 +2297,84 @@ def page_attendance():
         employee, attendance_date, status
     )
     if attendance_category == "Holiday Worked":
-        st.info(f"Holiday worked: {holiday_name or 'Paid holiday'} — OT calculated automatically.")
+        with form_col:
+            st.info(f"Holiday worked: {holiday_name or 'Paid holiday'} — OT calculated automatically.")
     elif attendance_category == "Weekly Off Worked":
-        st.info("Weekly off day with attendance — counted as Weekly Off Worked with OT.")
+        with form_col:
+            st.info("Weekly off day with attendance — counted as Weekly Off Worked with OT.")
 
-    r3c1, r3c2, r3c3, r3c4 = st.columns(4)
-    r3c1.text_input(
-        "Worked Hours",
-        value=format_decimal_hours(total_hours),
-        disabled=True,
-        key=f"att_show_worked{widget_suffix}",
-        help="Out − In − Break (HH:MM)",
-    )
-    r3c2.text_input(
-        "OT Hours",
-        value=format_decimal_hours(ot_hours),
-        disabled=True,
-        key=f"att_show_ot{widget_suffix}",
-    )
-    r3c3.text_input(
-        "Hourly Rate",
-        value=f"Rs {pay_preview.get('hourly_rate', 0):,.2f}",
-        disabled=True,
-        key=f"att_show_rate{widget_suffix}",
-    )
-    r3c4.text_input(
-        "Day Total",
-        value=f"Rs {day_total_display:,.2f}",
-        disabled=True,
-        key=f"att_show_pay{widget_suffix}",
-    )
+    with form_col:
+        r3c1, r3c2, r3c3, r3c4 = st.columns(4)
+        r3c1.text_input(
+            "Worked Hours",
+            value=format_decimal_hours(total_hours),
+            disabled=True,
+            key=f"att_show_worked{widget_suffix}",
+            help="Out − In − Break (HH:MM)",
+        )
+        r3c2.text_input(
+            "OT Hours",
+            value=format_decimal_hours(ot_hours),
+            disabled=True,
+            key=f"att_show_ot{widget_suffix}",
+        )
+        r3c3.text_input(
+            "Hourly Rate",
+            value=f"Rs {pay_preview.get('hourly_rate', 0):,.2f}",
+            disabled=True,
+            key=f"att_show_rate{widget_suffix}",
+        )
+        r3c4.text_input(
+            "Day Total",
+            value=f"Rs {day_total_display:,.2f}",
+            disabled=True,
+            key=f"att_show_pay{widget_suffix}",
+        )
 
-    remarks = st.text_input(
-        "Remarks",
-        value=remarks_default,
-        key=f"attendance_remarks{widget_suffix}",
-    )
-    st.caption(
-        "Worked = Out − In − Break. Under standard hours: pro-rata pay; at standard: full day; above: full day + OT. "
-        "Times use shorthand (In **8**, Out **5** / **17**)."
-    )
-    try:
-        preview_in, preview_out = _normalize_attendance_times(in_time, out_time)
-        if preview_in or preview_out:
-            st.caption(f"Saved as: In **{preview_in or '—'}** · Out **{preview_out or '—'}**")
-    except ValueError as exc:
-        st.warning(str(exc))
+        remarks = st.text_input(
+            "Remarks",
+            value=remarks_default,
+            key=f"attendance_remarks{widget_suffix}",
+        )
+        st.caption(
+            "Worked = Out − In − Break. Under standard hours: pro-rata pay; at standard: full day; above: full day + OT. "
+            "Times use shorthand (In **8**, Out **5** / **17**)."
+        )
+        try:
+            preview_in, preview_out = _normalize_attendance_times(in_time, out_time)
+            if preview_in or preview_out:
+                st.caption(f"Saved as: In **{preview_in or '—'}** · Out **{preview_out or '—'}**")
+        except ValueError as exc:
+            st.warning(str(exc))
 
-    _render_attendance_salary_preview(employee, pay_preview, total_hours, ot_hours, attendance_date)
+    with preview_col:
+        _render_attendance_salary_preview(employee, pay_preview, total_hours, ot_hours, attendance_date)
 
     if employee.get("employee_type") == "Sub Contractor Worker":
-        _render_subcontractor_payment_panel(
-            sub_contractor,
-            project_name,
-            employee.get("designation", ""),
-            working_hours,
-            status,
-            total_hours,
-            ot_hours,
-            applied_rate,
-            applied_ot_rate,
-            ot_allowed,
-            rate_card,
-            attendance_date,
-            fixed_working_hours,
-        )
+        with form_col:
+            _render_subcontractor_payment_panel(
+                sub_contractor,
+                project_name,
+                employee.get("designation", ""),
+                working_hours,
+                status,
+                total_hours,
+                ot_hours,
+                applied_rate,
+                applied_ot_rate,
+                ot_allowed,
+                rate_card,
+                attendance_date,
+                fixed_working_hours,
+            )
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-    save_label = f"Update timesheet (#{edit_id})" if edit_id else "Save attendance"
-    save_clicked = st.button(
-        save_label, type="primary", width="stretch", key=f"attendance_save_btn{widget_suffix}"
-    )
+    with form_col:
+        save_label = f"Update timesheet (#{edit_id})" if edit_id else "Save attendance"
+        save_clicked = st.button(
+            save_label, type="primary", width="stretch", key=f"attendance_save_btn{widget_suffix}"
+        )
     if save_clicked or submit_quick:
         ok, message = _persist_attendance_entry(
             employee,
@@ -2390,6 +2400,22 @@ def page_attendance():
         st.error(message)
 
     _render_attendance_timesheet_list(employee_id, employee)
+
+    st.markdown('<div class="maxek-attendance-card">', unsafe_allow_html=True)
+    st.markdown('<div class="maxek-attendance-card-title">Quick actions</div>', unsafe_allow_html=True)
+    qa_row = st.columns(4)
+    if qa_row[0].button("Mark all present", key="att_qa_all_present", width="stretch"):
+        st.info("Bulk mark present will be available in a future update.")
+    if qa_row[1].button("Export timesheet", key="att_qa_export", width="stretch"):
+        st.info("Export uses the Excel download on Payroll reports.")
+    if qa_row[2].button("Open payroll", key="att_qa_payroll", width="stretch"):
+        st.session_state.page = "hr_payroll"
+        st.rerun()
+    if qa_row[3].button("Employee master", key="att_qa_employee", width="stretch"):
+        st.session_state.page = "master_employee"
+        st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
+
     st.markdown("</div>", unsafe_allow_html=True)
 
 

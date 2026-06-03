@@ -1,4 +1,4 @@
-# MAXEL ERP SYSTEM
+# MAXEK ERP SYSTEM
 
 ## Run locally
 
