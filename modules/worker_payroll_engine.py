@@ -28,18 +28,30 @@ WORKFLOW_STEPS = (
     "Payment Entry",
     "Completed",
 )
-PAYMENT_MODES = ("Cash", "Bank", "UPI", "Cheque")
+PAYMENT_MODES = ("Cash", "Bank Transfer", "UPI", "Cheque")
+
+
+def normalize_workflow_status(status: str) -> str:
+    """Map HR/unified payroll statuses onto worker payroll workflow."""
+    text = (status or "Draft").strip()
+    if text == "Submitted to MD":
+        return "Calculated"
+    if text in WORKFLOW_STATUSES:
+        return text
+    return "Draft"
 
 
 def workflow_step_index(workflow_status: str) -> int:
     """Map stored status to UI workflow step (0-based)."""
-    status = (workflow_status or "Draft").strip()
+    status = normalize_workflow_status(workflow_status)
     if status == "Paid":
         return len(WORKFLOW_STEPS) - 1
     if status == "Approved":
         return 4
     if status == "Calculated":
         return 2
+    if status == "Draft":
+        return 0
     return 1
 
 

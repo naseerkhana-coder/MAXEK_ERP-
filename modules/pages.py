@@ -1698,11 +1698,11 @@ def _attendance_widget_suffix(edit_id):
 
 def _attendance_kpi_cards_html(kpis):
     cards = [
-        ("Total Workers", kpis.get("total_workers", 0), "Active employees", "accent-blue"),
+        ("Total Workers Today", kpis.get("total_workers", 0), "Active employees", "accent-blue"),
         ("Present", kpis.get("present", 0), f"Entries on {kpis.get('date', '')}", "accent-green"),
         ("Absent", kpis.get("absent", 0), "Marked absent today", "accent-red"),
-        ("OT Workers", kpis.get("ot_workers", 0), "OT hours recorded", "accent-purple"),
         ("Late", kpis.get("late", 0), "In after 08:30", "accent-orange"),
+        ("OT Workers", kpis.get("ot_workers", 0), "OT hours recorded", "accent-purple"),
         ("Attendance %", f"{kpis.get('attendance_pct', 0):g}%", "Present vs active roster", "accent-yellow"),
     ]
     parts = ['<div class="maxek-attendance-kpi-grid">']
@@ -2073,21 +2073,20 @@ def page_attendance():
         subtitle="Present · Absent · Leave · Half Day — weekly off and holidays flow to payroll automatically.",
     )
 
+    st.markdown(_attendance_kpi_cards_html(kpis), unsafe_allow_html=True)
+
     st.markdown('<div class="maxek-page-toolbar-wrap maxek-toolbar-attendance">', unsafe_allow_html=True)
     qa = st.columns(5)
-    stub_msg = "Not configured yet — use Submit to save attendance."
-    if qa[0].button("Save Draft", key="attendance_qa_draft", width="stretch"):
-        st.info(stub_msg)
+    draft_quick = qa[0].button("Save Draft", key="attendance_qa_draft", width="stretch")
     submit_quick = qa[1].button("Submit", key="attendance_qa_submit", width="stretch")
     if qa[2].button("Approve", key="attendance_qa_approve", width="stretch"):
         st.info("Approval workflow is managed under Payroll.")
     if qa[3].button("Generate Salary", key="attendance_qa_salary", width="stretch"):
-        st.info("Open **Payroll → Payroll** to generate salary for the period.")
+        st.session_state.page = "hr_payroll"
+        st.rerun()
     if qa[4].button("Print", key="attendance_qa_print", width="stretch"):
         st.info("Print/export will be available in a future update.")
     st.markdown("</div>", unsafe_allow_html=True)
-
-    st.markdown(_attendance_kpi_cards_html(kpis), unsafe_allow_html=True)
 
     employee_options = load_employee_options()
     employee_map = {f"{employee_id} - {employee_name}": employee_id for employee_id, employee_name in employee_options}
@@ -2105,9 +2104,10 @@ def page_attendance():
     edit_id = st.session_state.get("attendance_edit_id")
     edit_record = None
 
-    st.markdown('<div class="maxek-attendance-card">', unsafe_allow_html=True)
+    st.markdown('<div class="maxek-attendance-card maxek-attendance-form-card">', unsafe_allow_html=True)
     st.markdown('<div class="maxek-attendance-card-title">Timesheet entry</div>', unsafe_allow_html=True)
 
+    st.markdown('<div class="maxek-attendance-layout">', unsafe_allow_html=True)
     form_col, preview_col = st.columns([2.8, 1.2], gap="medium")
 
     with form_col:
@@ -2350,6 +2350,8 @@ def page_attendance():
     with preview_col:
         _render_attendance_salary_preview(employee, pay_preview, total_hours, ot_hours, attendance_date)
 
+    st.markdown("</div>", unsafe_allow_html=True)
+
     if employee.get("employee_type") == "Sub Contractor Worker":
         with form_col:
             _render_subcontractor_payment_panel(
@@ -2375,7 +2377,12 @@ def page_attendance():
         save_clicked = st.button(
             save_label, type="primary", width="stretch", key=f"attendance_save_btn{widget_suffix}"
         )
-    if save_clicked or submit_quick:
+    if save_clicked or submit_quick or draft_quick:
+        save_remarks = remarks
+        if draft_quick and not save_clicked:
+            draft_tag = "[Draft]"
+            if draft_tag not in (save_remarks or ""):
+                save_remarks = f"{draft_tag} {save_remarks}".strip()
         ok, message = _persist_attendance_entry(
             employee,
             edit_id,
@@ -2385,7 +2392,7 @@ def page_attendance():
             in_time,
             out_time,
             break_time,
-            remarks,
+            save_remarks,
             fixed_working_hours,
             applied_rate,
             applied_ot_rate,
@@ -2395,9 +2402,13 @@ def page_attendance():
         )
         if ok:
             st.session_state.pop("attendance_edit_id", None)
-            st.success(message)
+            if draft_quick and not save_clicked:
+                st.success(f"Draft saved. {message}")
+            else:
+                st.success(message)
             st.rerun()
-        st.error(message)
+        else:
+            st.error(message)
 
     _render_attendance_timesheet_list(employee_id, employee)
 
@@ -2482,6 +2493,7 @@ def _render_attendance_timesheet_list(employee_id, employee):
                 "OT": format_decimal_hours(row["ot_hours"]),
                 "Amount": f"Rs {amount:,.2f}",
                 "Status": row["status"],
+                "Actions": "Edit · View",
                 "_id": int(row["id"]),
             }
         )
@@ -3080,13 +3092,18 @@ def page_payroll():
                                 mark_advances_deducted(employee_id, pid, payroll_month)
                             elif employee_type == "Site Worker":
                                 from modules.worker_payroll_db import calculate_period, save_payroll_run
+                                from modules.worker_payroll_engine import normalize_workflow_status
 
                                 ps = summary.get("payroll_period_start") or ""
                                 pe = summary.get("payroll_period_end") or ""
                                 raw = calculate_period(employee_id, ps, pe) if ps and pe else {}
                                 if raw:
                                     raw["worker_id"] = employee_id
-                                    save_payroll_run(raw, deductions, workflow_status)
+                                    save_payroll_run(
+                                        raw,
+                                        deductions,
+                                        normalize_workflow_status(workflow_status),
+                                    )
                             return pid
 
                         if c1.button(

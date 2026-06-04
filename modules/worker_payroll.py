@@ -406,10 +406,10 @@ def _render_review_tab():
 
     status = run.get("workflow_status") or "Draft"
     c1, c2, c3 = st.columns(3)
-    if status in ("Draft", "Calculated") and c1.button("Mark Calculated", width="stretch"):
+    if status in ("Draft", "Calculated", "Submitted to MD") and c1.button("Mark Calculated", width="stretch"):
         update_run_status(run_id, "Calculated")
         st.rerun()
-    if status in ("Draft", "Calculated") and c2.button("Approve", type="primary", width="stretch"):
+    if status in ("Draft", "Calculated", "Submitted to MD") and c2.button("Approve", type="primary", width="stretch"):
         update_run_status(run_id, "Approved")
         st.success("Approved.")
         st.rerun()
