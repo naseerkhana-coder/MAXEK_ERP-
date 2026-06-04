@@ -1,0 +1,8 @@
+{
+  "appId": "com.maxek.erp",
+  "appName": "MAXEK ERP",
+  "webDir": "../frontend/dist",
+  "server": {
+    "androidScheme": "https"
+  }
+}

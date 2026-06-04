@@ -1,0 +1,18 @@
+{
+  "name": "maxek-erp-mobile",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Capacitor Android shell for MAXEK ERP React app",
+  "scripts": {
+    "build:web": "npm --prefix ../frontend run build",
+    "cap:sync": "npm run build:web && npx cap sync android",
+    "cap:open": "npx cap open android",
+    "android:sync": "npm run cap:sync",
+    "android:open": "npx cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.3.4",
+    "@capacitor/cli": "^8.3.4",
+    "@capacitor/core": "^8.3.4"
+  }
+}
