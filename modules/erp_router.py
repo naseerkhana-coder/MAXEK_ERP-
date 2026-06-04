@@ -6,6 +6,7 @@ from collections.abc import Callable
 
 import streamlit as st
 
+from modules.account_pages import page_account_profile
 from modules.billing import page_billing
 from modules.dpr import page_dpr
 from modules.finance import page_finance, page_finance_accounts_hub
@@ -39,6 +40,7 @@ from modules.erp_screens import (
     page_material_return,
     page_overtime_management,
     page_purchase_requisition,
+    page_purchase_order,
     page_quotation_comparison,
     page_rfq_management,
     page_site_wise_stock,
@@ -299,9 +301,14 @@ def page_pay_payroll():
     page_worker_payroll()
 
 
+def page_pay_staff_payroll():
+    page_payroll()
+
+
 def page_pay_payslips():
     from modules.worker_payroll import page_worker_payroll
 
+    st.session_state["wp_default_tab"] = "Salary Slip"
     page_worker_payroll()
 
 
@@ -557,7 +564,7 @@ PAGE_ROUTES: dict[str, Callable[[], None]] = {
     "purch_requisition": page_purchase_requisition,
     "purch_rfq": page_rfq_management,
     "purch_quotation": page_quotation_comparison,
-    "purch_order": page_inv_purchase,
+    "purch_order": page_purchase_order,
     "purch_grn": page_grn,
     "purch_invoice": page_fin_purchase_invoice,
     "purch_vendor_payment": page_sub_payments,
@@ -578,6 +585,7 @@ PAGE_ROUTES: dict[str, Callable[[], None]] = {
     "hr_transfer": page_employee_transfer,
     "hr_overtime": page_overtime_management,
     "hr_payroll": page_pay_payroll,
+    "hr_staff_payroll": page_pay_staff_payroll,
     "hr_salary_slip": page_pay_payslips,
     "hr_labour_attendance": page_pay_attendance,
     "hr_reports": page_rpt_payroll,
@@ -660,6 +668,8 @@ PAGE_ROUTES: dict[str, Callable[[], None]] = {
     "rpt_company_profit": page_rpt_profit_loss,
     "rpt_project_profit": page_rpt_profit_loss,
     "rpt_cash_flow": page_rpt_financial,
+    # My Account (all roles)
+    "account_profile": page_account_profile,
     # Settings & Administration
     "settings_users": page_settings_users,
     "settings_roles": page_settings_users,

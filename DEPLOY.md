@@ -84,6 +84,37 @@ Working directory: `/opt/MAXEK_ERP`
 
 ---
 
+## Email (SMTP) for workflow notifications
+
+Set these environment variables before starting Streamlit (or in systemd `Environment=`):
+
+| Variable | Example |
+|----------|---------|
+| `SMTP_HOST` | `smtp.gmail.com` |
+| `SMTP_PORT` | `587` |
+| `SMTP_USER` | `erp@yourcompany.com` |
+| `SMTP_PASSWORD` | app password |
+| `SMTP_FROM` | same as user if omitted |
+| `SMTP_TLS` | `1` (default) |
+
+Ensure `users.email` is filled for roles that receive workflow mail (Accounts, MD, etc.).
+
+Verify after deploy:
+
+```bash
+python scripts/test_smtp.py --to accounts@yourcompany.com
+python scripts/test_smtp.py --to accounts@yourcompany.com --scenario password_reset
+python scripts/test_smtp.py --to accounts@yourcompany.com --scenario approval
+python scripts/test_smtp.py --to accounts@yourcompany.com --scenario payment_released
+python scripts/test_smtp.py --to accounts@yourcompany.com --scenario notification
+```
+
+Login **Forgot password?** (on the sign-in page) emails a temporary password when `SMTP_*` is set and the user row has `email` populated.
+
+Session idle timeout defaults to **8 hours** (`session_timeout_minutes` in `app_settings`, seeded as `480`).
+
+---
+
 ## Reset test data (local or server)
 
 ```bash

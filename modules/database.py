@@ -1312,6 +1312,12 @@ def init_db():
             ("manager_name", "TEXT"),
             ("whatsapp_number", "TEXT"),
             ("gender", "TEXT"),
+            ("hour_category", "TEXT"),
+            ("daily_wage_rate", "REAL"),
+            ("ot_rate", "REAL"),
+            ("worker_type", "TEXT"),
+            ("duty_category", "TEXT"),
+            ("ot_eligible", "TEXT"),
         ),
         "staff": (
             ("region", "TEXT"),
@@ -1387,6 +1393,10 @@ def init_db():
             ("bank_name", "TEXT"),
             ("ifsc_code", "TEXT"),
             ("branch_name", "TEXT"),
+            ("worker_type", "TEXT"),
+            ("duty_category", "TEXT"),
+            ("daily_wage", "REAL"),
+            ("ot_eligible", "TEXT"),
         ),
         "employee_advance": (
             ("employee_id", "TEXT"),
@@ -1535,6 +1545,85 @@ def init_db():
     )
     cur.execute(
         """
+        UPDATE employees SET worker_type = 'Subcontractor Worker'
+        WHERE COALESCE(worker_type, '') = ''
+          AND employee_type IN ('Sub Contractor Worker', 'Site Worker')
+        """
+    )
+    cur.execute(
+        """
+        UPDATE employees SET worker_type = 'Company Worker'
+        WHERE COALESCE(worker_type, '') = ''
+          AND employee_type = 'Company Worker'
+        """
+    )
+    cur.execute(
+        """
+        UPDATE employees SET worker_type = 'Labour Supply Worker'
+        WHERE COALESCE(worker_type, '') = ''
+          AND employee_type = 'Labour Supply Worker'
+        """
+    )
+    cur.execute(
+        """
+        UPDATE employees SET duty_category = '8 Hour Worker'
+        WHERE COALESCE(duty_category, '') = ''
+          AND employee_type IN ('Sub Contractor Worker', 'Company Worker', 'Labour Supply Worker', 'Site Worker')
+        """
+    )
+    cur.execute(
+        """
+        UPDATE employees SET daily_wage = COALESCE(NULLIF(daily_wage, 0), salary_amount, basic_salary, 0)
+        WHERE employee_type IN ('Sub Contractor Worker', 'Company Worker', 'Labour Supply Worker', 'Site Worker')
+          AND COALESCE(daily_wage, 0) = 0
+        """
+    )
+    cur.execute(
+        """
+        UPDATE employees SET ot_eligible = COALESCE(NULLIF(ot_eligible, ''), ot_applicable, 'Yes')
+        WHERE employee_type IN ('Sub Contractor Worker', 'Company Worker', 'Labour Supply Worker', 'Site Worker')
+          AND COALESCE(ot_eligible, '') = ''
+        """
+    )
+    cur.execute(
+        """
+        UPDATE workers SET worker_type = 'Subcontractor Worker'
+        WHERE COALESCE(worker_type, '') = ''
+        """
+    )
+    cur.execute(
+        """
+        UPDATE workers SET duty_category = COALESCE(NULLIF(duty_category, ''), NULLIF(hour_category, ''), '8 Hour Worker')
+        WHERE COALESCE(duty_category, '') = ''
+        """
+    )
+    cur.execute(
+        """
+        UPDATE workers SET hour_category = duty_category
+        WHERE COALESCE(hour_category, '') = '' AND COALESCE(duty_category, '') != ''
+        """
+    )
+    cur.execute(
+        """
+        UPDATE workers SET daily_wage_rate = COALESCE(NULLIF(daily_wage_rate, 0), salary, 0)
+        WHERE COALESCE(daily_wage_rate, 0) = 0
+        """
+    )
+    cur.execute(
+        """
+        UPDATE workers SET ot_eligible = 'Yes'
+        WHERE COALESCE(ot_eligible, '') = ''
+          AND COALESCE(ot_rate, overtime_rate, 0) > 0
+        """
+    )
+    cur.execute(
+        """
+        UPDATE workers SET ot_eligible = 'No'
+        WHERE COALESCE(ot_eligible, '') = ''
+        """
+    )
+    cur.execute(
+        """
         UPDATE managers SET region = COALESCE(NULLIF(region, ''), NULLIF(state, ''), NULLIF(country, ''))
         WHERE COALESCE(region, '') = ''
         """
@@ -1649,14 +1738,26 @@ def init_db():
     cur.execute("SELECT COUNT(*) FROM ot_rules")
     if cur.fetchone()[0] == 0:
         cur.execute("INSERT INTO ot_rules(rule_name, description) VALUES(?, ?)", ("8 Hour Shift", "Overtime starts after 8 working hours"))
+    from modules.user_account import ensure_user_account_schema
+
+    ensure_user_account_schema(conn)
     cur.execute("SELECT COUNT(*) FROM users")
     if cur.fetchone()[0] == 0:
+        from modules.password_security import hash_password
+
         cur.execute(
             """
-            INSERT INTO users(user_id, full_name, username, password, role, mobile)
-            VALUES('USR101','Administrator','admin','1234','Admin','9999999999')
-            """
+            INSERT INTO users(user_id, full_name, username, password, role, mobile, must_change_password)
+            VALUES('USR101','Administrator','admin',?,'Admin','9999999999', 1)
+            """,
+            (hash_password("1234"),),
         )
+
+    _migrate_attendance_multi_project(cur)
+    cur.execute(
+        "INSERT OR IGNORE INTO app_settings(setting_key, setting_value) VALUES(?, ?)",
+        ("session_timeout_minutes", "480"),
+    )
 
     _sync_legacy_to_employees(cur)
     _sync_employee_columns(cur)
@@ -1700,11 +1801,15 @@ def init_db():
 
     ensure_erp_extension_tables(conn)
 
+    ensure_user_account_schema(conn)
+
     conn.commit()
     conn.close()
 
+    from modules.approval_workflow import ensure_approval_workflow_schema
     from modules.worker_payroll_db import ensure_worker_payroll_schema
 
+    ensure_approval_workflow_schema()
     ensure_worker_payroll_schema()
 
 
@@ -3032,11 +3137,26 @@ def load_material_requests(status=None, limit=200):
     return df
 
 
-def update_material_request_status(request_id, status):
+def update_material_request_status(request_id, status, actor="", role="Admin", comment=""):
+    from modules.approval_workflow import normalize_status, status_for_storage, transition
+
+    canonical = normalize_status(status, "material_request")
+    stored = status_for_storage("material_request", canonical)
+    if actor:
+        ok, _msg = transition(
+            "material_request",
+            request_id,
+            canonical,
+            actor,
+            role,
+            comment=comment,
+        )
+        if ok:
+            return True
     conn = get_conn()
     cur = conn.execute(
         "UPDATE material_requests SET status = ? WHERE request_id = ?",
-        (status, request_id),
+        (stored, request_id),
     )
     conn.commit()
     updated = cur.rowcount
@@ -4525,6 +4645,193 @@ def subcontractor_quantity_bill_preview(subcontractor_name, bill_month):
     }
 
 
+def subcontractor_bill_payroll_lines(subcontractor_name, bill_month):
+    """Designation-wise worked days/hours, OT hours, and amounts for payroll-based bills."""
+    import pandas as pd
+
+    payroll_month = parse_month_value(bill_month)
+    month_filter, params = attendance_month_filter_sql("attendance_date", payroll_month)
+    sub_name = resolve_subcontractor_name(subcontractor_name)
+    conn = get_conn()
+    att_df = pd.read_sql_query(
+        f"""
+        SELECT COALESCE(NULLIF(TRIM(designation), ''), 'General') AS designation,
+               COALESCE(applied_rate, 0) AS applied_rate,
+               COALESCE(ot_hours, overtime, 0) AS ot_hours,
+               COALESCE(applied_ot_rate, 0) AS applied_ot_rate,
+               COALESCE(status, '') AS status,
+               COALESCE(total_hours, worked_hours, 0) AS worked_hours
+        FROM attendance
+        WHERE LOWER(TRIM(COALESCE(sub_contractor, ''))) = LOWER(TRIM(?))
+          AND UPPER(COALESCE(status, '')) IN ('PRESENT', 'HALF DAY')
+          {month_filter}
+        """,
+        conn,
+        params=[sub_name] + params,
+    )
+    conn.close()
+
+    columns = [
+        "designation",
+        "worked_days",
+        "worked_hours",
+        "ot_hours",
+        "labour_amount",
+        "ot_amount",
+        "line_total",
+    ]
+    if att_df.empty:
+        return pd.DataFrame(columns=columns)
+
+    buckets: dict[str, dict] = {}
+    for _, row in att_df.iterrows():
+        des = str(row["designation"] or "General").strip() or "General"
+        bucket = buckets.setdefault(
+            des,
+            {
+                "designation": des,
+                "worked_days": 0,
+                "worked_hours": 0.0,
+                "ot_hours": 0.0,
+                "labour_amount": 0.0,
+                "ot_amount": 0.0,
+            },
+        )
+        bucket["worked_days"] += 1
+        bucket["worked_hours"] += float(row["worked_hours"] or 0)
+        bucket["ot_hours"] += float(row["ot_hours"] or 0)
+        labour_pay, ot_pay, _ = subcontractor_timesheet_day_amount(
+            row["status"],
+            row["applied_rate"],
+            row["ot_hours"],
+            row["applied_ot_rate"],
+            float(row["applied_ot_rate"] or 0) > 0,
+        )
+        bucket["labour_amount"] += labour_pay
+        bucket["ot_amount"] += ot_pay
+
+    rows = []
+    for bucket in sorted(buckets.values(), key=lambda r: r["designation"].lower()):
+        labour_amt = round(bucket["labour_amount"], 2)
+        ot_amt = round(bucket["ot_amount"], 2)
+        rows.append(
+            {
+                "designation": bucket["designation"],
+                "worked_days": int(bucket["worked_days"]),
+                "worked_hours": round(bucket["worked_hours"], 2),
+                "ot_hours": round(bucket["ot_hours"], 2),
+                "labour_amount": labour_amt,
+                "ot_amount": ot_amt,
+                "line_total": round(labour_amt + ot_amt, 2),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def subcontractor_bill_boq_lines(subcontractor_name, bill_month):
+    """BOQ measurement lines (qty, rate, amount) for quantity-based bills."""
+    import pandas as pd
+
+    payroll_month = parse_month_value(bill_month)
+    sub_name = resolve_subcontractor_name(subcontractor_name)
+    conn = get_conn()
+    df = pd.read_sql_query(
+        """
+        SELECT project_name, boq_item, unit,
+               ROUND(COALESCE(quantity, 0), 2) AS quantity,
+               ROUND(COALESCE(rate, 0), 2) AS rate,
+               ROUND(COALESCE(amount, 0), 2) AS amount,
+               COALESCE(remarks, '') AS remarks
+        FROM subcontractor_boq_entries
+        WHERE LOWER(TRIM(COALESCE(subcontractor_name, ''))) = LOWER(TRIM(?))
+          AND strftime('%m/%Y', substr(entry_date, 7, 4) || '-' || substr(entry_date, 4, 2) || '-01') = ?
+        ORDER BY project_name, boq_item
+        """,
+        conn,
+        params=(sub_name, payroll_month),
+    )
+    conn.close()
+    return df
+
+
+def load_petty_cash_report():
+    """Combined petty cash requests, petty expenses, and site expenses paid from petty."""
+    import pandas as pd
+
+    conn = get_conn()
+    requests_df = pd.read_sql_query(
+        """
+        SELECT 'Petty Cash Request' AS record_type,
+               request_id AS reference_id,
+               request_date AS transaction_date,
+               project_name,
+               staff_name AS party_name,
+               requested_amount AS amount,
+               status,
+               reason AS description,
+               released_amount,
+               COALESCE(remarks, '') AS remarks
+        FROM petty_cash_requests
+        ORDER BY id DESC
+        """,
+        conn,
+    )
+    petty_exp_df = pd.read_sql_query(
+        """
+        SELECT 'Petty Cash Expense' AS record_type,
+               expense_no AS reference_id,
+               COALESCE(created_at, '') AS transaction_date,
+               site AS project_name,
+               employee_name AS party_name,
+               amount,
+               status,
+               expense_type AS description,
+               NULL AS released_amount,
+               '' AS remarks
+        FROM petty_cash_expenses
+        ORDER BY id DESC
+        """,
+        conn,
+    )
+    site_petty_df = pd.read_sql_query(
+        """
+        SELECT 'Site Expense (Petty)' AS record_type,
+               expense_id AS reference_id,
+               expense_date AS transaction_date,
+               project_name,
+               supplier AS party_name,
+               total_invoice_value AS amount,
+               status,
+               expense_category AS description,
+               NULL AS released_amount,
+               COALESCE(remarks, '') AS remarks
+        FROM site_expenses
+        WHERE UPPER(COALESCE(payment_source, '')) LIKE '%PETTY%'
+        ORDER BY id DESC
+        """,
+        conn,
+    )
+    conn.close()
+    frames = [requests_df, petty_exp_df, site_petty_df]
+    frames = [f for f in frames if not f.empty]
+    if not frames:
+        return pd.DataFrame(
+            columns=[
+                "record_type",
+                "reference_id",
+                "transaction_date",
+                "project_name",
+                "party_name",
+                "amount",
+                "status",
+                "description",
+                "released_amount",
+                "remarks",
+            ]
+        )
+    return pd.concat(frames, ignore_index=True)
+
+
 def load_pending_client_bill_dprs():
     conn = get_conn()
     df = pd.read_sql_query(
@@ -5142,18 +5449,47 @@ def list_payroll_by_workflow(workflow_status, payment_status=None):
     return df
 
 
-def update_payroll_workflow(payroll_id, workflow_status, md_remarks=""):
+def update_payroll_workflow(payroll_id, workflow_status, md_remarks="", actor="", role="Admin"):
+    from modules.approval_workflow import normalize_status, status_for_storage, transition
+
+    legacy_to_canonical = {
+        "Submitted to MD": "Prepared",
+        "MD Approved": "Approved",
+        "Rejected": "Draft",
+        "Sent Back": "Draft",
+    }
+    canonical = legacy_to_canonical.get(workflow_status) or normalize_status(workflow_status, "staff_payroll")
+    if actor:
+        ok, _msg = transition(
+            "staff_payroll",
+            payroll_id,
+            canonical,
+            actor,
+            role,
+            comment=md_remarks,
+        )
+        if ok:
+            if md_remarks:
+                conn = get_conn()
+                conn.execute(
+                    "UPDATE payroll SET md_remarks = ? WHERE payroll_id = ?",
+                    (md_remarks, payroll_id),
+                )
+                conn.commit()
+                conn.close()
+            return
     conn = get_conn()
     now = datetime.now().strftime("%d/%m/%Y %H:%M")
-    if workflow_status == "Submitted to MD":
+    stored = status_for_storage("staff_payroll", canonical)
+    if workflow_status == "Submitted to MD" or canonical == "Prepared":
         conn.execute(
             "UPDATE payroll SET workflow_status = ?, salary_status = ?, submitted_at = ? WHERE payroll_id = ?",
-            (workflow_status, workflow_status, now, payroll_id),
+            ("Submitted to MD", "Submitted to MD", now, payroll_id),
         )
-    elif workflow_status == "MD Approved":
+    elif workflow_status == "MD Approved" or canonical == "Approved":
         conn.execute(
             "UPDATE payroll SET workflow_status = ?, salary_status = ?, approved_at = ?, md_remarks = ? WHERE payroll_id = ?",
-            (workflow_status, workflow_status, now, md_remarks, payroll_id),
+            ("MD Approved", "MD Approved", now, md_remarks, payroll_id),
         )
     else:
         conn.execute(
@@ -5573,18 +5909,51 @@ def kpi_stats():
         pending_po = scalar_query(
             "SELECT COUNT(*) FROM material_requests WHERE UPPER(COALESCE(status,'')) IN ('PENDING', 'SUBMITTED', 'OPEN')"
         )
+    att_kpis = get_today_attendance_kpis()
+    staff_count = scalar_query(
+        """
+        SELECT COUNT(*) FROM employees
+        WHERE COALESCE(employee_type, '') NOT IN ('Sub Contractor Worker', '')
+          AND (UPPER(COALESCE(status, 'ACTIVE')) = 'ACTIVE' OR TRIM(COALESCE(status, '')) = '')
+        """
+    )
+    if not staff_count:
+        staff_count = table_count("staff")
+    worker_payroll_open = 0
+    try:
+        worker_payroll_open = scalar_query(
+            """
+            SELECT COUNT(*) FROM worker_payroll_runs
+            WHERE UPPER(COALESCE(workflow_status, '')) NOT IN ('PAID', 'SETTLED', 'CANCELLED', 'VOID')
+            """
+        )
+    except Exception:
+        worker_payroll_open = 0
+
+    wf_counts: dict = {}
+    try:
+        from modules.approval_workflow import workflow_status_counts as aggregate_workflow_counts
+
+        wf_counts = aggregate_workflow_counts()
+    except Exception:
+        wf_counts = {}
+
     return {
         "employees": employee_count,
         "total_workers": worker_count,
         "active_workers": active_workers,
+        "staff_count": int(staff_count or 0),
         "projects": active_projects or total_projects,
         "total_projects": total_projects,
         "active_projects": active_projects or total_projects,
         "pending_salary": pending_salary,
+        "worker_payroll_open": int(worker_payroll_open or 0),
         "pending_bills": int(pending_bills or 0),
         "pending_po": int(pending_po or 0),
         "material_requests_open": int(material_requests_open or 0),
         "attendance_today": attendance_today,
+        "attendance_present": int(att_kpis.get("present", 0) or 0),
+        "attendance_pct": float(att_kpis.get("attendance_pct", 0) or 0),
         "clients": table_count("clients"),
         "subcontractors": table_count("subcontractors"),
         "users": table_count("users"),
@@ -5600,7 +5969,20 @@ def kpi_stats():
         "petty_issued": fk.get("petty_issued", 0),
         "petty_utilized": fk.get("petty_utilized", 0),
         "petty_pending_verify": fk.get("petty_pending_verify", 0),
+        "workflow_status_counts": wf_counts,
+        "workflow_pending": int(wf_counts.get("Prepared", 0) or 0)
+        + int(wf_counts.get("Checked", 0) or 0)
+        + int(wf_counts.get("Approved", 0) or 0),
     }
+
+
+def kpi_workflow_pending_for_role(role: str) -> int:
+    try:
+        from modules.approval_workflow import pending_approval_count_for_role
+
+        return pending_approval_count_for_role(role)
+    except Exception:
+        return 0
 
 
 def load_project_names(limit=200):
@@ -5705,14 +6087,30 @@ def dashboard_recent_transactions(limit=5):
 def dashboard_notifications():
     stats = kpi_stats()
     notes = []
+    if stats.get("workflow_pending"):
+        notes.append(
+            {
+                "title": f"{int(stats['workflow_pending'])} item(s) await your approval.",
+                "detail": "Review pending approvals on the dashboard.",
+            }
+        )
     if stats["pending_salary"]:
         notes.append({"title": f"Salary for {int(stats['pending_salary'])} workers is pending.", "detail": "Review payroll and process this month."})
     if stats["attendance_today"]:
         notes.append({"title": f"{int(stats['attendance_today'])} attendance entries captured today.", "detail": "Daily attendance is updating labor summaries."})
     if stats["active_projects"]:
         notes.append({"title": f"{int(stats['active_projects'])} active projects are running.", "detail": "Track project labor, expenses, and payments."})
-    notes.append({"title": "Masters are ready for setup.", "detail": "Manage regions, departments, designations, and users from Settings."})
-    return notes[:4]
+    try:
+        from modules.notifications import load_unread_notifications
+
+        unread = load_unread_notifications(limit=3)
+        for _, row in unread.iterrows():
+            notes.append({"title": row["title"], "detail": row.get("detail") or ""})
+    except Exception:
+        pass
+    if len(notes) < 4:
+        notes.append({"title": "Masters are ready for setup.", "detail": "Manage regions, departments, designations, and users from Settings."})
+    return notes[:6]
 
 
 # —— Master data CRUD ——
@@ -6493,29 +6891,231 @@ def load_material_issues(limit=200):
     return df
 
 
-def save_material_issue(data, actor=""):
-    conn = get_conn()
-    issue_id = data.get("issue_id") or generate_id("MI", "material_issues", id_column="issue_id", conn=conn)
-    issue_no = data.get("issue_no") or next_document_number("material_request", conn=conn)
+class StockInsufficientError(Exception):
+    """Raised when an issue would drive stock below zero."""
+
+    def __init__(self, material_name: str, available: float, requested: float):
+        self.material_name = material_name
+        self.available = available
+        self.requested = requested
+        super().__init__(
+            f"Insufficient stock for {material_name}: available {available:g}, requested {requested:g}."
+        )
+
+
+def _stock_keys(material_code: str, material_name: str) -> tuple[str, str]:
+    code = (material_code or "").strip()
+    name = (material_name or "").strip()
+    if not code and not name:
+        raise ValueError("Material code or name is required for stock movement.")
+    return code or name, name or code
+
+
+def _find_stock_register_row(conn, material_code: str, material_name: str):
+    code, name = _stock_keys(material_code, material_name)
+    return conn.execute(
+        """
+        SELECT id, stock_id, material_code, material_name, opening_qty, received, issued, balance
+        FROM stock_register
+        WHERE LOWER(TRIM(COALESCE(material_code, ''))) = LOWER(?)
+           OR LOWER(TRIM(COALESCE(material_name, ''))) = LOWER(?)
+        LIMIT 1
+        """,
+        (code, name),
+    ).fetchone()
+
+
+def apply_stock_receipt(
+    conn,
+    material_code: str,
+    material_name: str,
+    quantity: float,
+) -> float:
+    """Increase central store balance (GRN / material return). Returns new balance."""
+    qty = float(quantity or 0)
+    if qty <= 0:
+        return get_stock_balance(material_code, material_name, conn=conn)
+    code, name = _stock_keys(material_code, material_name)
+    row = _find_stock_register_row(conn, code, name)
+    ts = _finance_timestamp()
+    if row:
+        received = float(row[5] or 0) + qty
+        opening = float(row[4] or 0)
+        issued = float(row[6] or 0)
+        balance = opening + received - issued
+        conn.execute(
+            """
+            UPDATE stock_register
+            SET received=?, balance=?, updated_at=?
+            WHERE id=?
+            """,
+            (received, balance, ts, row[0]),
+        )
+        return balance
+    stock_id = generate_id("STK", "stock_register", id_column="stock_id", conn=conn)
     conn.execute(
         """
-        INSERT INTO material_issues(
-            issue_id, issue_no, project_name, material_code, material_name, quantity, issue_date, status, created_by, created_at
-        ) VALUES(?,?,?,?,?,?,?,?,?,?)
+        INSERT INTO stock_register(
+            stock_id, material_code, material_name, opening_qty, received, issued, balance, updated_at
+        ) VALUES(?,?,?,?,?,?,?,?)
         """,
-        (
-            issue_id,
-            issue_no,
-            data.get("project_name", ""),
-            data.get("material_code", ""),
-            data.get("material_name", ""),
-            float(data.get("quantity") or 0),
-            data.get("issue_date", datetime.now().strftime(DATE_FMT)),
-            data.get("status", "Issued"),
-            actor,
-            _finance_timestamp(),
-        ),
+        (stock_id, code, name, 0.0, qty, 0.0, qty, ts),
     )
-    conn.commit()
-    conn.close()
-    return issue_id, issue_no
+    return qty
+
+
+def apply_stock_issue(
+    conn,
+    material_code: str,
+    material_name: str,
+    quantity: float,
+    *,
+    allow_negative: bool = False,
+) -> float:
+    """Decrease central store balance (material issue). Returns new balance."""
+    qty = float(quantity or 0)
+    if qty <= 0:
+        return get_stock_balance(material_code, material_name, conn=conn)
+    code, name = _stock_keys(material_code, material_name)
+    row = _find_stock_register_row(conn, code, name)
+    available = 0.0
+    if row:
+        opening = float(row[4] or 0)
+        received = float(row[5] or 0)
+        issued = float(row[6] or 0)
+        available = opening + received - issued
+    if available < qty and not allow_negative:
+        raise StockInsufficientError(name, available, qty)
+    ts = _finance_timestamp()
+    if row:
+        issued = float(row[6] or 0) + qty
+        opening = float(row[4] or 0)
+        received = float(row[5] or 0)
+        balance = opening + received - issued
+        conn.execute(
+            """
+            UPDATE stock_register
+            SET issued=?, balance=?, updated_at=?
+            WHERE id=?
+            """,
+            (issued, balance, ts, row[0]),
+        )
+        return balance
+    stock_id = generate_id("STK", "stock_register", id_column="stock_id", conn=conn)
+    balance = -qty
+    conn.execute(
+        """
+        INSERT INTO stock_register(
+            stock_id, material_code, material_name, opening_qty, received, issued, balance, updated_at
+        ) VALUES(?,?,?,?,?,?,?,?)
+        """,
+        (stock_id, code, name, 0.0, 0.0, qty, balance, ts),
+    )
+    return balance
+
+
+def get_stock_balance(material_code: str = "", material_name: str = "", *, conn=None) -> float:
+    own = conn is None
+    if own:
+        conn = get_conn()
+    try:
+        row = _find_stock_register_row(conn, material_code, material_name)
+        if not row:
+            return 0.0
+        opening = float(row[4] or 0)
+        received = float(row[5] or 0)
+        issued = float(row[6] or 0)
+        return round(opening + received - issued, 4)
+    finally:
+        if own:
+            conn.close()
+
+
+def log_login_attempt(
+    username: str,
+    success: bool,
+    *,
+    ip_address: str = "",
+    user_agent: str = "",
+) -> None:
+    try:
+        conn = get_conn()
+        conn.execute(
+            """
+            INSERT INTO login_history(username, success, login_at, ip_address, user_agent)
+            VALUES(?,?,?,?,?)
+            """,
+            (
+                (username or "").strip(),
+                1 if success else 0,
+                datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
+                ip_address or "",
+                user_agent or "",
+            ),
+        )
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+
+def _migrate_attendance_multi_project(cur) -> None:
+    """Allow multiple attendance rows per employee per day for different projects."""
+    try:
+        cur.execute(
+            """
+            DELETE FROM attendance
+            WHERE id NOT IN (
+                SELECT MIN(id)
+                FROM attendance
+                WHERE COALESCE(employee_id, '') != ''
+                GROUP BY employee_id, attendance_date, COALESCE(project_name, '')
+            )
+            AND COALESCE(employee_id, '') != ''
+            """
+        )
+        cur.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_attendance_emp_date_project
+            ON attendance(employee_id, attendance_date, COALESCE(project_name, ''))
+            """
+        )
+    except sqlite3.OperationalError:
+        pass
+
+
+def save_material_issue(data, actor=""):
+    conn = get_conn()
+    try:
+        issue_id = data.get("issue_id") or generate_id("MI", "material_issues", id_column="issue_id", conn=conn)
+        issue_no = data.get("issue_no") or next_document_number("material_request", conn=conn)
+        qty = float(data.get("quantity") or 0)
+        material_code = data.get("material_code", "")
+        material_name = data.get("material_name", "")
+        apply_stock_issue(conn, material_code, material_name, qty)
+        conn.execute(
+            """
+            INSERT INTO material_issues(
+                issue_id, issue_no, project_name, material_code, material_name, quantity, issue_date, status, created_by, created_at
+            ) VALUES(?,?,?,?,?,?,?,?,?,?)
+            """,
+            (
+                issue_id,
+                issue_no,
+                data.get("project_name", ""),
+                material_code,
+                material_name,
+                qty,
+                data.get("issue_date", datetime.now().strftime(DATE_FMT)),
+                data.get("status", "Issued"),
+                actor,
+                _finance_timestamp(),
+            ),
+        )
+        conn.commit()
+        return issue_id, issue_no
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()

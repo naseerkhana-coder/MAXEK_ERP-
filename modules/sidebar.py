@@ -27,7 +27,7 @@ _QUICK_ACCESS = (
     ("purch_invoice", "Purchase Invoice"),
     ("proj_boq", "BOQ Entry"),
     ("store_issue", "Material Issue"),
-    ("hr_payroll", "Payroll Processing"),
+    ("hr_payroll", "Worker Payroll"),
 )
 
 

@@ -38,7 +38,11 @@ SECTION_DEFAULT_PAGE: dict[str, str] = {
     "letters": "doc_incoming",
     "reports": "rpt_proj_status",
     "settings": "settings_users",
+    "account": "account_profile",
 }
+
+# Available to every authenticated role (profile and password).
+ACCOUNT_PAGE_KEYS = frozenset({"account_profile"})
 
 QUICK_ADD_ACTIONS: list[tuple[str, str, str]] = [
     ("purch_requisition", "Material Request", "📋"),
@@ -152,7 +156,8 @@ MENU_SECTIONS: list[MenuSection] = [
                     ("master_employee", "Employees"),
                     ("hr_attendance", "Attendance"),
                     ("hr_leave", "Leave"),
-                    ("hr_payroll", "Payroll"),
+                    ("hr_payroll", "Worker Payroll"),
+                    ("hr_staff_payroll", "Staff Payroll"),
                 ],
             ),
         ],
@@ -226,6 +231,20 @@ MENU_SECTIONS: list[MenuSection] = [
         ],
     ),
     (
+        "account",
+        "My Account",
+        "👤",
+        [
+            (
+                "account_all",
+                None,
+                [
+                    ("account_profile", "My Profile"),
+                ],
+            ),
+        ],
+    ),
+    (
         "settings",
         "Settings",
         "⚙️",
@@ -242,6 +261,9 @@ MENU_SECTIONS: list[MenuSection] = [
         ],
     ),
 ]
+
+# Routed in erp_router but hidden from the sidebar (legacy bookmarks / deep links).
+ROUTER_ONLY_PAGE_KEYS = frozenset({"hr_salary_slip"})
 
 CORRESPONDENCE_PAGES = frozenset(
     {
@@ -357,7 +379,7 @@ def group_for_page(page_key: str) -> tuple[str, str] | None:
 
 
 def all_page_keys() -> set[str]:
-    keys = {MENU_DASHBOARD[0]}
+    keys = {MENU_DASHBOARD[0]} | set(ROUTER_ONLY_PAGE_KEYS)
     for _sid, _label, _icon, groups in MENU_SECTIONS:
         keys.update(k for k, _ in iter_section_items(groups))
     return keys
@@ -373,6 +395,8 @@ def pages_in_sections(*section_ids: str) -> set[str]:
 
 
 def page_label(page_key: str) -> str:
+    if page_key == "hr_salary_slip":
+        return "Worker Payroll — Salary Slip"
     if page_key == MENU_DASHBOARD[0]:
         return MENU_DASHBOARD[1]
     for _sid, _label, _icon, groups in MENU_SECTIONS:
@@ -449,6 +473,7 @@ _HR_PAYROLL_PAGES = pages_in_sections("hr", "reports") | {
     "master_branch",
     "master_department",
     "appr_leave",
+    "hr_staff_payroll",
     "hr_salary_slip",
     "hr_reports",
 }
@@ -513,9 +538,9 @@ def _full_router_page_keys() -> set[str]:
 
 def allowed_pages_for_role(role: str) -> set[str]:
     if is_super_admin(role):
-        return _full_router_page_keys()
+        return _full_router_page_keys() | ACCOUNT_PAGE_KEYS
     canonical = resolve_role_pages(role)
     pages = ROLE_PAGE_ACCESS.get(canonical, ROLE_PAGE_ACCESS.get(role, {MENU_DASHBOARD[0]}))
     if canonical in ("Admin", "MD") or role in ("Admin", "MD"):
-        return _full_router_page_keys()
-    return pages
+        return _full_router_page_keys() | ACCOUNT_PAGE_KEYS
+    return pages | ACCOUNT_PAGE_KEYS

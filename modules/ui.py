@@ -253,20 +253,17 @@ def render_page_header(user_name: str, on_logout=None, allowed_pages=None):
                 _navigate_to("dash_notifications")
 
     with profile_col:
-        st.markdown(
-            f"""
-            <div class="maxek-header-user-v2">
-              <span class="maxek-header-avatar">{user_name[:1].upper()}</span>
-              <div class="maxek-header-user-text">
-                <div class="maxek-header-user-name">{user_name}</div>
-                <div class="maxek-header-user-meta">{user_role_label}</div>
-              </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        if on_logout and st.button("Log out", key="header_logout", help="Log out"):
-            on_logout()
+        menu_label = f"{user_name} ▾"
+        with st.popover(menu_label, use_container_width=True):
+            st.caption(user_role_label)
+            if st.button("My Profile", key="header_my_profile", use_container_width=True):
+                st.session_state.pop("account_focus", None)
+                _navigate_to("account_profile")
+            if st.button("Change Password", key="header_change_password", use_container_width=True):
+                st.session_state.account_focus = "password"
+                _navigate_to("account_profile")
+            if on_logout and st.button("Logout", key="header_logout", use_container_width=True):
+                on_logout()
 
     st.markdown('<div class="maxek-top-nav-row">', unsafe_allow_html=True)
     visible_nav = []
@@ -303,11 +300,22 @@ def _overview_panel(title, items):
 
 
 def _render_dashboard_welcome(user_name: str):
-    render_page_breadcrumbs(
-        "Home",
-        "Dashboard",
-        title=f"Welcome back, {user_name}",
-        subtitle="Projects · Procurement · Inventory · Subcontractor billing · Petty cash · Letters",
+    today = datetime.now()
+    st.markdown(
+        f"""
+        <div class="maxek-breadcrumbs">Home › Dashboard</div>
+        <div class="maxek-dashboard-intro">
+          <div>
+            <h1>Welcome back, {user_name}</h1>
+            <p>Projects · Procurement · HR &amp; Payroll · Finance · Store · Correspondence</p>
+          </div>
+          <div class="maxek-dashboard-date">
+            <div>{today.strftime('%d %b %Y')}</div>
+            <span>{today.strftime('%A')}</span>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
 
 
@@ -315,12 +323,23 @@ def _render_dashboard_kpis(stats):
     cards = [
         ("📁", "Total Projects", stats.get("total_projects", stats["active_projects"]), "All sites", "accent-blue"),
         ("🏗️", "Active Projects", stats["active_projects"], "On site now", "accent-green"),
+        ("👷", "Active Workers", stats.get("active_workers", 0), "Site workforce", "accent-green"),
+        ("🏢", "Staff", stats.get("staff_count", 0), "Office & payroll staff", "accent-slate"),
         ("🧾", "Pending Bills", stats.get("pending_bills", 0), "Awaiting payment", "accent-red"),
         ("🛒", "Pending PO", stats.get("pending_po", 0), "Purchase orders", "accent-orange"),
         ("💵", "Cash Balance", f"Rs {stats.get('cash_balance', 0):,.0f}", "Petty + cash book", "accent-purple"),
-        ("📋", "Material Requests", stats.get("material_requests_open", 0), "Open MRs", "accent-yellow"),
+        ("🏦", "Bank Balance", f"Rs {stats.get('bank_balance', 0):,.0f}", "Settled bank position", "accent-blue"),
+        ("📋", "Open MRs", stats.get("material_requests_open", 0), "Material requests", "accent-yellow"),
+        ("💰", "Payroll Runs", stats.get("worker_payroll_open", 0), "Worker payroll in progress", "accent-orange"),
+        (
+            "✅",
+            "Workflow Queue",
+            stats.get("workflow_pending", 0),
+            "Prepared / checked / approved",
+            "accent-yellow",
+        ),
     ]
-    html_parts = ['<div class="maxek-kpi-grid">']
+    html_parts = ['<div class="maxek-kpi-grid maxek-kpi-grid-wide">']
     for icon, label, value, helper, accent in cards:
         html_parts.append(
             f'<div class="maxek-kpi-card {accent}">'
@@ -371,11 +390,14 @@ def _render_dashboard_overviews(stats, dashboard_settings):
     if dashboard_settings.get("show_attendance_overview", True):
         panels.append(
             (
-                "Attendance Overview (Today)",
+                "HR & Payroll (Today)",
                 [
-                    ("Present Entries", stats["attendance_today"]),
+                    ("Present Today", stats.get("attendance_present", stats["attendance_today"])),
+                    ("Attendance %", f"{stats.get('attendance_pct', 0):g}%"),
                     ("Active Workers", stats["active_workers"]),
-                    ("Pending Salary", stats["pending_salary"]),
+                    ("Staff (Office)", stats.get("staff_count", 0)),
+                    ("Pending Worker Salary", stats["pending_salary"]),
+                    ("Open Payroll Runs", stats.get("worker_payroll_open", 0)),
                 ],
             )
         )
@@ -393,11 +415,13 @@ def _render_dashboard_overviews(stats, dashboard_settings):
     if dashboard_settings.get("show_expense_overview", True):
         panels.append(
             (
-                "Petty Cash & Expenses",
+                "Finance & Expenses",
                 [
-                    ("Petty Issued", f"Rs {stats.get('petty_issued', 0):,.2f}"),
-                    ("Petty Utilized", f"Rs {stats.get('petty_utilized', 0):,.2f}"),
-                    ("Pending Verification", stats.get("petty_pending_verify", 0)),
+                    ("Cash Balance", f"Rs {stats.get('cash_balance', 0):,.2f}"),
+                    ("Bank Balance", f"Rs {stats.get('bank_balance', 0):,.2f}"),
+                    ("Debtors", f"Rs {stats.get('debtors', 0):,.2f}"),
+                    ("Creditors", f"Rs {stats.get('creditors', 0):,.2f}"),
+                    ("Petty Pending Verify", stats.get("petty_pending_verify", 0)),
                     ("Monthly Expenses", f"Rs {stats.get('monthly_expense', 0):,.2f}"),
                 ],
             )
@@ -413,9 +437,23 @@ def _render_dashboard_overviews(stats, dashboard_settings):
 
 
 def _render_dashboard_pending_approvals():
+    from modules.approval_workflow import get_pending_for_role
+    from modules.database import kpi_workflow_pending_for_role
     from modules.finance_workflow import render_approval_inbox
 
     st.subheader("Pending Approvals")
+    role = st.session_state.get("user_role", "Admin")
+    user = st.session_state.get("user_name", "User")
+    my_count = kpi_workflow_pending_for_role(role)
+    if my_count:
+        st.caption(f"**{my_count}** item(s) need action for your role ({role}).")
+    pending = get_pending_for_role(user, role)
+    if pending:
+        st.dataframe(
+            pd.DataFrame(pending)[["entity_type", "count", "statuses"]],
+            width="stretch",
+            hide_index=True,
+        )
     render_approval_inbox("Pending", ["Submitted", "Verified", "PM Approved"])
 
 
@@ -484,11 +522,19 @@ def render_dashboard_home(user_name: str):
         "site_updates": _render_dashboard_site_updates,
         "notifications": _render_dashboard_notifications,
     }
+    show_overviews = any(
+        dashboard_settings.get(flag, True)
+        for flag in (
+            "show_attendance_overview",
+            "show_project_overview",
+            "show_expense_overview",
+        )
+    )
     section_enabled = {
         "welcome": dashboard_settings.get("show_welcome", True),
         "kpis": dashboard_settings.get("show_kpis", True),
         "cash_flow": dashboard_settings.get("show_sidebar_cashflow", True),
-        "overviews": dashboard_settings.get("show_attendance_overview", False),
+        "overviews": show_overviews,
         "pending_approvals": dashboard_settings.get("show_recent_payments", True),
         "recent_activities": dashboard_settings.get("show_recent_payments", True),
         "site_updates": dashboard_settings.get("show_project_overview", True),
@@ -498,7 +544,7 @@ def render_dashboard_home(user_name: str):
     for section_key in section_order:
         if section_key in ("pending_approvals", "recent_activities", "site_updates"):
             continue
-        if not section_enabled.get(section_key, False):
+        if not section_enabled.get(section_key, True):
             continue
         if not section_visibility.get(section_key, True):
             continue
@@ -506,19 +552,29 @@ def render_dashboard_home(user_name: str):
         if result is not False:
             rendered_any = True
 
-    st.markdown('<div class="maxek-section-title">Action centre</div>', unsafe_allow_html=True)
-    b1, b2 = st.columns(2)
-    with b1:
-        if section_enabled.get("pending_approvals", True):
-            _render_dashboard_pending_approvals()
-        if section_enabled.get("site_updates", True):
-            _render_dashboard_site_updates()
-    with b2:
-        if section_enabled.get("recent_activities", True):
-            _render_dashboard_recent_activities()
-        if section_enabled.get("notifications", True):
-            _render_dashboard_notifications()
-    rendered_any = True
+    action_blocks = [
+        ("pending_approvals", _render_dashboard_pending_approvals),
+        ("site_updates", _render_dashboard_site_updates),
+        ("recent_activities", _render_dashboard_recent_activities),
+        ("notifications", _render_dashboard_notifications),
+    ]
+    if any(section_enabled.get(key, True) for key, _ in action_blocks):
+        st.markdown('<div class="maxek-section-title">Action centre</div>', unsafe_allow_html=True)
+        b1, b2 = st.columns(2)
+        with b1:
+            if section_enabled.get("pending_approvals", True):
+                _render_dashboard_pending_approvals()
+                rendered_any = True
+            if section_enabled.get("site_updates", True) and section_visibility.get("site_updates", True):
+                _render_dashboard_site_updates()
+                rendered_any = True
+        with b2:
+            if section_enabled.get("recent_activities", True):
+                _render_dashboard_recent_activities()
+                rendered_any = True
+            if section_enabled.get("notifications", True) and section_visibility.get("notifications", True):
+                _render_dashboard_notifications()
+                rendered_any = True
 
     if not rendered_any:
         st.info("All dashboard sections are hidden. Enable them from Settings > Dashboard.")
@@ -679,6 +735,137 @@ body.maxek-login-page input:-webkit-autofill {
 """
 
 
+def _login_reset_token_from_query() -> str:
+    try:
+        raw = st.query_params.get("reset_token")
+        if isinstance(raw, list):
+            raw = raw[0] if raw else ""
+        return (raw or "").strip()
+    except Exception:
+        return ""
+
+
+def _render_login_reset_password_form(token: str) -> None:
+    from modules.user_account import lookup_token_username, reset_password_with_token, validate_new_password
+
+    hint_user = lookup_token_username(token)
+    st.markdown("### Set a new password")
+    if hint_user:
+        st.caption(f"Resetting password for **{hint_user}**")
+    else:
+        st.warning("This reset link is invalid or has expired. Use **Forgot password?** on the login page to request a new link.")
+
+    new_pwd = st.text_input("New password", type="password", key="reset_new_password")
+    confirm = st.text_input("Confirm new password", type="password", key="reset_confirm_password")
+    if st.button("Save new password", type="primary", key="reset_save_password"):
+        err = validate_new_password(new_pwd, confirm)
+        if err:
+            st.error(err)
+        else:
+            ok, msg = reset_password_with_token(token, new_pwd)
+            if ok:
+                try:
+                    del st.query_params["reset_token"]
+                except Exception:
+                    pass
+                st.success(msg)
+            else:
+                st.error(msg)
+    if st.button("Back to login", key="reset_back_login"):
+        try:
+            del st.query_params["reset_token"]
+        except Exception:
+            pass
+        st.rerun()
+
+
+def _handle_forgot_password_request(email: str) -> None:
+    import secrets
+    import string
+
+    from modules.notifications import (
+        _ensure_users_email_column,
+        send_password_reset_email,
+        send_password_reset_link_email,
+        smtp_config,
+    )
+    from modules.password_security import hash_password
+    from modules.user_account import (
+        app_base_url,
+        create_password_reset_token_by_email,
+        password_reset_token_hours,
+    )
+
+    email_reset = (email or "").strip()
+    if not email_reset or "@" not in email_reset:
+        st.warning("Enter the email address registered to your account.")
+        return
+
+    base = app_base_url()
+    cfg = smtp_config()
+    if base and cfg.get("configured"):
+        token, _uid, err = create_password_reset_token_by_email(email_reset)
+        if err:
+            st.error(err)
+            return
+        if not token:
+            st.error("Could not create a reset link. Contact your administrator.")
+            return
+        reset_url = f"{base}/?reset_token={token}"
+        if send_password_reset_link_email(
+            email_reset,
+            email_reset.split("@")[0],
+            reset_url,
+            password_reset_token_hours(),
+        ):
+            st.success(f"Password reset link sent to {email_reset}. Check your inbox.")
+        else:
+            st.error("Email could not be sent. Contact your administrator.")
+        return
+
+    conn = get_conn()
+    cur = conn.cursor()
+    _ensure_users_email_column(conn)
+    cur.execute(
+        "SELECT user_id, username, COALESCE(email, '') FROM users WHERE LOWER(TRIM(email)) = LOWER(TRIM(?))",
+        (email_reset,),
+    )
+    row_reset = cur.fetchone()
+    if not row_reset:
+        conn.close()
+        st.error("No account found for this email address.")
+        return
+    reset_user_id, uname_reset, email_addr = row_reset[0], row_reset[1], (row_reset[2] or "").strip()
+    if not email_addr or "@" not in email_addr:
+        conn.close()
+        st.error(
+            "No email on file for this user. Ask your administrator to set your email under Settings → Users."
+        )
+        return
+    if not cfg.get("configured"):
+        conn.close()
+        st.info(
+            "SMTP is not configured on this server. Contact your system administrator to reset your password."
+        )
+        return
+    if not base:
+        st.caption(
+            "Tip: set APP_BASE_URL on the server to receive a secure reset link instead of a temporary password."
+        )
+    alphabet = string.ascii_letters + string.digits
+    temp_password = "".join(secrets.choice(alphabet) for _ in range(12))
+    cur.execute(
+        "UPDATE users SET password=?, must_change_password=1 WHERE user_id=?",
+        (hash_password(temp_password), reset_user_id),
+    )
+    conn.commit()
+    conn.close()
+    if send_password_reset_email(email_addr, uname_reset, temp_password):
+        st.success(f"Temporary password sent to {email_addr}. Log in and change it under My Account → Change Password.")
+    else:
+        st.error("Email could not be sent. Contact your administrator.")
+
+
 def show_login_page():
     inject_global_css()
     add_watermark()
@@ -715,6 +902,21 @@ def show_login_page():
         unsafe_allow_html=True,
     )
 
+    reset_token = _login_reset_token_from_query()
+    if reset_token:
+        _render_login_reset_password_form(reset_token)
+        st.markdown(
+            f"""
+            <div class="maxek-login-page-footer">
+              <strong>{ERP_LEGAL_NAME}</strong>
+              <span>{ERP_LOGIN_FOOTER}</span>
+              <em>Version {ERP_VERSION}</em>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        return
+
     remembered = st.session_state.get("login_remember_user", False)
     saved_user = st.session_state.get("login_saved_username", "")
     if remembered and saved_user and "login_user" not in st.session_state:
@@ -728,28 +930,66 @@ def show_login_page():
     remember = st.checkbox("Remember me", value=remembered, key="login_remember")
     login_clicked = st.button("LOGIN", type="primary", key="login_btn")
 
-    st.markdown(
-        '<div class="maxek-login-forgot">Forgot password? Contact your system administrator.</div>',
-        unsafe_allow_html=True,
-    )
+    with st.expander("Forgot password?", expanded=False):
+        st.caption(
+            "Enter your registered email. When SMTP and APP_BASE_URL are configured, you receive a reset link. "
+            "Otherwise a temporary password may be emailed."
+        )
+        reset_email = st.text_input("Email address", key="login_reset_email", placeholder="you@company.com")
+        if st.button("Send reset link", key="login_reset_btn"):
+            _handle_forgot_password_request(reset_email)
 
     if login_clicked:
+        import time
+
+        from modules.database import log_login_attempt
+        from modules.password_security import hash_password, password_needs_rehash, verify_password
+
+        uname = username.strip()
+        from modules.user_account import login_allowed_for_username, record_successful_login, user_must_change_password
+
+        allowed, block_msg = login_allowed_for_username(uname)
+        if not allowed:
+            log_login_attempt(uname, False)
+            st.error(block_msg)
+            return
+
         conn = get_conn()
         cur = conn.cursor()
         cur.execute(
-            "SELECT full_name, role FROM users WHERE username=? AND password=?",
-            (username.strip(), password),
+            """
+            SELECT user_id, full_name, role, password, COALESCE(must_change_password, 0)
+            FROM users WHERE LOWER(username)=LOWER(?)
+            """,
+            (uname,),
         )
         row = cur.fetchone()
-        conn.close()
-        if row:
+        if row and verify_password(password, row[3] or ""):
+            if password_needs_rehash(row[3] or ""):
+                cur.execute(
+                    "UPDATE users SET password=? WHERE user_id=?",
+                    (hash_password(password), row[0]),
+                )
+                conn.commit()
+            conn.close()
+            log_login_attempt(uname, True)
+            record_successful_login(row[0])
             st.session_state.logged_in = True
-            st.session_state.user_name = row[0]
-            st.session_state.user_role = row[1] or "Admin"
-            st.session_state.page = "dash_mgmt"
+            st.session_state.user_id = row[0]
+            st.session_state.username = uname
+            st.session_state.user_name = row[1]
+            st.session_state.user_role = row[2] or "Admin"
+            if user_must_change_password(row[0]) or row[4]:
+                st.session_state.page = "account_profile"
+                st.session_state.account_focus = "password"
+            else:
+                st.session_state.page = "dash_mgmt"
+            st.session_state.last_activity = time.time()
             st.session_state.login_remember_user = remember
-            st.session_state.login_saved_username = username.strip() if remember else ""
+            st.session_state.login_saved_username = uname if remember else ""
             st.rerun()
+        conn.close()
+        log_login_attempt(uname, False)
         st.error("Invalid username or password.")
 
     st.markdown(
