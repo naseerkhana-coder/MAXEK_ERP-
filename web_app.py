@@ -75,6 +75,10 @@ def _logout(silent: bool = False):
         "clients_projects_tab",
         "store_tab",
         "subcontractor_hint",
+        "portal_user_id",
+        "client_id",
+        "client_name",
+        "login_portal_mode",
     ):
         st.session_state.pop(key, None)
     if silent:
@@ -108,6 +112,10 @@ def _allowed_pages():
 
 
 def _enforce_password_change():
+    from modules.roles import is_client_role
+
+    if is_client_role(st.session_state.get("user_role", "")):
+        return
     user_id = st.session_state.get("user_id", "")
     if not user_id:
         return
@@ -126,15 +134,18 @@ def _enforce_password_change():
 def _render_current_page():
     _enforce_password_change()
     current_page = st.session_state.get("page", "dash_mgmt")
+    from modules.roles import is_client_role
+
+    fallback = "portal_dash" if is_client_role(st.session_state.get("user_role", "")) else "dash_mgmt"
     if current_page not in _allowed_pages():
         st.warning("This role does not have access to that page.")
-        st.session_state.page = "dash_mgmt"
+        st.session_state.page = fallback
         st.rerun()
         return
 
     page_handler = PAGE_HANDLERS.get(current_page)
     if page_handler is None:
-        st.session_state.page = "dash_mgmt"
+        st.session_state.page = fallback
         st.rerun()
         return
 
@@ -155,7 +166,12 @@ def main():
     if not st.session_state.logged_in:
         if st.session_state.pop("session_expired_msg", False):
             st.warning("Your session expired due to inactivity. Please log in again.")
-        show_login_page()
+        if st.session_state.get("login_portal_mode"):
+            from modules.client_portal import show_client_login_form
+
+            show_client_login_form()
+        else:
+            show_login_page()
         return
 
     if _check_session_timeout():
@@ -163,22 +179,38 @@ def main():
 
     _hydrate_user_id_from_session()
 
-    inject_global_css()
-    add_watermark()
+    from modules.roles import is_client_role
+
+    is_client = is_client_role(st.session_state.get("user_role", ""))
+    if is_client:
+        from modules.client_portal import inject_client_portal_css, render_client_portal_sidebar
+
+        inject_client_portal_css()
+    else:
+        inject_global_css()
+        add_watermark()
     st.markdown('<div class="maxek-app-layer">', unsafe_allow_html=True)
     with st.sidebar:
-        render_sidebar(
+        if is_client:
+            render_client_portal_sidebar(st.session_state.get("user_name", "Client"), _logout)
+        else:
+            render_sidebar(
+                st.session_state.get("user_name", "User"),
+                _logout,
+                _allowed_pages(),
+            )
+    if not is_client:
+        render_page_header(
             st.session_state.get("user_name", "User"),
             _logout,
             _allowed_pages(),
         )
-    render_page_header(
-        st.session_state.get("user_name", "User"),
-        _logout,
-        _allowed_pages(),
-    )
+    else:
+        st.markdown(f"### {ERP_DISPLAY_NAME} — Client Portal")
+        if st.button("Logout", key="portal_header_logout"):
+            _logout()
     user_id = st.session_state.get("user_id", "")
-    if user_id:
+    if user_id and not is_client:
         from modules.user_account import user_must_change_password
 
         if user_must_change_password(user_id):

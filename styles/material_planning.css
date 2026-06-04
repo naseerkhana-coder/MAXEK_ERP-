@@ -1,0 +1,30 @@
+/* Material Planning & Consumption Control — mobile-friendly */
+.mp-wrap .stMetric {
+  background: #f8fafc;
+  border-radius: 8px;
+  padding: 0.5rem;
+}
+.mp-variance-excess {
+  background: #fef2f2;
+  color: #b91c1c;
+  font-weight: 600;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+}
+.mp-variance-shortage {
+  background: #eff6ff;
+  color: #1d4ed8;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+}
+.mp-variance-balanced {
+  color: #64748b;
+}
+@media (max-width: 768px) {
+  .mp-wrap [data-testid="column"] {
+    min-width: 100% !important;
+  }
+  .mp-wrap .stTabs [data-baseweb="tab-list"] {
+    flex-wrap: wrap;
+  }
+}

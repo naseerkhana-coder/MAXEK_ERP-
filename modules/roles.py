@@ -14,7 +14,10 @@ ERP_USER_ROLES = [
     "Project Manager",
     "Site Engineer",
     "Store Keeper",
+    "Client",
 ]
+
+CLIENT_PORTAL_ROLE = "Client"
 
 SUPER_ADMIN_ROLES = frozenset({"Super Admin", "Admin", "MD"})
 ACCOUNTS_MANAGER_ROLES = frozenset({"Admin", "Super Admin", "MD", "Accountant", "Accounts Manager"})
@@ -120,6 +123,25 @@ def can_view_all_projects(role: str) -> bool:
     }
 
 
+def can_access_dpr_measurement_module(role: str) -> bool:
+    """Daily Progress (DPR) and Measurement Book — Engineer, PM, Owner/MD."""
+    return (
+        is_super_admin(role)
+        or is_management(role)
+        or is_site_role(role)
+        or role in {"General Manager", "Managing Director", "Admin"}
+    )
+
+
+def can_access_profitability_dashboard(role: str) -> bool:
+    """Owner / MD / GM / Project Manager — PM scoped to assigned projects in UI."""
+    if is_super_admin(role) or is_management(role):
+        return True
+    if is_project_manager(role):
+        return True
+    return (role or "").strip() in {"General Manager", "Managing Director"}
+
+
 def can_view_financial_statements(role: str) -> bool:
     return is_super_admin(role) or role in {"Accountant", "Accounts Manager"}
 
@@ -164,12 +186,97 @@ def can_maintain_stock(role: str) -> bool:
     return is_store_keeper(role) or is_super_admin(role)
 
 
+def is_client_role(role: str) -> bool:
+    return role == CLIENT_PORTAL_ROLE
+
+
+def can_access_internal_erp(role: str) -> bool:
+    return not is_client_role(role)
+
+
 def can_access_finance_module(role: str) -> bool:
-    return not is_store_keeper(role)
+    return not is_store_keeper(role) and not is_client_role(role)
 
 
 def can_access_supplier_payments(role: str) -> bool:
     return not is_hr_payroll(role)
+
+
+def can_prepare_workflow(role: str, entity_type: str = "") -> bool:
+    """Submit draft documents (Draft → Prepared)."""
+    if is_super_admin(role):
+        return True
+    if entity_type in {"staff_payroll", "worker_payroll"}:
+        return is_hr_payroll(role) or role in ACCOUNTS_STAFF_ROLES
+    if entity_type == "material_request":
+        return can_request_material(role) or is_store_keeper(role)
+    if entity_type in {
+        "site_expense",
+        "petty_cash",
+        "petty_cash_fund_request",
+        "vendor_bill",
+        "direct_payment",
+        "payment_voucher",
+    }:
+        return is_site_role(role) or is_accounts_staff(role)
+    if entity_type in {"client_bill", "subcontractor_bill"}:
+        return is_accounts_staff(role) or is_project_manager(role)
+    if entity_type == "purchase_order":
+        return is_store_keeper(role) or is_accounts_staff(role) or is_project_manager(role)
+    return is_site_role(role) or is_hr_payroll(role) or is_accounts_staff(role)
+
+
+def can_check_workflow(role: str, entity_type: str = "") -> bool:
+    """Verify submitted documents (Prepared → Checked)."""
+    if is_super_admin(role):
+        return True
+    if entity_type in {"staff_payroll", "worker_payroll"}:
+        return is_hr_payroll(role) or is_accounts_staff(role)
+    if entity_type in {
+        "site_expense",
+        "petty_cash",
+        "petty_cash_fund_request",
+        "vendor_bill",
+        "direct_payment",
+        "payment_voucher",
+        "purchase_order",
+    }:
+        return can_verify_finance(role) or is_project_manager(role)
+    if entity_type in {"client_bill", "subcontractor_bill"}:
+        return can_verify_finance(role) or is_project_manager(role)
+    if entity_type == "material_request":
+        return is_project_manager(role) or is_store_keeper(role)
+    return can_verify_finance(role) or is_project_manager(role)
+
+
+def can_approve_workflow(role: str, entity_type: str = "") -> bool:
+    """Final business approval (Checked → Approved)."""
+    if is_super_admin(role):
+        return True
+    if entity_type in {"staff_payroll", "worker_payroll"}:
+        return is_management(role) or is_accounts_manager(role)
+    if entity_type in {"site_expense", "petty_cash"}:
+        return is_project_manager(role) or can_approve_payments(role)
+    if entity_type in {
+        "client_bill",
+        "subcontractor_bill",
+        "vendor_bill",
+        "purchase_order",
+        "payment_voucher",
+        "petty_cash_fund_request",
+    }:
+        return can_approve_payments(role) or is_management(role) or is_project_manager(role)
+    return can_approve_payments(role) or is_management(role)
+
+
+def can_release_payment_workflow(role: str) -> bool:
+    """Release payment after approval (Approved → Payment Released)."""
+    return can_settle_finance(role) or is_super_admin(role)
+
+
+def can_mark_paid_workflow(role: str) -> bool:
+    """Mark document paid (Payment Released → Paid)."""
+    return can_settle_finance(role) or is_accounts_executive(role) or is_super_admin(role)
 
 
 def can_edit_site_expense(role: str, status: str, creator: str, current_user: str) -> bool:

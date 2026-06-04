@@ -65,6 +65,7 @@ DOCUMENT_PREFIXES = {
     "receipt_voucher": "RV",
     "journal_voucher": "JV",
     "petty_cash_issue": "PCI",
+    "petty_cash_fund_request": "PCFR",
     "material_request": "MR",
     "subcontractor_bill": "SCB",
     "inward_letter": "INW",
@@ -1362,6 +1363,9 @@ def init_db():
             ("dimensions_json", "TEXT"),
             ("boq_item_id", "TEXT"),
             ("boq_line_id", "TEXT"),
+            ("width_3", "REAL"),
+            ("thickness", "REAL"),
+            ("row_index", "INTEGER"),
         ),
         "dpr_reports": (
             ("client_billed_quantity", "REAL"),
@@ -1369,6 +1373,9 @@ def init_db():
             ("rejection_reason", "TEXT"),
             ("rejected_by", "TEXT"),
             ("rejected_at", "TEXT"),
+            ("work_category", "TEXT"),
+            ("location_text", "TEXT"),
+            ("engineer_name", "TEXT"),
         ),
         "subcontractor_bills": (
             ("bill_type", "TEXT"),
@@ -1812,6 +1819,34 @@ def init_db():
     ensure_approval_workflow_schema()
     ensure_worker_payroll_schema()
 
+    from modules.payment_voucher_db import ensure_payment_voucher_schema
+
+    ensure_payment_voucher_schema()
+
+    from modules.client_portal_db import ensure_client_portal_schema
+
+    ensure_client_portal_schema()
+
+    from modules.dpr_measurement_db import ensure_dpr_measurement_schema
+
+    ensure_dpr_measurement_schema()
+
+    from modules.project_profitability_db import ensure_profitability_schema
+
+    ensure_profitability_schema()
+
+    from modules.phase3_integration_db import ensure_phase3_schema
+
+    ensure_phase3_schema()
+
+    from modules.material_planning_db import ensure_material_planning_schema
+
+    ensure_material_planning_schema()
+
+    from modules.petty_cash_db import ensure_petty_cash_schema
+
+    ensure_petty_cash_schema()
+
 
 def _sync_legacy_to_employees(cur):
     employee_cols = _columns(cur, "employees")
@@ -1994,8 +2029,10 @@ _ID_COLUMN_BY_TABLE = {
     "expense_entries": "expense_id",
     "payment_vouchers": "voucher_id",
     "receipt_vouchers": "voucher_id",
+    "petty_cash_fund_requests": "request_id",
     "petty_cash_issues": "issue_id",
     "petty_cash_expenses": "expense_no",
+    "petty_cash_attachments": "attachment_id",
     "gst_payments": "payment_id",
     "tds_deductions": "deduction_id",
     "tds_payments": "payment_id",
@@ -3018,74 +3055,9 @@ def load_project_boq_by_project(project_name):
 
 
 def get_boq_progress_stats(boq_item_id):
-    conn = get_conn()
-    boq_df = pd.read_sql_query(
-        """
-        SELECT quantity, unit, boq_number, description, project_name
-        FROM project_boq_items
-        WHERE boq_item_id = ?
-        LIMIT 1
-        """,
-        conn,
-        params=(boq_item_id,),
-    )
-    if boq_df.empty:
-        conn.close()
-        return {
-            "total_qty": 0.0,
-            "done_qty": 0.0,
-            "billed_qty": 0.0,
-            "balance_qty": 0.0,
-            "pending_billing_qty": 0.0,
-            "unit": "",
-            "boq_number": "",
-            "description": "",
-        }
-    total_qty = float(boq_df.iloc[0]["quantity"] or 0)
-    unit = boq_df.iloc[0]["unit"] or ""
-    done_qty = scalar_query(
-        """
-        SELECT COALESCE(SUM(q), 0) FROM (
-            SELECT progress_quantity AS q FROM dpr_reports r
-            WHERE r.boq_item_id = ? AND COALESCE(r.status, '') NOT IN ('Draft', 'Rejected')
-              AND NOT EXISTS (SELECT 1 FROM dpr_boq_lines bl WHERE bl.dpr_id = r.dpr_id)
-            UNION ALL
-            SELECT bl.progress_quantity AS q FROM dpr_boq_lines bl
-            INNER JOIN dpr_reports r ON r.dpr_id = bl.dpr_id
-            WHERE bl.boq_item_id = ? AND COALESCE(r.status, '') NOT IN ('Draft', 'Rejected')
-        )
-        """,
-        (boq_item_id, boq_item_id),
-    )
-    billed_qty = scalar_query(
-        """
-        SELECT COALESCE(SUM(billed_quantity), 0) FROM dpr_reports
-        WHERE boq_item_id = ? AND UPPER(COALESCE(billing_measurement, '')) = 'YES'
-          AND COALESCE(status, '') IN ('Engineer Approved', 'Client Approved', 'Billed')
-        """,
-        (boq_item_id,),
-    )
-    pending_billing = scalar_query(
-        """
-        SELECT COALESCE(SUM(progress_quantity), 0) FROM dpr_reports
-        WHERE boq_item_id = ? AND UPPER(COALESCE(billing_measurement, '')) = 'YES'
-          AND COALESCE(status, '') IN ('Engineer Approved', 'Client Approved')
-          AND COALESCE(billed_quantity, 0) < COALESCE(progress_quantity, 0)
-        """,
-        (boq_item_id,),
-    )
-    conn.close()
-    balance_qty = max(total_qty - float(done_qty), 0.0)
-    return {
-        "total_qty": total_qty,
-        "done_qty": float(done_qty),
-        "billed_qty": float(billed_qty),
-        "balance_qty": balance_qty,
-        "pending_billing_qty": float(pending_billing),
-        "unit": unit,
-        "boq_number": boq_df.iloc[0]["boq_number"] or "",
-        "description": boq_df.iloc[0]["description"] or "",
-    }
+    from modules.phase3_integration_db import get_boq_integration_stats
+
+    return get_boq_integration_stats(boq_item_id)
 
 
 def load_company_staff_for_select():
@@ -4840,19 +4812,33 @@ def load_pending_client_bill_dprs():
                COALESCE(NULLIF(r.client_name, ''), p.client_name, '') AS client_name,
                r.boq_number, r.boq_description,
                r.unit, r.billed_quantity, COALESCE(r.client_billed_quantity, 0) AS client_billed_quantity,
-               (r.billed_quantity - COALESCE(r.client_billed_quantity, 0)) AS pending_qty,
+               COALESCE(
+                   (SELECT SUM(m.calculated_quantity)
+                    FROM dpr_measurements m
+                    WHERE m.dpr_id = r.dpr_id AND COALESCE(m.include_in_client_bill, 1) = 1),
+                   (SELECT SUM(bl.billable_quantity)
+                    FROM dpr_boq_lines bl
+                    WHERE bl.dpr_id = r.dpr_id AND UPPER(COALESCE(bl.billing_measurement, '')) = 'YES'),
+                   r.progress_quantity
+               ) AS billable_progress,
                r.boq_item_id, COALESCE(b.approved_rate, 0) AS approved_rate
         FROM dpr_reports r
         LEFT JOIN project_boq_items b ON b.boq_item_id = r.boq_item_id
         LEFT JOIN projects p ON p.project_name = r.project_name
         WHERE UPPER(COALESCE(r.billing_measurement, '')) = 'YES'
-          AND COALESCE(r.billed_quantity, 0) > COALESCE(r.client_billed_quantity, 0)
           AND r.status IN ('Engineer Approved', 'Client Approved', 'Billed')
         ORDER BY r.id DESC
         """,
         conn,
     )
     conn.close()
+    if df.empty:
+        return df
+    df["billable_progress"] = df["billable_progress"].astype(float)
+    df["billed_quantity"] = df["billed_quantity"].astype(float)
+    df["client_billed_quantity"] = df["client_billed_quantity"].astype(float)
+    df["pending_qty"] = (df["billable_progress"] - df["client_billed_quantity"]).clip(lower=0)
+    df = df[df["pending_qty"] > 0.0001].copy()
     return df
 
 

@@ -11,8 +11,10 @@ from modules.database import DATE_FMT, generate_id, get_conn
 from modules.worker_payroll_engine import (
     WORKFLOW_STATUSES,
     build_period_payroll,
+    duty_category_from_record,
     period_cycle_label,
     standard_hours_for_category,
+    worker_daily_wage,
 )
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -68,6 +70,9 @@ def ensure_worker_payroll_schema():
         ("hour_category", "TEXT"),
         ("daily_wage_rate", "REAL"),
         ("ot_rate", "REAL"),
+        ("worker_type", "TEXT"),
+        ("duty_category", "TEXT"),
+        ("ot_eligible", "TEXT"),
     ):
         try:
             cur.execute(f"ALTER TABLE workers ADD COLUMN {col} {typ}")
@@ -88,7 +93,10 @@ def list_all_workers(active_only: bool = False):
         SELECT worker_id, worker_name, subcontractor_name, trade_name, joining_date,
                COALESCE(daily_wage_rate, salary, 0) AS daily_wage_rate,
                COALESCE(ot_rate, overtime_rate, 0) AS ot_rate,
-               COALESCE(hour_category, '8 Hr') AS hour_category,
+               COALESCE(duty_category, hour_category, '8 Hour Worker') AS duty_category,
+               COALESCE(hour_category, duty_category, '8 Hour Worker') AS hour_category,
+               COALESCE(worker_type, 'Subcontractor Worker') AS worker_type,
+               COALESCE(ot_eligible, 'Yes') AS ot_eligible,
                COALESCE(status, 'Active') AS status
         FROM workers
     """
@@ -108,7 +116,10 @@ def get_worker(worker_id: str) -> dict | None:
         SELECT worker_id, worker_name, subcontractor_name, trade_name, joining_date,
                COALESCE(daily_wage_rate, salary, 0) AS daily_wage_rate,
                COALESCE(ot_rate, overtime_rate, 0) AS ot_rate,
-               COALESCE(hour_category, '8 Hr') AS hour_category,
+               COALESCE(duty_category, hour_category, '8 Hour Worker') AS duty_category,
+               COALESCE(hour_category, duty_category, '8 Hour Worker') AS hour_category,
+               COALESCE(worker_type, 'Subcontractor Worker') AS worker_type,
+               COALESCE(ot_eligible, 'Yes') AS ot_eligible,
                COALESCE(status, 'Active') AS status
         FROM workers WHERE worker_id = ?
         """,
@@ -119,8 +130,9 @@ def get_worker(worker_id: str) -> dict | None:
     if df.empty:
         return None
     row = df.iloc[0].to_dict()
-    std = standard_hours_for_category(row.get("hour_category"))
-    wage = float(row.get("daily_wage_rate") or 0)
+    row["duty_category"] = duty_category_from_record(row)
+    std = standard_hours_for_category(row.get("duty_category") or row.get("hour_category"))
+    wage = worker_daily_wage(row)
     if not float(row.get("ot_rate") or 0) and wage and std:
         row["ot_rate"] = round(wage / std, 2)
     return row
@@ -136,28 +148,37 @@ def save_worker_profile(
     status: str,
     subcontractor_name: str = "",
     trade_name: str = "",
+    worker_type: str = "Subcontractor Worker",
+    ot_eligible: str = "Yes",
 ):
+    duty_category = hour_category if hour_category in ("8 Hour Worker", "10 Hour Worker") else (
+        "10 Hour Worker" if "10" in str(hour_category) else "8 Hour Worker"
+    )
     ensure_worker_payroll_schema()
     conn = get_conn()
     existing = conn.execute("SELECT id FROM workers WHERE worker_id = ?", (worker_id,)).fetchone()
     if existing:
         conn.execute(
             """
-            UPDATE workers SET worker_name=?, hour_category=?, daily_wage_rate=?, salary=?,
+            UPDATE workers SET worker_name=?, hour_category=?, duty_category=?, daily_wage_rate=?, salary=?,
                    ot_rate=?, overtime_rate=?, joining_date=?, status=?,
+                   worker_type=?, ot_eligible=?,
                    subcontractor_name=COALESCE(NULLIF(?, ''), subcontractor_name),
                    trade_name=COALESCE(NULLIF(?, ''), trade_name)
             WHERE worker_id=?
             """,
             (
                 worker_name,
-                hour_category,
+                duty_category,
+                duty_category,
                 daily_wage_rate,
                 daily_wage_rate,
                 ot_rate,
                 ot_rate,
                 joining_date,
                 status,
+                worker_type,
+                ot_eligible,
                 subcontractor_name,
                 trade_name,
                 worker_id,
@@ -168,8 +189,9 @@ def save_worker_profile(
             """
             INSERT INTO workers(
                 worker_id, worker_name, subcontractor_name, trade_name, joining_date,
-                salary, daily_wage_rate, overtime_rate, ot_rate, hour_category, status
-            ) VALUES(?,?,?,?,?,?,?,?,?,?,?)
+                salary, daily_wage_rate, overtime_rate, ot_rate, hour_category, duty_category,
+                worker_type, ot_eligible, status
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 worker_id,
@@ -181,7 +203,10 @@ def save_worker_profile(
                 daily_wage_rate,
                 ot_rate,
                 ot_rate,
-                hour_category,
+                duty_category,
+                duty_category,
+                worker_type,
+                ot_eligible,
                 status,
             ),
         )
@@ -221,7 +246,7 @@ def save_worker_attendance(
 ):
     conn = get_conn()
     worker = get_worker(worker_id) or {}
-    std = standard_hours_for_category(worker.get("hour_category"))
+    std = standard_hours_for_category(worker.get("duty_category") or worker.get("hour_category"))
     fields = (
         worker_id,
         worker_name,
@@ -374,7 +399,7 @@ def recalculate_run_net(run_id: str) -> float:
     return net
 
 
-def save_payroll_run(summary: dict, deductions_total: float, workflow_status: str = "Calculated") -> str:
+def save_payroll_run(summary: dict, deductions_total: float, workflow_status: str = "Prepared") -> str:
     ensure_worker_payroll_schema()
     run_id = summary.get("run_id") or generate_id("WR", "worker_payroll_runs", id_column="run_id")
     now = datetime.now().strftime("%d/%m/%Y %H:%M")
@@ -469,24 +494,45 @@ def list_payroll_runs(worker_id: str | None = None, status: str | None = None) -
     return df
 
 
-def update_run_status(run_id: str, workflow_status: str):
+def update_run_status(
+    run_id: str,
+    workflow_status: str,
+    actor: str = "",
+    role: str = "Admin",
+    comment: str = "",
+):
+    from modules.approval_workflow import normalize_status, status_for_storage, transition
+
     ensure_worker_payroll_schema()
+    canonical = normalize_status(workflow_status, "worker_payroll")
+    if actor:
+        ok, _msg = transition(
+            "worker_payroll",
+            run_id,
+            canonical,
+            actor,
+            role,
+            comment=comment,
+        )
+        if ok:
+            return
     now = datetime.now().strftime("%d/%m/%Y %H:%M")
+    stored = status_for_storage("worker_payroll", canonical)
     conn = get_conn()
-    if workflow_status == "Approved":
+    if canonical == "Approved":
         conn.execute(
             "UPDATE worker_payroll_runs SET workflow_status=?, approved_at=? WHERE run_id=?",
-            (workflow_status, now, run_id),
+            (stored, now, run_id),
         )
-    elif workflow_status == "Paid":
+    elif canonical == "Paid":
         conn.execute(
             "UPDATE worker_payroll_runs SET workflow_status=?, paid_at=? WHERE run_id=?",
-            (workflow_status, now, run_id),
+            (stored, now, run_id),
         )
     else:
         conn.execute(
             "UPDATE worker_payroll_runs SET workflow_status=? WHERE run_id=?",
-            (workflow_status, run_id),
+            (stored, run_id),
         )
     conn.commit()
     conn.close()
@@ -501,7 +547,11 @@ def save_payment(
     receipt_path: str = "",
     bank_proof_path: str = "",
     signed_sheet_path: str = "",
+    actor: str = "",
+    role: str = "Admin",
 ):
+    from modules.approval_workflow import transition
+
     ensure_worker_payroll_schema()
     now = datetime.now().strftime("%d/%m/%Y %H:%M")
     conn = get_conn()
@@ -509,8 +559,7 @@ def save_payment(
         """
         UPDATE worker_payroll_runs SET
             payment_date=?, payment_mode=?, payment_reference=?, payment_remarks=?,
-            receipt_path=?, bank_proof_path=?, signed_sheet_path=?,
-            workflow_status='Paid', paid_at=?
+            receipt_path=?, bank_proof_path=?, signed_sheet_path=?
         WHERE run_id=?
         """,
         (
@@ -521,12 +570,43 @@ def save_payment(
             receipt_path,
             bank_proof_path,
             signed_sheet_path,
-            now,
             run_id,
         ),
     )
     conn.commit()
     conn.close()
+    if actor:
+        from modules.approval_workflow import can_transition, normalize_status
+
+        run = get_payroll_run(run_id) or {}
+        cur = normalize_status(run.get("workflow_status"), "worker_payroll")
+        if can_transition(cur, "Payment Released"):
+            transition(
+                "worker_payroll",
+                run_id,
+                "Payment Released",
+                actor,
+                role,
+                comment=payment_remarks,
+                payment_ref=payment_reference,
+            )
+        transition(
+            "worker_payroll",
+            run_id,
+            "Paid",
+            actor,
+            role,
+            comment=payment_remarks,
+            payment_ref=payment_reference,
+        )
+    else:
+        conn = get_conn()
+        conn.execute(
+            "UPDATE worker_payroll_runs SET workflow_status='Paid', paid_at=? WHERE run_id=?",
+            (now, run_id),
+        )
+        conn.commit()
+        conn.close()
 
 
 def salary_report_df(from_date: str | None = None, to_date: str | None = None) -> pd.DataFrame:
@@ -564,6 +644,131 @@ def salary_report_df(from_date: str | None = None, to_date: str | None = None) -
         sql += " AND period_start <= ?"
         params.append(to_date)
     sql += " ORDER BY period_end DESC, worker_name"
+    df = pd.read_sql_query(sql, conn, params=params)
+    conn.close()
+    return df
+
+
+def daily_wage_report_df(active_only: bool = True) -> pd.DataFrame:
+    ensure_worker_payroll_schema()
+    workers = list_all_workers(active_only=active_only)
+    if workers.empty:
+        return workers
+    workers = workers.copy()
+    workers["Standard Hours"] = workers["duty_category"].map(
+        lambda c: standard_hours_for_category(str(c))
+    )
+    workers.rename(
+        columns={
+            "worker_id": "Worker ID",
+            "worker_name": "Worker Name",
+            "worker_type": "Worker Type",
+            "duty_category": "Duty Category",
+            "daily_wage_rate": "Daily Wage",
+            "ot_rate": "OT Rate",
+            "ot_eligible": "OT Eligible",
+            "subcontractor_name": "Subcontractor",
+            "status": "Status",
+        },
+        inplace=True,
+    )
+    return workers[
+        [
+            "Worker ID",
+            "Worker Name",
+            "Worker Type",
+            "Subcontractor",
+            "Duty Category",
+            "Standard Hours",
+            "Daily Wage",
+            "OT Rate",
+            "OT Eligible",
+            "Status",
+        ]
+    ]
+
+
+def attendance_report_df(from_date: str, to_date: str, worker_id: str | None = None) -> pd.DataFrame:
+    conn = get_conn()
+    sql = """
+        SELECT COALESCE(worker_id, employee_id) AS "Worker ID",
+               COALESCE(worker_name, employee_name) AS "Worker Name",
+               employee_type AS "Employee Type",
+               attendance_date AS "Date",
+               project_name AS "Project",
+               in_time AS "In",
+               out_time AS "Out",
+               COALESCE(total_hours, worked_hours, 0) AS "Worked Hours",
+               COALESCE(ot_hours, overtime, 0) AS "OT Hours",
+               COALESCE(fixed_working_hours, 8) AS "Standard Hours",
+               COALESCE(applied_rate, 0) AS "Applied Rate",
+               status AS "Status",
+               remarks AS "Remarks"
+        FROM attendance
+        WHERE attendance_date >= ? AND attendance_date <= ?
+          AND COALESCE(employee_type, '') IN (
+              'Sub Contractor Worker', 'Company Worker', 'Labour Supply Worker', 'Site Worker'
+          )
+    """
+    params: list = [from_date, to_date]
+    if worker_id:
+        sql += " AND COALESCE(worker_id, employee_id) = ?"
+        params.append(worker_id)
+    sql += " ORDER BY attendance_date DESC, worker_name"
+    df = pd.read_sql_query(sql, conn, params=params)
+    conn.close()
+    return df
+
+
+def ot_report_df(from_date: str, to_date: str) -> pd.DataFrame:
+    conn = get_conn()
+    df = pd.read_sql_query(
+        """
+        SELECT COALESCE(worker_id, employee_id) AS "Worker ID",
+               COALESCE(worker_name, employee_name) AS "Worker Name",
+               attendance_date AS "Date",
+               COALESCE(total_hours, worked_hours, 0) AS "Worked Hours",
+               COALESCE(ot_hours, overtime, 0) AS "OT Hours",
+               COALESCE(applied_ot_rate, 0) AS "OT Rate",
+               ROUND(COALESCE(ot_hours, overtime, 0) * COALESCE(applied_ot_rate, 0), 2) AS "OT Amount",
+               project_name AS "Project"
+        FROM attendance
+        WHERE attendance_date >= ? AND attendance_date <= ?
+          AND COALESCE(ot_hours, overtime, 0) > 0
+        ORDER BY attendance_date DESC, worker_name
+        """,
+        conn,
+        params=(from_date, to_date),
+    )
+    conn.close()
+    return df
+
+
+def advance_recovery_report_df(from_date: str | None = None, to_date: str | None = None) -> pd.DataFrame:
+    ensure_worker_payroll_schema()
+    conn = get_conn()
+    sql = """
+        SELECT d.worker_id AS "Worker ID",
+               r.worker_name AS "Worker Name",
+               r.period_start AS "Period From",
+               r.period_end AS "Period To",
+               d.deduction_date AS "Deduction Date",
+               d.deduction_type AS "Type",
+               d.amount AS "Amount",
+               d.remarks AS "Remarks",
+               r.workflow_status AS "Payroll Status"
+        FROM worker_payroll_deductions d
+        JOIN worker_payroll_runs r ON r.run_id = d.run_id
+        WHERE d.deduction_type = 'Advance Recovery'
+    """
+    params: list = []
+    if from_date:
+        sql += " AND d.deduction_date >= ?"
+        params.append(from_date)
+    if to_date:
+        sql += " AND d.deduction_date <= ?"
+        params.append(to_date)
+    sql += " ORDER BY d.deduction_date DESC"
     df = pd.read_sql_query(sql, conn, params=params)
     conn.close()
     return df

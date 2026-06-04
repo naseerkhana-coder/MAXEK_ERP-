@@ -18,12 +18,28 @@ from modules.database import (
     resolve_project_id,
 )
 from modules.dpr_measurements import (
+    BBS_SHAPE_OPTIONS,
+    bbs_rows_to_steel_measurements,
     build_measurement_record,
+    build_structured_measurement_record,
     compute_measurement,
+    compute_steel_bbs_row,
     is_steel_boq_entry,
+    measurement_include_in_bill,
     normalize_boq_unit,
+    should_use_average_width,
     unit_entry_label,
 )
+from modules.dpr_measurement_db import (
+    ensure_dpr_measurement_schema,
+    load_boq_meta_for_item,
+    load_steel_bbs_for_dpr,
+    log_dpr_audit,
+    persist_dpr_photos,
+    persist_steel_bbs_rows,
+    recalculate_dpr_quantities,
+)
+from modules.roles import can_access_dpr_measurement_module
 from modules.dpr_boq_lines import (
     build_boq_line,
     enrich_boq_lines_for_save,
@@ -145,6 +161,7 @@ def _reset_dpr_drafts():
     st.session_state.dpr_work_measurements = []
     st.session_state.dpr_draft_measurements = []
     st.session_state.dpr_draft_manpower = []
+    st.session_state.dpr_steel_bbs_draft = []
     st.session_state.dpr_editing_boq_line_id = None
 
 
@@ -373,7 +390,7 @@ def _render_dimension_list(section_label, state_key):
             label_visibility="collapsed",
         )
     btn_i = min(len(values), 6)
-    if cols[btn_i].button("+", key=f"{state_key}_add", help=f"Add {section_label.lower()}"):
+    if cols[btn_i].button("Insert Row", key=f"{state_key}_add", help=f"Add {section_label.lower()}"):
         values.append(0.0)
         st.session_state[state_key] = values
         st.rerun()
@@ -422,12 +439,123 @@ def _render_measurement_preview(calc):
     )
 
 
+def _render_structured_measurement_grid(unit_family, boq_item_id=""):
+    """Explicit L/W/W2/W3/D/H/thickness/Nos row — Insert Row adds to work list."""
+    suffix = _measurement_state_suffix(boq_item_id)
+    unit_family = normalize_boq_unit(unit_family)
+    st.caption(
+        "Structured row: quantities sum across **Insert Row** entries. "
+        "Average width = (W1+W2+W3)/n when W2 or W3 is filled."
+    )
+    c1, c2, c3, c4, c5, c6, c7, c8 = st.columns(8)
+    length = c1.number_input("L", min_value=0.0, step=0.01, key=f"dpr_grid_l_{suffix}")
+    width = c2.number_input("W", min_value=0.0, step=0.01, key=f"dpr_grid_w_{suffix}")
+    width_2 = c3.number_input("W2", min_value=0.0, step=0.01, key=f"dpr_grid_w2_{suffix}")
+    width_3 = c4.number_input("W3", min_value=0.0, step=0.01, key=f"dpr_grid_w3_{suffix}")
+    depth = c5.number_input("D", min_value=0.0, step=0.01, key=f"dpr_grid_d_{suffix}")
+    height = c6.number_input("H", min_value=0.0, step=0.01, key=f"dpr_grid_h_{suffix}")
+    thickness = c7.number_input("T", min_value=0.0, step=0.01, key=f"dpr_grid_t_{suffix}")
+    nos = c8.number_input("Nos", min_value=0.0, step=1.0, key=f"dpr_grid_nos_{suffix}")
+    widths = [width, width_2, width_3]
+    if should_use_average_width(widths):
+        st.caption("Average width mode active (W2/W3 detected).")
+    preview = build_structured_measurement_record(
+        unit_family,
+        length=length,
+        width=width,
+        width_2=width_2,
+        width_3=width_3,
+        depth=depth,
+        height=height,
+        thickness=thickness,
+        nos=nos,
+    )
+    _render_measurement_preview({"preview_lines": preview.get("preview_lines") or []})
+    return preview
+
+
+def _bbs_shape_image_path(shape_code: str) -> str:
+    path = steel_shape_diagram_path(shape_code)
+    return str(path) if path else ""
+
+
+def _render_steel_bbs_entry(key_prefix: str = "bbs"):
+    """Bar bending schedule: shape, dia, legs A–F, nos → length & weight."""
+    st.caption("Steel BBS — shape, diameter (mm), leg dimensions A–F (mm), nos. Weight = d²×L×nos/162 kg.")
+    shape_labels = {label: code for code, label in BBS_SHAPE_OPTIONS}
+    shape_pick = st.selectbox(
+        "Shape",
+        list(shape_labels.keys()),
+        key=f"dpr_{key_prefix}_bbs_shape",
+    )
+    shape_code = shape_labels[shape_pick]
+    diagram = steel_shape_diagram_path(shape_code)
+    if diagram:
+        st.image(str(diagram), caption=f"{shape_pick} — reference", width=200)
+    c1, c2, c3, c4 = st.columns(4)
+    bar_mark = c1.text_input("Mark", key=f"dpr_{key_prefix}_mark", placeholder="A1")
+    dia = c2.number_input("Dia mm", min_value=0.0, step=1.0, key=f"dpr_{key_prefix}_dia")
+    spacing = c3.number_input("Spacing mm", min_value=0.0, step=1.0, key=f"dpr_{key_prefix}_spacing")
+    nos = c4.number_input("Nos", min_value=0.0, step=1.0, key=f"dpr_{key_prefix}_nos")
+    a1, a2, a3, a4, a5, a6 = st.columns(6)
+    dim_a = a1.number_input("A (mm)", min_value=0.0, step=1.0, key=f"dpr_{key_prefix}_a")
+    dim_b = a2.number_input("B (mm)", min_value=0.0, step=1.0, key=f"dpr_{key_prefix}_b")
+    dim_c = a3.number_input("C (mm)", min_value=0.0, step=1.0, key=f"dpr_{key_prefix}_c")
+    dim_d = a4.number_input("D (mm)", min_value=0.0, step=1.0, key=f"dpr_{key_prefix}_d")
+    dim_e = a5.number_input("E (mm)", min_value=0.0, step=1.0, key=f"dpr_{key_prefix}_e")
+    dim_f = a6.number_input("F (mm)", min_value=0.0, step=1.0, key=f"dpr_{key_prefix}_f")
+    length_override = st.number_input(
+        "Length override (m, optional)",
+        min_value=0.0,
+        step=0.01,
+        key=f"dpr_{key_prefix}_len_override",
+    )
+    row = compute_steel_bbs_row(
+        bar_mark,
+        dia,
+        spacing,
+        nos,
+        length_override,
+        shape_code=shape_code,
+        dim_a=dim_a,
+        dim_b=dim_b,
+        dim_c=dim_c,
+        dim_d=dim_d,
+        dim_e=dim_e,
+        dim_f=dim_f,
+        shape_image_path=_bbs_shape_image_path(shape_code),
+    )
+    m1, m2 = st.columns(2)
+    m1.metric("Cut length (m)", f"{row['length_m']:,.3f}")
+    m2.metric("Total weight (MT)", f"{row['weight_mt']:,.4f}")
+    return row
+
+
+def _stamp_measurement_billing_flag(entry: dict, billing_yes: bool) -> dict:
+    include = st.session_state.get(
+        "dpr_include_in_bill",
+        billing_yes,
+    )
+    entry["include_in_client_bill"] = measurement_include_in_bill(bool(include))
+    return entry
+
+
 def _render_boq_measurement_entry(unit_family, boq_item_id=""):
     st.session_state.setdefault("dpr_measurement_method", "Normal")
     unit_family = normalize_boq_unit(unit_family)
     suffix = _measurement_state_suffix(boq_item_id)
     st.markdown('<div class="maxek-dpr-measure-compact">', unsafe_allow_html=True)
     st.caption(unit_entry_label(unit_family))
+    entry_mode = st.radio(
+        "Entry mode",
+        ["Quick", "Structured grid", "Average lists"],
+        horizontal=True,
+        key=f"dpr_entry_mode_{suffix}",
+        label_visibility="collapsed",
+    )
+    if entry_mode == "Structured grid":
+        st.markdown("</div>", unsafe_allow_html=True)
+        return _render_structured_measurement_grid(unit_family, boq_item_id)
     method = st.radio(
         "Method",
         ["Normal", "Average"],
@@ -435,7 +563,7 @@ def _render_boq_measurement_entry(unit_family, boq_item_id=""):
         key="dpr_measurement_method",
         label_visibility="collapsed",
     )
-    if method == "Average":
+    if method == "Average" or entry_mode == "Average lists":
         _init_average_dimension_lists(boq_item_id)
 
     if unit_family in {"NOS", "KG", "TON"}:
@@ -843,6 +971,10 @@ def _populate_dpr_edit_session(dpr_id):
     st.session_state["dpr_weather"] = report.get("weather") or ""
     st.session_state["dpr_equipment"] = report.get("equipment_usage") or ""
     st.session_state["dpr_delay"] = report.get("delay_reason") or ""
+    st.session_state["dpr_work_category"] = report.get("work_category") or ""
+    st.session_state["dpr_location"] = report.get("location_text") or ""
+    st.session_state["dpr_engineer"] = report.get("engineer_name") or ""
+    st.session_state.dpr_steel_bbs_draft = load_steel_bbs_for_dpr(dpr_id)
     return True
 
 
@@ -877,12 +1009,30 @@ def _delete_dpr(dpr_id):
     if float(billed[0] or 0) > 0 or str(billed[1] or "") == DPR_STATUS_BILLED:
         conn.close()
         return False, "Cannot delete: this DPR has billing recorded."
+    proj = conn.execute(
+        "SELECT project_name, project_id FROM dpr_reports WHERE dpr_id = ?",
+        (dpr_id,),
+    ).fetchone()
     conn.execute("DELETE FROM dpr_measurements WHERE dpr_id = ?", (dpr_id,))
     conn.execute("DELETE FROM dpr_boq_lines WHERE dpr_id = ?", (dpr_id,))
     conn.execute("DELETE FROM dpr_manpower WHERE dpr_id = ?", (dpr_id,))
+    conn.execute("DELETE FROM dpr_steel_bbs_rows WHERE dpr_id = ?", (dpr_id,))
+    conn.execute("DELETE FROM dpr_photos WHERE dpr_id = ?", (dpr_id,))
+    log_dpr_audit(dpr_id, "delete", {}, "system", conn=conn)
     conn.execute("DELETE FROM dpr_reports WHERE dpr_id = ?", (dpr_id,))
     conn.commit()
     conn.close()
+    try:
+        from modules.phase3_integration import run_after_dpr_deleted
+
+        if proj:
+            run_after_dpr_deleted(
+                dpr_id=dpr_id,
+                project_name=str(proj[0] or ""),
+                project_id=str(proj[1] or ""),
+            )
+    except Exception:
+        pass
     return True, ""
 
 
@@ -943,8 +1093,9 @@ def _insert_measurements(conn, dpr_id, measurements):
                 width_1, width_2, length_1, length_2,
                 height, depth, nos, dia_mm, bend,
                 avg_width, avg_length, avg_depth, qty,
-                calculated_quantity, unit, dimensions_json, boq_item_id, boq_line_id
-            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                calculated_quantity, unit, dimensions_json, boq_item_id, boq_line_id,
+                width_3, thickness, include_in_client_bill
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 measurement_id,
@@ -969,6 +1120,9 @@ def _insert_measurements(conn, dpr_id, measurements):
                 row.get("dimensions_json", ""),
                 row.get("boq_item_id", ""),
                 row.get("boq_line_id", ""),
+                row.get("width_3", 0),
+                row.get("thickness", 0),
+                int(row.get("include_in_client_bill", 1) or 0),
             ),
         )
 
@@ -987,9 +1141,10 @@ def _insert_dpr_records(
             boq_item_id, boq_number, boq_description, unit, billing_measurement,
             total_boq_quantity, done_quantity, billed_quantity, balance_quantity,
             pending_billing_quantity, progress_quantity, remarks, document_upload, site_photo,
-            weather, equipment_usage, delay_reason, engineer_approval, client_approval,
+            weather, equipment_usage, delay_reason, work_category, location_text, engineer_name,
+            engineer_approval, client_approval,
             status, created_by, created_at
-        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """,
         (
             dpr_row["dpr_id"],
@@ -1016,6 +1171,9 @@ def _insert_dpr_records(
             dpr_row.get("weather", ""),
             dpr_row.get("equipment_usage", ""),
             dpr_row.get("delay_reason", ""),
+            dpr_row.get("work_category", ""),
+            dpr_row.get("location_text", ""),
+            dpr_row.get("engineer_name", ""),
             "Pending",
             "Pending",
             dpr_row["status"],
@@ -1025,6 +1183,9 @@ def _insert_dpr_records(
     )
     persist_boq_lines(conn, dpr_row["dpr_id"], boq_lines)
     _insert_measurements(conn, dpr_row["dpr_id"], measurements)
+    bbs_rows = dpr_row.get("steel_bbs_rows") or []
+    if bbs_rows:
+        persist_steel_bbs_rows(conn, dpr_row["dpr_id"], bbs_rows)
     for row in manpower_rows:
         manpower_id = generate_id("DPL", "dpr_manpower")
         conn.execute(
@@ -1054,6 +1215,7 @@ def _update_dpr_records(conn, dpr_id, dpr_row, boq_lines, measurements, manpower
             billed_quantity = ?, balance_quantity = ?, pending_billing_quantity = ?,
             progress_quantity = ?, remarks = ?, document_upload = ?, site_photo = ?,
             weather = ?, equipment_usage = ?, delay_reason = ?,
+            work_category = ?, location_text = ?, engineer_name = ?,
             engineer_approval = 'Pending', client_approval = 'Pending',
             engineer_approved_by = NULL, engineer_approved_at = NULL,
             client_approved_by = NULL, client_approved_at = NULL,
@@ -1084,6 +1246,9 @@ def _update_dpr_records(conn, dpr_id, dpr_row, boq_lines, measurements, manpower
             dpr_row.get("weather", ""),
             dpr_row.get("equipment_usage", ""),
             dpr_row.get("delay_reason", ""),
+            dpr_row.get("work_category", ""),
+            dpr_row.get("location_text", ""),
+            dpr_row.get("engineer_name", ""),
             dpr_row["status"],
             dpr_id,
         ),
@@ -1093,6 +1258,8 @@ def _update_dpr_records(conn, dpr_id, dpr_row, boq_lines, measurements, manpower
     conn.execute("DELETE FROM dpr_manpower WHERE dpr_id = ?", (dpr_id,))
     persist_boq_lines(conn, dpr_id, boq_lines)
     _insert_measurements(conn, dpr_id, measurements)
+    bbs_rows = dpr_row.get("steel_bbs_rows") or []
+    persist_steel_bbs_rows(conn, dpr_id, bbs_rows)
     for row in manpower_rows:
         manpower_id = generate_id("DPL", "dpr_manpower", conn=conn)
         conn.execute(
@@ -1218,7 +1385,7 @@ def _render_new_dpr_tab():
     dpr_date = m1.date_input("Date", value=date_default, key="dpr_date")
     project_name = m2.selectbox("Project Name", projects, key="dpr_project")
     site_pick = m3.selectbox(
-        "Site Incharge",
+        "Site Incharge / Engineer",
         staff_labels,
         key="dpr_site_incharge",
         placeholder="Select staff" if staff_labels else "No staff",
@@ -1263,7 +1430,14 @@ def _render_new_dpr_tab():
         format_func=lambda row_key: boq_label_map.get(row_key, "Select BOQ"),
         key="dpr_boq_row_id",
     )
-    billing_measurement = b2.selectbox("Billing Measurement", ["No", "Yes"], key="dpr_billing")
+    billing_measurement = b2.selectbox("Include in client bill (BOQ line)", ["No", "Yes"], key="dpr_billing")
+    billing_yes = billing_measurement == "Yes"
+    st.checkbox(
+        "Include in Client Bill (next measurement row)",
+        value=billing_yes,
+        key="dpr_include_in_bill",
+        help="Only checked measurement lines flow to Client Bill / billing generation.",
+    )
     dpr_no_display = edit_id or generate_id("DPR", "dpr_reports")
     b3.text_input("DPR No", value=dpr_no_display, disabled=True, key="dpr_no_preview")
 
@@ -1306,13 +1480,37 @@ def _render_new_dpr_tab():
             f'<div class="maxek-dpr-unit-badge">Auto entry: <strong>{unit_family}</strong></div>',
             unsafe_allow_html=True,
         )
+    if boq_item_id:
+        meta = load_boq_meta_for_item(boq_item_id)
+        if meta:
+            st.caption(
+                f"Measurement type: **{meta.get('measurement_type', unit_family)}** · "
+                f"Billing: **{billing_measurement}** (Yes = feeds client bill after approval)"
+            )
 
-    q1, q2, q3, q4, q5 = st.columns(5)
-    q1.metric("BOQ Qty", f"{stats['total_qty']:,.2f}")
-    q2.metric("Done Qty", f"{stats['done_qty']:,.2f}")
-    q3.metric("Billed Qty", f"{stats['billed_qty']:,.2f}")
-    q4.metric("Balance Qty", f"{stats['balance_qty']:,.2f}")
-    q5.metric("Pending Billing", f"{stats['pending_billing_qty']:,.2f}")
+    w1, w2, w3 = st.columns(3)
+    work_category = w1.text_input("Work Category", key="dpr_work_category", placeholder="e.g. Slab, Column")
+    location_text = w2.text_input("Location", key="dpr_location", placeholder="Block / floor / zone")
+    engineer_name = w3.text_input(
+        "Engineer",
+        key="dpr_engineer",
+        value=st.session_state.get("user_name", ""),
+        placeholder="Site engineer name",
+    )
+
+    from modules.phase3_integration import (
+        render_dpr_billing_metrics,
+        render_dpr_material_estimate,
+    )
+
+    draft_prog = sum(float(ln.get("progress_quantity") or 0) for ln in st.session_state.get("dpr_draft_boq_lines", []))
+    if draft_prog <= 0:
+        draft_prog = sum(
+            float(m.get("calculated_quantity") or 0)
+            for m in st.session_state.get("dpr_draft_measurements", [])
+        )
+    render_dpr_billing_metrics(boq_item_id, billing_yes)
+    render_dpr_material_estimate(boq_item_id, draft_prog or float(stats.get("executed_qty") or stats.get("done_qty") or 0))
 
     remarks = st.text_area("Remarks", key="dpr_remarks")
     e1, e2, e3 = st.columns(3)
@@ -1384,36 +1582,87 @@ def _render_new_dpr_tab():
             st.caption(f"Current BOQ ({boq_number}): **{work_count}** measurement line(s) not saved to DPR yet.")
         use_steel = is_steel_boq_entry(unit, boq_desc)
         if use_steel:
-            st.caption(
-                "Steel: shape (Ring = 6 fields), dia dropdown, nos → MT. Then save this BOQ item to the DPR."
+            steel_mode = st.radio(
+                "Steel entry",
+                ["BBS schedule", "Shape library"],
+                horizontal=True,
+                key="dpr_steel_entry_mode",
             )
-            calc = _render_steel_measurement_entry(key_prefix="entry")
-            if st.button("ADD MEASUREMENT FOR THIS BOQ", key="dpr_add_measurement", type="secondary"):
-                if not calc:
-                    st.error("Select a steel shape and enter dimensions.")
-                else:
-                    entry = build_steel_measurement_record(calc)
-                    if entry["calculated_quantity"] <= 0:
-                        st.error("Weight (MT) must be greater than zero.")
+            if steel_mode == "BBS schedule":
+                st.session_state.setdefault("dpr_steel_bbs_draft", [])
+                bbs_row = _render_steel_bbs_entry("entry_bbs")
+                if st.button("Insert Row (BBS)", key="dpr_add_bbs_row", type="secondary"):
+                    if bbs_row["weight_mt"] <= 0:
+                        st.error("Enter dia, nos, and length for a positive weight.")
                     else:
-                        st.session_state.dpr_work_measurements.append(entry)
-                        st.success(f"Measurement #{len(st.session_state.dpr_work_measurements)} added for BOQ {boq_number}.")
+                        st.session_state.dpr_steel_bbs_draft.append(bbs_row)
+                        for m in bbs_rows_to_steel_measurements([bbs_row]):
+                            st.session_state.dpr_work_measurements.append(
+                                _stamp_measurement_billing_flag(m, billing_yes)
+                            )
+                        st.success(f"BBS row added ({len(st.session_state.dpr_steel_bbs_draft)} in schedule).")
                         st.rerun()
+                if st.session_state.dpr_steel_bbs_draft:
+                    st.dataframe(
+                        pd.DataFrame(st.session_state.dpr_steel_bbs_draft),
+                        width="stretch",
+                        hide_index=True,
+                    )
+            else:
+                st.caption(
+                    "Steel shapes: Ring = 6 fields, dia, nos → MT. Save BOQ item when done."
+                )
+                calc = _render_steel_measurement_entry(key_prefix="entry")
+                if st.button("Insert Row (shape)", key="dpr_add_measurement", type="secondary"):
+                    if not calc:
+                        st.error("Select a steel shape and enter dimensions.")
+                    else:
+                        entry = build_steel_measurement_record(calc)
+                        if entry["calculated_quantity"] <= 0:
+                            st.error("Weight (MT) must be greater than zero.")
+                        else:
+                            st.session_state.dpr_work_measurements.append(
+                                _stamp_measurement_billing_flag(entry, billing_yes)
+                            )
+                            st.success(
+                                f"Measurement #{len(st.session_state.dpr_work_measurements)} added for BOQ {boq_number}."
+                            )
+                            st.rerun()
         else:
             st.caption(
-                "Area / volume: pick **Normal** (one L×W) or **Average** (many lengths & widths — use **+ Add length** / **+ Add width**)."
+                "Area / volume: **Quick**, **Structured grid** (L/W/W2/W3/D/H/T/Nos), or **Average lists** "
+                "(Insert Row on length/width lists)."
             )
             calc = _render_boq_measurement_entry(unit_family, boq_item_id)
-            if st.button("ADD MEASUREMENT FOR THIS BOQ", key="dpr_add_measurement", type="secondary"):
-                method = st.session_state.get("dpr_measurement_method", "Normal")
-                lengths, widths, depths, qty = _collect_measurement_inputs(
-                    unit_family, method, boq_item_id
-                )
-                entry = build_measurement_record(unit_family, method, lengths, widths, depths, qty)
+            if st.button("Insert Row", key="dpr_add_measurement", type="secondary"):
+                suffix = _measurement_state_suffix(boq_item_id)
+                mode = st.session_state.get(f"dpr_entry_mode_{suffix}", "Quick")
+                if mode == "Structured grid":
+                    entry = build_structured_measurement_record(
+                        unit_family,
+                        length=float(st.session_state.get(f"dpr_grid_l_{suffix}") or 0),
+                        width=float(st.session_state.get(f"dpr_grid_w_{suffix}") or 0),
+                        width_2=float(st.session_state.get(f"dpr_grid_w2_{suffix}") or 0),
+                        width_3=float(st.session_state.get(f"dpr_grid_w3_{suffix}") or 0),
+                        depth=float(st.session_state.get(f"dpr_grid_d_{suffix}") or 0),
+                        height=float(st.session_state.get(f"dpr_grid_h_{suffix}") or 0),
+                        thickness=float(st.session_state.get(f"dpr_grid_t_{suffix}") or 0),
+                        nos=float(st.session_state.get(f"dpr_grid_nos_{suffix}") or 0),
+                    )
+                else:
+                    method = st.session_state.get("dpr_measurement_method", "Normal")
+                    if mode == "Average lists":
+                        method = "Average"
+                    lengths, widths, depths, qty = _collect_measurement_inputs(
+                        unit_family, method, boq_item_id
+                    )
+                    entry = build_measurement_record(unit_family, method, lengths, widths, depths, qty)
                 if entry["calculated_quantity"] <= 0:
                     st.error("Calculated quantity must be greater than zero.")
                 else:
-                    st.session_state.dpr_work_measurements.append(entry)
+                    st.session_state.dpr_work_measurements.append(
+                        _stamp_measurement_billing_flag(entry, billing_yes)
+                    )
                     st.success(f"Measurement #{len(st.session_state.dpr_work_measurements)} added for BOQ {boq_number}.")
                     st.rerun()
 
@@ -1429,6 +1678,7 @@ def _render_new_dpr_tab():
                         "Qty": m.get("qty", 0),
                         "Total": m.get("calculated_quantity", 0),
                         "Unit": m.get("unit", ""),
+                        "Client bill": "Yes" if int(m.get("include_in_client_bill", 1)) else "No",
                     }
                 )
             st.dataframe(pd.DataFrame(wr), width="stretch", hide_index=True)
@@ -1610,11 +1860,16 @@ def _save_dpr(
         "weather": weather,
         "equipment_usage": equipment_usage,
         "delay_reason": delay_reason,
+        "work_category": st.session_state.get("dpr_work_category", ""),
+        "location_text": st.session_state.get("dpr_location", ""),
+        "engineer_name": st.session_state.get("dpr_engineer", "") or staff_name,
+        "steel_bbs_rows": list(st.session_state.get("dpr_steel_bbs_draft") or []),
         "status": status,
         "created_by": st.session_state.get("user_name", "User"),
         "created_at": _timestamp(),
     }
     all_measurements = flatten_measurements(boq_lines)
+    ensure_dpr_measurement_schema()
     conn = get_conn()
     if edit_id:
         _update_dpr_records(
@@ -1633,8 +1888,23 @@ def _save_dpr(
             all_measurements,
             st.session_state.dpr_draft_manpower,
         )
+    if photo_path:
+        persist_dpr_photos(conn, dpr_id, [photo_path], st.session_state.get("user_name", "User"))
+    log_dpr_audit(
+        dpr_id,
+        "update" if edit_id else "create",
+        {
+            "status": status,
+            "progress_quantity": progress_qty,
+            "boq_line_count": len(boq_lines),
+            "measurement_count": len(all_measurements),
+        },
+        st.session_state.get("user_name", "User"),
+        conn=conn,
+    )
     conn.commit()
     conn.close()
+    recalculate_dpr_quantities(dpr_id, st.session_state.get("user_name", "User"))
     _clear_dpr_edit_session()
     st.success(f"DPR {'updated' if edit_id else 'saved'}. ID: {dpr_id} · Status: {status}")
     st.rerun()
@@ -1658,6 +1928,12 @@ def _render_dpr_approval_actions(pending_df, pick_key, prefix, role, can_act, ap
         )
         conn.commit()
         conn.close()
+        try:
+            from modules.phase3_integration import run_after_dpr_approval
+
+            run_after_dpr_approval(pick)
+        except Exception:
+            pass
         st.success(f"{pick} approved.")
         st.rerun()
 
@@ -1774,37 +2050,47 @@ def _render_approvals_tab(role):
 def _render_billing_tab():
     st.markdown("### Pending Client Billing")
     st.caption(
-        "Step 1: Mark measured qty here. Step 2: Create client invoice in **Billing → Client Bill** "
-        "(amount = qty × BOQ rate, print/PDF)."
+        "Only DPR / measurement lines marked **Include in Client Bill** are billable. "
+        "Step 2: Create invoice in **Billing → Client Bill**."
     )
-    conn = get_conn()
-    pending_df = pd.read_sql_query(
-        """
-        SELECT dpr_id, dpr_date, project_name, boq_number, boq_description, progress_quantity,
-               billed_quantity, unit, status
-        FROM dpr_reports
-        WHERE UPPER(COALESCE(billing_measurement, '')) = 'YES'
-          AND status IN (?, ?)
-          AND COALESCE(progress_quantity, 0) > COALESCE(billed_quantity, 0)
-        ORDER BY id DESC
-        """,
-        conn,
-        params=(DPR_STATUS_ENGINEER_APPROVED, DPR_STATUS_CLIENT_APPROVED),
-    )
-    conn.close()
+    from modules.database import load_pending_client_bill_dprs
+
+    pending_df = load_pending_client_bill_dprs()
     if pending_df.empty:
         st.info("No pending billing measurements.")
         return
-    st.dataframe(pending_df, width="stretch", hide_index=True)
+    show = pending_df.copy()
+    show["billable_qty"] = show["billable_progress"]
+    show["already_billed_qty"] = show.get("client_billed_quantity", show.get("billed_quantity", 0))
+    show["balance_billing_qty"] = show["pending_qty"]
+    st.dataframe(
+        show[
+            [
+                "dpr_id",
+                "dpr_date",
+                "project_name",
+                "boq_number",
+                "billable_progress",
+                "already_billed_qty",
+                "balance_billing_qty",
+                "pending_qty",
+                "unit",
+                "status",
+            ]
+        ],
+        width="stretch",
+        hide_index=True,
+    )
     pick = st.selectbox("Select DPR to bill", [""] + pending_df["dpr_id"].tolist(), key="dpr_bill_pick")
     if not pick:
         return
     row = pending_df[pending_df["dpr_id"] == pick].iloc[0]
-    max_bill = float(row["progress_quantity"]) - float(row["billed_quantity"])
+    max_bill = float(row["pending_qty"])
     bill_qty = st.number_input("Bill Quantity (partial allowed)", min_value=0.0, max_value=max_bill, value=max_bill, step=0.01)
     if st.button("MARK BILLED", type="primary", key="dpr_mark_billed"):
         new_billed = float(row["billed_quantity"]) + bill_qty
-        new_status = DPR_STATUS_BILLED if new_billed >= float(row["progress_quantity"]) else row["status"]
+        billable_total = float(row.get("billable_progress") or row.get("progress_quantity") or 0)
+        new_status = DPR_STATUS_BILLED if new_billed >= billable_total - 0.0001 else row["status"]
         conn = get_conn()
         conn.execute(
             """
@@ -1817,7 +2103,7 @@ def _render_billing_tab():
         conn.execute(
             """
             UPDATE dpr_measurements SET billed = 1, billed_quantity = calculated_quantity
-            WHERE dpr_id = ?
+            WHERE dpr_id = ? AND COALESCE(include_in_client_bill, 1) = 1
             """,
             (pick,),
         )
@@ -1834,7 +2120,10 @@ def _render_history_tab():
         """
         SELECT dpr_id, dpr_date, project_name, site_incharge_name, boq_number, boq_description,
                progress_quantity, unit, billing_measurement, balance_quantity, status,
-               engineer_approval, client_approval, weather
+               engineer_approval, client_approval, weather,
+               COALESCE(engineer_name, '') AS engineer_name,
+               COALESCE(location_text, '') AS location_text,
+               COALESCE(work_category, '') AS work_category
         FROM dpr_reports
         ORDER BY id DESC
         LIMIT 300
@@ -1846,7 +2135,8 @@ def _render_history_tab():
         SELECT m.dpr_id, d.dpr_date, d.project_name,
                COALESCE(bl.boq_number, d.boq_number) AS boq_number,
                m.measurement_type, m.avg_width, m.avg_length,
-               m.calculated_quantity, m.unit, m.billed
+               m.calculated_quantity, m.unit, m.billed,
+               COALESCE(m.include_in_client_bill, 1) AS include_in_client_bill
         FROM dpr_measurements m
         JOIN dpr_reports d ON d.dpr_id = m.dpr_id
         LEFT JOIN dpr_boq_lines bl ON bl.line_id = m.boq_line_id
@@ -1867,6 +2157,44 @@ def _render_history_tab():
     )
     conn.close()
     st.dataframe(dpr_df, width="stretch", hide_index=True)
+
+    st.markdown("#### View / edit / recalculate")
+    hist_pick = st.selectbox("Select DPR", [""] + dpr_df["dpr_id"].tolist(), key="dpr_hist_pick")
+    if hist_pick:
+        h1, h2, h3, h4 = st.columns(4)
+        if h1.button("View / Edit", key="dpr_hist_edit"):
+            st.session_state.dpr_edit_id = hist_pick
+            st.session_state.pop("dpr_edit_loaded", None)
+            st.info("Open the **New DPR** tab to edit this entry.")
+            st.rerun()
+        if h2.button("Recalculate", key="dpr_hist_recalc"):
+            result = recalculate_dpr_quantities(
+                hist_pick, st.session_state.get("user_name", "User")
+            )
+            st.success(
+                f"Recalculated {hist_pick}: progress {result['progress_quantity']:,.4f}, "
+                f"billable {result['billable_quantity']:,.4f}"
+            )
+            st.rerun()
+        if h3.button("Delete", key="dpr_hist_delete"):
+            start_delete_confirm("dpr_hist", hist_pick, hist_pick)
+
+        def _hist_delete(dpr_to_delete):
+            if str(st.session_state.get("dpr_edit_id") or "") == str(dpr_to_delete):
+                _clear_dpr_edit_session()
+            ok, err = _delete_dpr(dpr_to_delete)
+            if not ok:
+                st.error(err)
+            else:
+                st.success(f"DPR {dpr_to_delete} deleted.")
+                st.rerun()
+
+        render_delete_confirm_dialog(
+            "dpr_hist",
+            _hist_delete,
+            message=f"Delete DPR {hist_pick}? This cannot be undone.",
+        )
+
     st.markdown("#### Measurement History")
     st.dataframe(meas_df, width="stretch", hide_index=True)
     st.markdown("#### Manpower History")
@@ -1886,19 +2214,39 @@ def _render_steel_shapes_tab_safe():
 
 
 def page_dpr():
-    st.subheader("Daily Progress Report (DPR)")
     role = st.session_state.get("user_role", "Admin")
-    tabs = st.tabs(["New DPR", "Approvals", "Pending Billing", "Register & History", "Steel Shapes"])
+    if not can_access_dpr_measurement_module(role):
+        st.warning("You do not have access to Daily Progress / Measurement Book.")
+        return
+    st.subheader("Daily Progress Report (DPR)")
+    st.caption(
+        "Site progress → measurement rows → **Measurement Book** tab → "
+        "**Pending Billing** → **Billing → Client Bill**. Client portal approval unchanged."
+    )
+    from modules.dpr_measurement_book import page_measurement_book
+
+    tabs = st.tabs(
+        [
+            "New DPR",
+            "Measurement Book",
+            "Approvals",
+            "Pending Billing",
+            "Register & History",
+            "Steel Shapes",
+        ]
+    )
     with tabs[0]:
         _render_new_dpr_tab()
     with tabs[1]:
-        _render_approvals_tab(role)
+        page_measurement_book()
     with tabs[2]:
-        if role in {"Admin", "Accountant", "Accounts Manager", "MD"}:
+        _render_approvals_tab(role)
+    with tabs[3]:
+        if role in {"Admin", "Accountant", "Accounts Manager", "MD", "Super Admin"}:
             _render_billing_tab()
         else:
             st.info("Billing is handled by Accounts / MD.")
-    with tabs[3]:
-        _render_history_tab()
     with tabs[4]:
+        _render_history_tab()
+    with tabs[5]:
         _render_steel_shapes_tab_safe()

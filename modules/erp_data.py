@@ -65,6 +65,32 @@ def ensure_erp_extension_tables(conn=None) -> None:
             created_by TEXT,
             created_at TEXT
         );
+        CREATE TABLE IF NOT EXISTS purchase_orders(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            po_id TEXT UNIQUE,
+            document_no TEXT,
+            po_date TEXT,
+            vendor_name TEXT,
+            project_name TEXT,
+            total_amount REAL,
+            remarks TEXT,
+            status TEXT DEFAULT 'Draft',
+            prepared_by TEXT,
+            prepared_date TEXT,
+            checked_by TEXT,
+            checked_date TEXT,
+            approved_by TEXT,
+            approved_date TEXT,
+            payment_released_by TEXT,
+            payment_released_date TEXT,
+            paid_by TEXT,
+            paid_date TEXT,
+            approval_comment TEXT,
+            workflow_remarks TEXT,
+            payment_reference TEXT,
+            created_by TEXT,
+            created_at TEXT
+        );
         CREATE TABLE IF NOT EXISTS purchase_quotations(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             quote_id TEXT UNIQUE,
@@ -382,9 +408,58 @@ def load_purchase_quotations() -> pd.DataFrame:
     return _load_table("purchase_quotations")
 
 
-def save_grn(data: dict, actor: str) -> str:
+def save_purchase_order(data: dict, actor: str) -> str:
+    ensure_erp_extension_tables()
+    data.setdefault("status", "Draft")
     data["created_by"] = actor
-    return _insert_row("grn_entries", "grn_id", "GRN", data)
+    data["created_at"] = data.get("created_at") or datetime.now().strftime("%d/%m/%Y %H:%M")
+    return _insert_row("purchase_orders", "po_id", "PO", data)
+
+
+def load_purchase_orders(limit: int = 200) -> pd.DataFrame:
+    ensure_erp_extension_tables()
+    conn = get_conn()
+    df = pd.read_sql_query(
+        "SELECT * FROM purchase_orders ORDER BY id DESC LIMIT ?",
+        conn,
+        params=(max(1, min(int(limit), 500)),),
+    )
+    conn.close()
+    return df
+
+
+def get_purchase_order(po_id: str) -> dict | None:
+    ensure_erp_extension_tables()
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM purchase_orders WHERE po_id = ?", (po_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def save_grn(data: dict, actor: str) -> str:
+    from modules.database import apply_stock_receipt
+
+    ensure_erp_extension_tables()
+    conn = get_conn()
+    try:
+        grn_id = data.get("grn_id") or generate_id("GRN", "grn_entries", "grn_id", conn=conn)
+        data = {**data, "grn_id": grn_id, "created_by": actor, "created_at": _now()}
+        cols = ", ".join(data.keys())
+        placeholders = ", ".join("?" for _ in data)
+        conn.execute(f"INSERT INTO grn_entries({cols}) VALUES({placeholders})", tuple(data.values()))
+        apply_stock_receipt(
+            conn,
+            data.get("material_code", ""),
+            data.get("material_name", ""),
+            float(data.get("quantity") or 0),
+        )
+        conn.commit()
+        return grn_id
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 def load_grn_entries() -> pd.DataFrame:
@@ -392,8 +467,29 @@ def load_grn_entries() -> pd.DataFrame:
 
 
 def save_stock_return(data: dict, actor: str) -> str:
-    data["created_by"] = actor
-    return _insert_row("stock_returns", "return_id", "SR", data)
+    from modules.database import apply_stock_receipt
+
+    ensure_erp_extension_tables()
+    conn = get_conn()
+    try:
+        return_id = data.get("return_id") or generate_id("SR", "stock_returns", "return_id", conn=conn)
+        data = {**data, "return_id": return_id, "created_by": actor, "created_at": _now()}
+        cols = ", ".join(data.keys())
+        placeholders = ", ".join("?" for _ in data)
+        conn.execute(f"INSERT INTO stock_returns({cols}) VALUES({placeholders})", tuple(data.values()))
+        apply_stock_receipt(
+            conn,
+            data.get("material_code", ""),
+            data.get("material_name", ""),
+            float(data.get("quantity") or 0),
+        )
+        conn.commit()
+        return return_id
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 def load_stock_returns() -> pd.DataFrame:

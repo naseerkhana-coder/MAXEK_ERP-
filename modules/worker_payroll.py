@@ -11,10 +11,13 @@ import streamlit as st
 
 from modules.branding import ERP_LEGAL_NAME, ERP_VERSION
 from modules.database import DATE_FMT, calculate_hours, next_worker_id, parse_flexible_time
-from modules.pages import _save_upload
+from modules.pages import _download_dataframe, _save_upload
 from modules.worker_payroll_db import (
     add_deduction,
+    advance_recovery_report_df,
+    attendance_report_df,
     calculate_period,
+    daily_wage_report_df,
     delete_deduction,
     delete_worker_attendance,
     ensure_worker_payroll_schema,
@@ -25,6 +28,7 @@ from modules.worker_payroll_db import (
     list_deductions,
     list_payroll_runs,
     load_worker_attendance,
+    ot_report_df,
     recalculate_run_net,
     save_payment,
     save_payroll_run,
@@ -35,18 +39,31 @@ from modules.worker_payroll_db import (
 )
 from modules.worker_payroll_engine import (
     DEDUCTION_TYPES,
+    DUTY_CATEGORY_OPTIONS,
     PAYMENT_MODES,
+    WORKER_TYPES,
     WORKFLOW_STATUSES,
     WORKFLOW_STEPS,
     calculate_daily_pay,
     hourly_rate,
+    next_workflow_status,
+    ot_eligible_flag,
     ot_hourly_rate,
     standard_hours_for_category,
     workflow_step_index,
 )
 from modules.worker_payroll_pdf import generate_worker_salary_slip_pdf
 
-WORKER_CATEGORY_OPTIONS = ("8 Hr", "10 Hr")
+WORKER_CATEGORY_OPTIONS = DUTY_CATEGORY_OPTIONS
+WORKER_PAYROLL_TABS = (
+    "Workers",
+    "Attendance",
+    "Salary",
+    "Review",
+    "Payment",
+    "Reports",
+    "Salary Slip",
+)
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -87,7 +104,10 @@ def _render_workflow_steps(workflow_status: str | None = None):
 
 def _render_workers_tab():
     st.markdown("#### Worker profiles")
-    st.caption("Category A = 8 hours/day · Category B = 10 hours/day. OT rate defaults to Daily Wage ÷ standard hours.")
+    st.caption(
+        "8 Hour / 10 Hour duty categories. OT rate defaults to Daily Wage ÷ standard hours. "
+        "Applies to Company, Subcontractor, and Labour Supply workers."
+    )
 
     edit_id = st.session_state.get("wp_edit_worker")
 
@@ -108,16 +128,31 @@ def _render_workers_tab():
         if worker_id:
             st.caption(f"Worker ID: **{worker_id}**")
         worker_name = st.text_input("Name", value=w.get("worker_name") or "")
+        worker_type = st.selectbox(
+            "Worker Type",
+            WORKER_TYPES,
+            index=max(0, WORKER_TYPES.index(w.get("worker_type") or "Subcontractor Worker"))
+            if (w.get("worker_type") or "Subcontractor Worker") in WORKER_TYPES
+            else 0,
+        )
         hour_category = st.selectbox(
-            "Category",
+            "Duty Category",
             WORKER_CATEGORY_OPTIONS,
-            index=0 if (w.get("hour_category") or "8 Hr") in ("8 Hr", "Category A") else 1,
+            index=0
+            if (w.get("duty_category") or w.get("hour_category") or "8 Hour Worker")
+            not in ("10 Hour Worker", "10 Hr", "Category B")
+            else 1,
         )
     with c2:
-        daily_wage = st.number_input("Daily Wage Rate (₹)", min_value=0.0, step=50.0, value=float(w.get("daily_wage_rate") or 0))
+        daily_wage = st.number_input("Daily Wage (₹)", min_value=0.0, step=50.0, value=float(w.get("daily_wage_rate") or 0))
         std = standard_hours_for_category(hour_category)
         default_ot = hourly_rate(daily_wage, std) if daily_wage else float(w.get("ot_rate") or 0)
         ot_rate = st.number_input("OT Rate (₹/hr)", min_value=0.0, step=10.0, value=float(w.get("ot_rate") or default_ot))
+        ot_eligible = st.selectbox(
+            "OT Eligible",
+            ["Yes", "No"],
+            index=0 if ot_eligible_flag(w.get("ot_eligible", "Yes")) else 1,
+        )
         joining = st.text_input("Joining Date (DD/MM/YYYY)", value=w.get("joining_date") or "")
         status = st.selectbox("Status", ["Active", "Inactive"], index=0 if (w.get("status") or "Active") == "Active" else 1)
 
@@ -136,6 +171,8 @@ def _render_workers_tab():
                 joining.strip(),
                 status,
                 subcontractor_name=subcontractor.strip(),
+                worker_type=worker_type,
+                ot_eligible=ot_eligible,
             )
             st.session_state.pop("wp_edit_worker", None)
             st.success(f"Worker {worker_id} saved.")
@@ -161,8 +198,10 @@ def _render_workers_tab():
             [
                 "worker_id",
                 "worker_name",
+                "worker_type",
                 "hour_category",
                 "daily_wage_rate",
+                "ot_eligible",
                 "OT Rate (calc)",
                 "joining_date",
                 "status",
@@ -182,7 +221,8 @@ def _render_workers_tab():
 
 
 def _hours_from_times(worker: dict, in_time: str, out_time: str, break_hrs: float):
-    std = standard_hours_for_category(worker.get("hour_category"))
+    std = standard_hours_for_category(worker.get("duty_category") or worker.get("hour_category"))
+    ot_eligible = worker.get("ot_eligible", "Yes")
     try:
         worked, _legacy_ot = calculate_hours(in_time, out_time, break_hrs, std, ot_allowed=True)
     except ValueError as exc:
@@ -193,6 +233,7 @@ def _hours_from_times(worker: dict, in_time: str, out_time: str, break_hrs: floa
         std,
         worked,
         float(worker.get("ot_rate") or 0) or None,
+        ot_eligible=ot_eligible,
     )
     return worked, pay["ot_hours"]
 
@@ -215,8 +256,13 @@ def _render_attendance_tab():
         conn_rows = load_worker_attendance(worker_id, "01/01/2000", "31/12/2099")
         att_default = next((r for r in conn_rows if r["id"] == edit_att), {})
 
-    std = standard_hours_for_category(worker.get("hour_category"))
-    st.info(f"**{worker.get('hour_category')}** worker · Standard **{std:g}h**/day · Daily wage **₹{float(worker.get('daily_wage_rate') or 0):,.2f}**")
+    std = standard_hours_for_category(worker.get("duty_category") or worker.get("hour_category"))
+    ot_eligible = worker.get("ot_eligible", "Yes")
+    st.info(
+        f"**{worker.get('worker_type') or 'Worker'}** · **{worker.get('duty_category') or worker.get('hour_category')}** "
+        f"· Standard **{std:g}h**/day · Daily wage **₹{float(worker.get('daily_wage_rate') or 0):,.2f}** "
+        f"· OT eligible **{worker.get('ot_eligible', 'Yes')}**"
+    )
 
     c1, c2, c3, c4 = st.columns(4)
     att_date = c1.date_input("Date", value=datetime.now().date(), key="wp_att_date")
@@ -231,6 +277,7 @@ def _render_attendance_tab():
             std,
             worked,
             float(worker.get("ot_rate") or 0) or None,
+            ot_eligible=ot_eligible,
         )
         m1, m2, m3 = st.columns(3)
         m1.metric("Worked hours", f"{worked:g}")
@@ -329,7 +376,7 @@ def _render_salary_tab():
             st.dataframe(pd.DataFrame(summary["day_lines"]), width="stretch", hide_index=True)
 
         if generate:
-            status = "Calculated"
+            status = "Prepared"
             rid = save_payroll_run(summary, total_ded, status)
             summary["run_id"] = rid
             run_id = rid
@@ -373,8 +420,20 @@ def _render_salary_tab():
         else:
             st.caption("Click **Generate Salary** to save this period and add deductions.")
 
-        st.markdown(f"### Net payable: **₹{net:,.2f}**")
-        st.caption(f"Gross ₹{gross:,.2f} (base ₹{base_gross:,.2f} + OT ₹{ot_amt:,.2f}) − deductions ₹{total_ded:,.2f}")
+        st.markdown("##### Salary calculation")
+        calc_lines = [
+            f"Gross salary (base): ₹{base_gross:,.2f}",
+            f"Overtime: ₹{ot_amt:,.2f}",
+            f"Gross + OT: ₹{gross:,.2f}",
+        ]
+        for d in deductions:
+            calc_lines.append(
+                f"Less: {d.get('deduction_type')}: ₹{float(d.get('amount') or 0):,.2f}"
+            )
+        if not deductions and total_ded:
+            calc_lines.append(f"Less: Deductions: ₹{total_ded:,.2f}")
+        calc_lines.append(f"**Net payable: ₹{net:,.2f}**")
+        st.markdown("\n\n".join(calc_lines))
 
         if summary.get("workflow_status"):
             _render_workflow_steps(summary.get("workflow_status"))
@@ -383,7 +442,7 @@ def _render_salary_tab():
 
 def _render_review_tab():
     st.markdown("#### Salary review & approval")
-    _render_workflow_steps("Calculated")
+    _render_workflow_steps("Prepared")
 
     pending = list_payroll_runs(status=None)
     if pending.empty:
@@ -404,16 +463,19 @@ def _render_review_tab():
     if deductions:
         st.dataframe(pd.DataFrame(deductions), width="stretch", hide_index=True)
 
+    from modules.worker_payroll_engine import normalize_workflow_status
+    from modules.workflow_ui import render_workflow_action_panel
+
     status = run.get("workflow_status") or "Draft"
-    c1, c2, c3 = st.columns(3)
-    if status in ("Draft", "Calculated", "Submitted to MD") and c1.button("Mark Calculated", width="stretch"):
-        update_run_status(run_id, "Calculated")
+    norm = normalize_workflow_status(status)
+    if render_workflow_action_panel(
+        "worker_payroll",
+        run_id,
+        status,
+        key_prefix="wp_review",
+    ):
         st.rerun()
-    if status in ("Draft", "Calculated", "Submitted to MD") and c2.button("Approve", type="primary", width="stretch"):
-        update_run_status(run_id, "Approved")
-        st.success("Approved.")
-        st.rerun()
-    if status == "Approved":
+    if norm in ("Approved", "Payment Released"):
         st.info("Approved — complete payment in the Payment tab.")
 
 
@@ -432,6 +494,16 @@ def _render_payment_tab():
     pick = st.selectbox("Approved payroll", list(options.keys()), key="wp_pay_pick")
     run_id = options[pick]
     run = get_payroll_run(run_id)
+    from modules.workflow_ui import render_workflow_action_panel, render_workflow_status_steps
+
+    render_workflow_status_steps(run.get("workflow_status"))
+    if render_workflow_action_panel(
+        "worker_payroll",
+        run_id,
+        run.get("workflow_status") or "Approved",
+        key_prefix="wp_pay",
+    ):
+        st.rerun()
 
     st.metric("Net payable", f"₹{float(run.get('net_salary') or 0):,.2f}")
 
@@ -449,25 +521,66 @@ def _render_payment_tab():
         rp = _save_upload(receipt, "uploads/worker_payroll", f"{run_id}_receipt") if receipt else ""
         bp = _save_upload(bank, "uploads/worker_payroll", f"{run_id}_bank") if bank else ""
         sp = _save_upload(sheet, "uploads/worker_payroll", f"{run_id}_sheet") if sheet else ""
-        save_payment(run_id, _parse_date(pay_date), pay_mode, reference, remarks, rp, bp, sp)
+        save_payment(
+            run_id,
+            _parse_date(pay_date),
+            pay_mode,
+            reference,
+            remarks,
+            rp,
+            bp,
+            sp,
+            actor=st.session_state.get("user_name", "User"),
+            role=st.session_state.get("user_role", "Admin"),
+        )
         st.success("Payment recorded. Status: **Paid**")
         st.rerun()
 
 
 def _render_reports_tab():
-    st.markdown("#### Worker salary report")
+    st.markdown("#### Worker payroll reports")
     c1, c2 = st.columns(2)
     from_d = c1.date_input("From", value=datetime.now().replace(day=1).date(), key="wp_rpt_from")
     to_d = c2.date_input("To", value=datetime.now().date(), key="wp_rpt_to")
-    df = salary_report_df(_parse_date(from_d), _parse_date(to_d))
+    from_s, to_s = _parse_date(from_d), _parse_date(to_d)
+
+    report_kind = st.selectbox(
+        "Report",
+        [
+            "Payroll Report",
+            "Daily Wage Report",
+            "Attendance Report",
+            "OT Report",
+            "Advance Recovery Report",
+        ],
+        key="wp_report_kind",
+    )
+
+    if report_kind == "Daily Wage Report":
+        df = daily_wage_report_df(active_only=False)
+        file_stub = "daily_wage_report"
+    elif report_kind == "Attendance Report":
+        df = attendance_report_df(from_s, to_s)
+        file_stub = f"attendance_report_{from_s.replace('/', '-')}"
+    elif report_kind == "OT Report":
+        df = ot_report_df(from_s, to_s)
+        file_stub = f"ot_report_{from_s.replace('/', '-')}"
+    elif report_kind == "Advance Recovery Report":
+        df = advance_recovery_report_df(from_s, to_s)
+        file_stub = f"advance_recovery_{from_s.replace('/', '-')}"
+    else:
+        df = salary_report_df(from_s, to_s)
+        file_stub = f"payroll_report_{from_s.replace('/', '-')}"
+
     if df.empty:
-        st.info("No payroll data in range.")
+        st.info("No data for this report.")
     else:
         st.dataframe(df, width="stretch", hide_index=True)
+        _download_dataframe(df, f"{file_stub}.xlsx")
         st.download_button(
             "Export CSV",
             data=df.to_csv(index=False).encode("utf-8"),
-            file_name=f"worker_salary_report_{_parse_date(from_d).replace('/', '-')}.csv",
+            file_name=f"{file_stub}.csv",
             mime="text/csv",
             key="wp_rpt_csv",
         )
@@ -475,6 +588,10 @@ def _render_reports_tab():
 
 def _render_payslip_tab():
     st.markdown("#### Salary slip (PDF)")
+    st.caption(
+        "8hr/10hr site workers only. Staff payslips (monthly/daily wage) are under "
+        "**HR → Staff Payroll → Payroll Register**."
+    )
     runs = list_payroll_runs()
     if runs.empty:
         st.info("Generate payroll first.")
@@ -503,37 +620,27 @@ def page_worker_payroll():
     ensure_worker_payroll_schema()
     st.subheader("Worker Payroll")
     st.caption(
-        f"{ERP_LEGAL_NAME} · 8hr & 10hr workers · Actual hours salary · "
-        "Advance (1–15) & Final (16–end) cycles"
+        f"{ERP_LEGAL_NAME} · Category A (8 hr) & Category B (10 hr) · Salary from actual worked hours · "
+        "Advance cycle (1st–15th) & Final cycle (16th–month end)"
     )
 
-    tabs = st.tabs(
-        [
-            "Process Payroll",
-            "Workers",
-            "Attendance",
-            "Salary",
-            "Review",
-            "Payment",
-            "Reports",
-            "Salary Slip",
-        ]
-    )
+    default_tab = st.session_state.pop("wp_default_tab", None)
+    tab_labels = list(WORKER_PAYROLL_TABS)
+    tabs = st.tabs(tab_labels)
+    if default_tab in tab_labels:
+        st.info(f"Open the **{default_tab}** tab above.")
+
     with tabs[0]:
-        from modules.pages import page_payroll
-
-        page_payroll()
-    with tabs[1]:
         _render_workers_tab()
-    with tabs[2]:
+    with tabs[1]:
         _render_attendance_tab()
-    with tabs[3]:
+    with tabs[2]:
         _render_salary_tab()
-    with tabs[4]:
+    with tabs[3]:
         _render_review_tab()
-    with tabs[5]:
+    with tabs[4]:
         _render_payment_tab()
-    with tabs[6]:
+    with tabs[5]:
         _render_reports_tab()
-    with tabs[7]:
+    with tabs[6]:
         _render_payslip_tab()

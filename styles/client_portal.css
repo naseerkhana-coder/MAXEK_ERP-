@@ -1,0 +1,47 @@
+/* Client portal — mobile-friendly layout */
+body.maxek-client-portal section.main .block-container {
+  max-width: 1100px;
+  padding-top: 1rem;
+  padding-bottom: 2rem;
+}
+
+body.maxek-client-portal [data-testid="stSidebar"] {
+  background: linear-gradient(180deg, #0f2942 0%, #1a365d 100%);
+}
+
+body.maxek-client-portal [data-testid="stSidebar"] .stMarkdown p,
+body.maxek-client-portal [data-testid="stSidebar"] label {
+  color: #e8eef5;
+}
+
+body.maxek-client-portal .portal-hero {
+  background: #f7fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
+}
+
+body.maxek-client-portal .portal-metric {
+  text-align: center;
+  padding: 0.75rem;
+  border-radius: 8px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+}
+
+body.maxek-client-portal .portal-metric strong {
+  display: block;
+  font-size: 1.35rem;
+  color: #1a365d;
+}
+
+@media (max-width: 768px) {
+  body.maxek-client-portal section.main .block-container {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+  body.maxek-client-portal [data-testid="column"] {
+    min-width: 100% !important;
+  }
+}

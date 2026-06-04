@@ -7,10 +7,17 @@ import json
 import pandas as pd
 
 from modules.database import generate_id, get_boq_progress_stats, get_conn
+from modules.dpr_measurements import sum_billable_measurement_rows
 
 
 def line_progress_qty(measurements: list) -> float:
     return round(sum(float(m.get("calculated_quantity") or 0) for m in (measurements or [])), 4)
+
+
+def line_billable_qty(measurements: list, billing_measurement: str = "No") -> float:
+    if str(billing_measurement or "").upper() != "YES":
+        return 0.0
+    return sum_billable_measurement_rows(measurements)
 
 
 def build_boq_line(
@@ -35,6 +42,7 @@ def build_boq_line(
         "stats": dict(stats or {}),
         "measurements": list(measurements or []),
         "progress_quantity": line_progress_qty(measurements),
+        "billable_quantity": line_billable_qty(measurements, billing_measurement),
     }
 
 
@@ -87,6 +95,7 @@ def enrich_boq_lines_for_save(boq_lines: list, edit_dpr_id: str = "") -> list:
         bid = line["boq_item_id"]
         stats = get_boq_progress_stats(bid)
         prog = line_progress_qty(line.get("measurements"))
+        bill = line_billable_qty(line.get("measurements"), line.get("billing_measurement"))
         old_prog = old_by_line.get(line.get("line_id"), 0.0)
         done_after = float(stats["done_qty"]) - old_prog + prog
         balance_after = max(float(stats["total_qty"]) - done_after, 0.0)
@@ -94,6 +103,7 @@ def enrich_boq_lines_for_save(boq_lines: list, edit_dpr_id: str = "") -> list:
             {
                 **line,
                 "progress_quantity": prog,
+                "billable_quantity": bill,
                 "stats": stats,
                 "total_boq_quantity": stats["total_qty"],
                 "done_quantity": done_after,
@@ -133,6 +143,7 @@ def _measurement_from_sql_row(row, cols) -> dict:
         "dimensions_json": data.get("dimensions_json") or "",
         "boq_item_id": data.get("boq_item_id") or "",
         "boq_line_id": data.get("boq_line_id") or "",
+        "include_in_client_bill": int(data.get("include_in_client_bill") or 1),
         "preview_lines": [],
     }
 
@@ -143,7 +154,8 @@ def load_boq_lines_for_dpr(dpr_id: str) -> list:
         """
         SELECT line_id, boq_item_id, boq_number, boq_description, unit, billing_measurement,
                total_boq_quantity, done_quantity, billed_quantity, balance_quantity,
-               pending_billing_quantity, progress_quantity
+               pending_billing_quantity, progress_quantity,
+               COALESCE(billable_quantity, 0) AS billable_quantity
         FROM dpr_boq_lines WHERE dpr_id = ? ORDER BY id
         """,
         conn,
@@ -157,7 +169,8 @@ def load_boq_lines_for_dpr(dpr_id: str) -> list:
         """
         SELECT measurement_type, measurement_method, width_1, width_2, length_1, length_2,
                height, depth, nos, dia_mm, bend, avg_width, avg_length, avg_depth, qty,
-               calculated_quantity, unit, dimensions_json, boq_item_id, boq_line_id
+               calculated_quantity, unit, dimensions_json, boq_item_id, boq_line_id,
+               COALESCE(include_in_client_bill, 1) AS include_in_client_bill
         FROM dpr_measurements WHERE dpr_id = ? ORDER BY id
         """,
         conn,
@@ -204,7 +217,8 @@ def load_legacy_single_boq_line(dpr_id: str, report: dict) -> list:
         """
         SELECT measurement_type, measurement_method, width_1, width_2, length_1, length_2,
                height, depth, nos, dia_mm, bend, avg_width, avg_length, avg_depth, qty,
-               calculated_quantity, unit, dimensions_json, boq_item_id, boq_line_id
+               calculated_quantity, unit, dimensions_json, boq_item_id, boq_line_id,
+               COALESCE(include_in_client_bill, 1) AS include_in_client_bill
         FROM dpr_measurements WHERE dpr_id = ? ORDER BY id
         """,
         conn,
@@ -253,8 +267,8 @@ def persist_boq_lines(conn, dpr_id: str, boq_lines: list) -> None:
             INSERT INTO dpr_boq_lines(
                 line_id, dpr_id, boq_item_id, boq_number, boq_description, unit,
                 billing_measurement, total_boq_quantity, done_quantity, billed_quantity,
-                balance_quantity, pending_billing_quantity, progress_quantity
-            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
+                balance_quantity, pending_billing_quantity, progress_quantity, billable_quantity
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 line_id,
@@ -270,6 +284,9 @@ def persist_boq_lines(conn, dpr_id: str, boq_lines: list) -> None:
                 line.get("balance_quantity", 0),
                 line.get("pending_billing_quantity", 0),
                 line.get("progress_quantity", 0),
+                line.get("billable_quantity", line_billable_qty(
+                    line.get("measurements"), line.get("billing_measurement")
+                )),
             ),
         )
 

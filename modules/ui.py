@@ -930,6 +930,11 @@ def show_login_page():
     remember = st.checkbox("Remember me", value=remembered, key="login_remember")
     login_clicked = st.button("LOGIN", type="primary", key="login_btn")
 
+    st.divider()
+    if st.button("Client Portal sign-in", key="login_go_portal", use_container_width=True):
+        st.session_state.login_portal_mode = True
+        st.rerun()
+
     with st.expander("Forgot password?", expanded=False):
         st.caption(
             "Enter your registered email. When SMTP and APP_BASE_URL are configured, you receive a reset link. "
