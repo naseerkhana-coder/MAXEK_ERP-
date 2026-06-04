@@ -240,7 +240,7 @@ def render_page_header(user_name: str, on_logout=None, allowed_pages=None):
             f"""
             <div class="maxek-header-date-chip">
               <div>{today.strftime('%d %b %Y')}</div>
-              <span>{today.strftime('%a')}</span>
+              <span>{today.strftime('%a · %H:%M')}</span>
             </div>
             """,
             unsafe_allow_html=True,

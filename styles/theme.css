@@ -37,6 +37,10 @@ section[data-testid="stSidebar"] {
   background: var(--sidebar-bg) !important;
   border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
   transition: width 0.2s ease, min-width 0.2s ease, max-width 0.2s ease !important;
+  position: sticky !important;
+  top: 0 !important;
+  height: 100vh !important;
+  overflow-y: auto !important;
 }
 
 body.maxek-sidebar-collapsed section[data-testid="stSidebar"] {
@@ -1463,9 +1467,28 @@ div[data-testid="stForm"] h3 {
 .maxek-attendance-kpi-card.accent-orange { border-top-color: var(--accent-orange); }
 .maxek-attendance-kpi-card.accent-yellow { border-top-color: var(--accent-yellow); }
 .maxek-attendance-kpi-card.accent-purple { border-top-color: var(--accent-purple); }
-.maxek-attendance-kpi-card.accent-orange { border-top-color: var(--accent-orange); }
-.maxek-attendance-kpi-card.accent-yellow { border-top-color: var(--accent-yellow); }
 .maxek-attendance-kpi-card.accent-slate { border-top-color: var(--accent-red); }
+
+.maxek-attendance-form-card [data-testid="stHorizontalBlock"] {
+  gap: 0.45rem;
+}
+
+.maxek-attendance-form-card [data-testid="column"] .stTextInput,
+.maxek-attendance-form-card [data-testid="column"] .stNumberInput,
+.maxek-attendance-form-card [data-testid="column"] .stSelectbox,
+.maxek-attendance-form-card [data-testid="column"] .stDateInput {
+  margin-bottom: 0.15rem;
+}
+
+.maxek-attendance-table-wrap [data-testid="stDataFrame"] {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  overflow: hidden;
+}
+
+.maxek-attendance-table-wrap [data-testid="column"]:last-child button {
+  font-size: 0.76rem !important;
+}
 
 .maxek-attendance-kpi-label {
   font-size: 0.7rem;
