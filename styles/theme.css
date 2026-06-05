@@ -139,6 +139,29 @@ header[data-testid="stHeader"] {
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+.maxek-sidebar-submenu {
+  margin: 0.05rem 0 0.35rem 0.35rem;
+  padding-left: 0.35rem;
+  border-left: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+[data-testid="stSidebar"] .maxek-sidebar-submenu div.stButton > button {
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  min-height: 2.15rem !important;
+  height: 2.15rem !important;
+  padding-left: 0.85rem !important;
+  color: #e2e8f0 !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-color: rgba(255, 255, 255, 0.06) !important;
+}
+
+[data-testid="stSidebar"] .maxek-sidebar-submenu div.stButton > button[kind="primary"],
+[data-testid="stSidebar"] .maxek-sidebar-submenu div.stButton > button[data-testid="stBaseButton-primary"] {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8) !important;
+  font-weight: 700 !important;
+}
+
 .maxek-sidebar-search-label,
 .maxek-sidebar-block-title,
 .maxek-sidebar-menu-title {

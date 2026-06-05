@@ -496,6 +496,99 @@ def page_appr_petty():
     page_petty_expense_approval()
 
 
+def page_appr_history():
+    from modules.finance_workflow import render_approval_inbox
+
+    st.subheader("Approval History")
+    render_approval_inbox("History", ["Approved", "Posted", "Released", "Rejected"])
+
+
+def page_audit_log():
+    from modules.database import load_finance_audit
+
+    st.subheader("Audit Log")
+    st.caption("Finance and workflow audit trail across the ERP.")
+    df = load_finance_audit(limit=200)
+    if df.empty:
+        st.info("No audit entries recorded yet.")
+        return
+    show_cols = [c for c in ("action_at", "entity_type", "entity_id", "actor", "action", "old_status", "new_status", "comments") if c in df.columns]
+    st.dataframe(df[show_cols], use_container_width=True, hide_index=True)
+
+
+def _render_phase3_register(title: str, loader, key_prefix: str) -> None:
+    from modules.phase3_integration import _export_buttons, _report_filters
+
+    st.subheader(title)
+    project, d_from, d_to = _report_filters(key_prefix)
+    df = loader(project_name=project, date_from=d_from, date_to=d_to)
+    st.dataframe(df, use_container_width=True, hide_index=True)
+    _export_buttons(df, key_prefix, f"exp_{key_prefix}")
+
+
+def page_rpt_dpr_register():
+    from modules.phase3_integration_db import load_dpr_register
+
+    _render_phase3_register("DPR Register", load_dpr_register, "rpt_dpr")
+
+
+def page_rpt_measurement_register():
+    from modules.phase3_integration_db import load_measurement_book_register
+
+    _render_phase3_register("Measurement Book Register", load_measurement_book_register, "rpt_mb")
+
+
+def page_rpt_bbs_register():
+    from modules.phase3_integration_db import load_bbs_register
+
+    _render_phase3_register("BBS Register", load_bbs_register, "rpt_bbs")
+
+
+def page_rpt_finance_reports():
+    page_rpt_financial()
+
+
+def page_rpt_profitability_reports():
+    page_dash_profitability()
+
+
+def page_sub_boq_entries():
+    st.session_state.subcontractor_hint = "BOQ Entries"
+    page_subcontractors()
+
+
+def page_sub_measurement_entries():
+    st.session_state.subcontractor_hint = "BOQ / Measurement Rates"
+    page_subcontractors()
+
+
+def page_sub_bills():
+    st.session_state.subcontractor_hint = "Bills"
+    page_subcontractors()
+
+
+def page_settings_email():
+    st.subheader("Email Settings")
+    st.caption("SMTP and notification email configuration.")
+    st.info(
+        "Email delivery is configured on the server. User notification addresses "
+        "are maintained under Administration → Users."
+    )
+
+
+def page_settings_backup():
+    st.subheader("Backup & Restore")
+    st.caption("Database backup and restore.")
+    st.warning(
+        "Database backups are managed on the server. Contact your system administrator "
+        "for restore or migration requests."
+    )
+
+
+def page_settings_audit_route():
+    page_audit_log()
+
+
 # —— Correspondence / Documents ——
 def page_corr_dashboard():
     from modules.correspondence import page_corr_dashboard as _page
@@ -563,6 +656,17 @@ PAGE_ROUTES: dict[str, Callable[[], None]] = {
     "dash_pending": page_dash_pending,
     "dash_notifications": page_dash_notifications,
     "dash_calendar": page_calendar,
+    # Subcontract shortcuts
+    "sub_boq_entries": page_sub_boq_entries,
+    "sub_measurement_entries": page_sub_measurement_entries,
+    "sub_bills": page_sub_bills,
+    # Register reports
+    "rpt_dpr_register": page_rpt_dpr_register,
+    "rpt_measurement_register": page_rpt_measurement_register,
+    "rpt_bbs_register": page_rpt_bbs_register,
+    "rpt_finance_reports": page_rpt_finance_reports,
+    "rpt_profitability_reports": page_rpt_profitability_reports,
+    "appr_history": page_appr_history,
     # Master Management
     "master_client": lambda: _open_clients("clients"),
     "master_client_create": lambda: _open_clients("clients"),
@@ -756,11 +860,11 @@ PAGE_ROUTES: dict[str, Callable[[], None]] = {
     # Settings & Administration
     "settings_users": page_settings_users,
     "settings_roles": page_settings_users,
-    "settings_email": page_settings_system,
+    "settings_email": page_settings_email,
     "settings_whatsapp": page_settings_system,
     "settings_number_series": page_settings_system,
-    "settings_backup": page_settings_system,
-    "settings_audit": page_settings_system,
+    "settings_backup": page_settings_backup,
+    "settings_audit": page_settings_audit_route,
     "settings_erp": page_settings_system,
 }
 

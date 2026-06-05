@@ -66,8 +66,6 @@ def _logout(silent: bool = False):
         "_finance_hub_entry_type",
         "settings_focus",
         "sidebar_open_section",
-        "sidebar_favorites",
-        "sidebar_recent",
         "sidebar_menu_search",
         "sidebar_collapsed",
         "login_remember_user",

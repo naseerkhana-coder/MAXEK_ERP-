@@ -1,4 +1,4 @@
-"""ERP menu tree — MAXEK INDIA Construction ERP sidebar sections and page keys.
+"""ERP menu tree — MAXEK INDIA Construction ERP sidebar (9 groups + quick access).
 
 Workflow:
   Client → Project → Site → BOQ → Work Order → Purchase → Store → Accounts → Billing → Reports
@@ -10,36 +10,51 @@ from __future__ import annotations
 
 from modules.roles import CLIENT_PORTAL_ROLE, is_super_admin, resolve_role_pages
 
-# Home screen (sidebar + top bar Dashboard)
-MENU_DASHBOARD = ("dash_mgmt", "Dashboard", "🏠")
+# Default landing page (Management Dashboard)
+MENU_DASHBOARD = ("dash_mgmt", "Management Dashboard", "🏠")
 
-# Top bar: 5–7 primary modules only — detail lives in the left sidebar
+# Top bar — mirrors the nine sidebar groups (detail in left sidebar)
 TopNavItem = tuple[str, str, str]  # section_id, label, icon
 TOP_NAV_ITEMS: list[TopNavItem] = [
     ("dashboard", "Dashboard", "🏠"),
-    ("projects", "Projects", "🏗️"),
-    ("procurement", "Procurement", "🛒"),
+    ("projects", "Projects", "📁"),
+    ("hr", "HR & Payroll", "👷"),
     ("inventory", "Inventory", "📦"),
-    ("accounts", "Accounts", "💰"),
+    ("accounts", "Finance", "💰"),
+    ("subcontract", "Subcontract", "📄"),
     ("reports", "Reports", "📊"),
-    ("settings", "Settings", "⚙️"),
+    ("approvals", "Approvals", "✅"),
+    ("settings", "Admin", "⚙️"),
 ]
 
 SECTION_DEFAULT_PAGE: dict[str, str] = {
     "dashboard": "dash_mgmt",
-    "crm": "master_client",
     "projects": "proj_create",
-    "tender": "proj_boq",
-    "procurement": "purch_requisition",
-    "inventory": "store_receipt",
     "hr": "master_employee",
+    "inventory": "master_material",
     "accounts": "petty_dashboard",
-    "contracts": "proj_wo_sub",
-    "letters": "doc_incoming",
-    "reports": "rpt_proj_status",
+    "subcontract": "master_contractor_sub",
+    "reports": "rpt_dpr_register",
+    "approvals": "dash_pending",
     "settings": "settings_users",
-    "account": "account_profile",
 }
+
+# Compact shortcuts (not counted as a top-level sidebar group)
+QuickAccessItem = tuple[str, str, str]  # page_key, label, icon
+QUICK_ACCESS_ITEMS: list[QuickAccessItem] = [
+    ("dash_calendar", "Calendar", "📅"),
+    ("dash_notifications", "Notifications", "🔔"),
+    ("dash_pending", "Pending Approvals", "✅"),
+]
+
+# Partial / settings screens visible only to Admin / Owner roles
+ADMIN_ONLY_PAGE_KEYS = frozenset(
+    {
+        "settings_email",
+        "settings_backup",
+        "portal_admin_assign",
+    }
+)
 
 # Available to every authenticated role (profile and password).
 ACCOUNT_PAGE_KEYS = frozenset({"account_profile"})
@@ -61,17 +76,18 @@ MenuSection = tuple[str, str, str, list[MenuGroup]]
 
 MENU_SECTIONS: list[MenuSection] = [
     (
-        "crm",
-        "CRM",
-        "👥",
+        "dashboard",
+        "Dashboard",
+        "🏠",
         [
             (
-                "crm_all",
+                "dashboard_all",
                 None,
                 [
-                    ("master_client_create", "Leads"),
-                    ("master_client", "Clients"),
-                    ("doc_followup", "Follow-up"),
+                    ("dash_mgmt", "Management Dashboard"),
+                    ("dash_project", "Project Dashboard"),
+                    ("dash_hr", "HR Dashboard"),
+                    ("dash_store", "Store Dashboard"),
                 ],
             ),
         ],
@@ -79,72 +95,19 @@ MENU_SECTIONS: list[MenuSection] = [
     (
         "projects",
         "Projects",
-        "🏗️",
+        "📁",
         [
             (
                 "projects_all",
                 None,
                 [
                     ("proj_create", "Project Creation"),
-                    ("proj_dpr_weekly", "Project Progress"),
-                    ("doc_site", "Site Photos"),
+                    ("master_client_create", "Client Creation"),
+                    ("proj_boq", "BOQ"),
                     ("proj_dpr_daily", "Daily Progress (DPR)"),
                     ("proj_measurement_book", "Measurement Book"),
-                    ("proj_material_planning", "Material Planning"),
                     ("proj_profitability", "Project Profitability"),
-                    ("portal_admin_assign", "Client Portal Access"),
-                ],
-            ),
-        ],
-    ),
-    (
-        "tender",
-        "Tender & Estimation",
-        "📋",
-        [
-            (
-                "tender_all",
-                None,
-                [
-                    ("proj_boq", "BOQ"),
-                    ("proj_boq_approval", "Estimation"),
-                    ("purch_quotation", "Quotation"),
-                    ("purch_rfq", "Tender Submission"),
-                ],
-            ),
-        ],
-    ),
-    (
-        "procurement",
-        "Procurement",
-        "🛒",
-        [
-            (
-                "procurement_all",
-                None,
-                [
-                    ("purch_requisition", "Material Request"),
-                    ("purch_approval", "Purchase Request"),
-                    ("purch_order", "Purchase Order"),
-                    ("master_vendor", "Vendor Management"),
-                ],
-            ),
-        ],
-    ),
-    (
-        "inventory",
-        "Inventory",
-        "📦",
-        [
-            (
-                "inventory_all",
-                None,
-                [
-                    ("store_receipt", "Material Inward"),
-                    ("store_site_stock", "Stock"),
-                    ("store_issue", "Material Issue"),
-                    ("store_consumption_control", "Consumption Control"),
-                    ("asset_register", "Asset Register"),
+                    ("proj_material_planning", "Material Planning"),
                 ],
             ),
         ],
@@ -158,18 +121,38 @@ MENU_SECTIONS: list[MenuSection] = [
                 "hr_all",
                 None,
                 [
-                    ("master_employee", "Employees"),
+                    ("master_employee", "Staff Master"),
+                    ("master_labour", "Worker Master"),
                     ("hr_attendance", "Attendance"),
-                    ("hr_leave", "Leave"),
-                    ("hr_payroll", "Worker Payroll"),
                     ("hr_staff_payroll", "Staff Payroll"),
+                    ("hr_payroll", "Worker Payroll"),
+                ],
+            ),
+        ],
+    ),
+    (
+        "inventory",
+        "Inventory & Store",
+        "📦",
+        [
+            (
+                "inventory_all",
+                None,
+                [
+                    ("master_material", "Material Master"),
+                    ("purch_requisition", "Purchase Request"),
+                    ("purch_order", "Purchase Order"),
+                    ("purch_grn", "Goods Receipt"),
+                    ("store_issue", "Material Issue"),
+                    ("store_site_stock", "Stock Register"),
+                    ("store_consumption_control", "Consumption Control"),
                 ],
             ),
         ],
     ),
     (
         "accounts",
-        "Accounts",
+        "Accounts & Finance",
         "💰",
         [
             (
@@ -177,49 +160,28 @@ MENU_SECTIONS: list[MenuSection] = [
                 None,
                 [
                     ("petty_dashboard", "Petty Cash"),
-                    ("petty_request", "Fund Requests"),
-                    ("petty_allocation", "Fund Issue"),
-                    ("petty_expense", "Petty Expenses"),
-                    ("petty_verification", "Expense Approval"),
-                    ("petty_reports", "Petty Reports"),
-                    ("purch_invoice", "Invoices"),
-                    ("acc_payment", "Payments"),
                     ("acc_payment_voucher", "Payment Voucher"),
-                    ("acc_gst_reports", "GST"),
+                    ("proj_bill_client", "Client Bills"),
+                    ("purch_invoice", "Vendor Bills"),
+                    ("acc_payment", "Payments"),
+                    ("acc_receipt", "Receipts"),
                 ],
             ),
         ],
     ),
     (
-        "contracts",
-        "Contract Management",
+        "subcontract",
+        "Subcontract",
         "📄",
         [
             (
-                "contracts_all",
+                "subcontract_all",
                 None,
                 [
-                    ("master_client_contract", "Main Contract"),
-                    ("master_contractor_sub", "Subcontractor"),
-                    ("proj_wo_sub", "Work Orders"),
-                    ("proj_bill_ra", "Running Bills"),
-                ],
-            ),
-        ],
-    ),
-    (
-        "letters",
-        "Letter & DMS",
-        "📨",
-        [
-            (
-                "letters_all",
-                None,
-                [
-                    ("doc_incoming", "Incoming Letter"),
-                    ("doc_outgoing", "Outgoing Letter"),
-                    ("doc_draft", "Letter Drafting"),
-                    ("doc_contract", "Documents"),
+                    ("master_contractor_sub", "Subcontractor Master"),
+                    ("sub_boq_entries", "BOQ Entries"),
+                    ("sub_measurement_entries", "Measurement Entries"),
+                    ("sub_bills", "Subcontract Bills"),
                 ],
             ),
         ],
@@ -233,33 +195,36 @@ MENU_SECTIONS: list[MenuSection] = [
                 "reports_all",
                 None,
                 [
-                    ("rpt_receivable", "Financial Reports"),
-                    ("rpt_proj_status", "Project Reports"),
-                    ("dash_profitability", "Project Profitability"),
-                    ("rpt_phase3", "Phase 3 Integration"),
-                    ("rpt_material_planning", "Material Planning Report"),
+                    ("rpt_dpr_register", "DPR Register"),
+                    ("rpt_measurement_register", "Measurement Book Register"),
+                    ("rpt_bbs_register", "BBS Register"),
+                    ("rpt_payroll", "Payroll Reports"),
                     ("store_reports", "Inventory Reports"),
+                    ("rpt_finance_reports", "Finance Reports"),
+                    ("rpt_profitability_reports", "Profitability Reports"),
                 ],
             ),
         ],
     ),
     (
-        "account",
-        "My Account",
-        "👤",
+        "approvals",
+        "Approvals",
+        "✅",
         [
             (
-                "account_all",
+                "approvals_all",
                 None,
                 [
-                    ("account_profile", "My Profile"),
+                    ("dash_pending", "Pending Approvals"),
+                    ("appr_history", "Approval History"),
+                    ("settings_audit", "Audit Log"),
                 ],
             ),
         ],
     ),
     (
         "settings",
-        "Settings",
+        "Administration",
         "⚙️",
         [
             (
@@ -267,8 +232,11 @@ MENU_SECTIONS: list[MenuSection] = [
                 None,
                 [
                     ("settings_users", "Users"),
-                    ("settings_roles", "Permissions"),
-                    ("master_branch", "Company Setup"),
+                    ("settings_roles", "Roles & Permissions"),
+                    ("master_branch", "Company Settings"),
+                    ("settings_email", "Email Settings"),
+                    ("settings_backup", "Backup & Restore"),
+                    ("portal_admin_assign", "Client Portal Access"),
                 ],
             ),
         ],
@@ -276,7 +244,56 @@ MENU_SECTIONS: list[MenuSection] = [
 ]
 
 # Routed in erp_router but hidden from the sidebar (legacy bookmarks / deep links).
-ROUTER_ONLY_PAGE_KEYS = frozenset({"hr_salary_slip"})
+_CLIENT_PORTAL_PAGES = frozenset(
+    {
+        "portal_dash",
+        "portal_projects",
+        "portal_invoices",
+        "portal_bills",
+        "portal_documents",
+        "portal_progress",
+        "portal_payments",
+        "account_profile",
+    }
+)
+
+_INTERNAL_PORTAL_ADMIN_PAGES = frozenset({"portal_admin_assign"})
+
+ROUTER_ONLY_PAGE_KEYS = frozenset(
+    {
+        "hr_salary_slip",
+        "hr_leave",
+        "master_client",
+        "doc_followup",
+        "doc_site",
+        "proj_dpr_weekly",
+        "proj_boq_approval",
+        "purch_quotation",
+        "purch_rfq",
+        "purch_approval",
+        "master_vendor",
+        "store_receipt",
+        "asset_register",
+        "petty_request",
+        "petty_allocation",
+        "petty_expense",
+        "petty_verification",
+        "petty_reports",
+        "acc_gst_reports",
+        "master_client_contract",
+        "proj_wo_sub",
+        "proj_bill_ra",
+        "doc_incoming",
+        "doc_outgoing",
+        "doc_draft",
+        "doc_contract",
+        "rpt_receivable",
+        "rpt_proj_status",
+        "dash_profitability",
+        "rpt_phase3",
+        "rpt_material_planning",
+    }
+)
 
 CORRESPONDENCE_PAGES = frozenset(
     {
@@ -425,8 +442,26 @@ def page_label(page_key: str) -> str:
         return "Worker Payroll — Salary Slip"
     if page_key == MENU_DASHBOARD[0]:
         return MENU_DASHBOARD[1]
-    if page_key in {"dash_profitability", "proj_profitability"}:
+    if page_key in {"dash_profitability", "proj_profitability", "rpt_profitability_reports"}:
         return "Project Profitability"
+    _report_labels = {
+        "rpt_dpr_register": "DPR Register",
+        "rpt_measurement_register": "Measurement Book Register",
+        "rpt_bbs_register": "BBS Register",
+        "rpt_finance_reports": "Finance Reports",
+        "rpt_profitability_reports": "Profitability Reports",
+        "sub_boq_entries": "BOQ Entries",
+        "sub_measurement_entries": "Measurement Entries",
+        "sub_bills": "Subcontract Bills",
+        "appr_history": "Approval History",
+        "settings_audit": "Audit Log",
+        "settings_email": "Email Settings",
+        "settings_backup": "Backup & Restore",
+        "master_branch": "Company Settings",
+        "settings_roles": "Roles & Permissions",
+    }
+    if page_key in _report_labels:
+        return _report_labels[page_key]
     for _sid, _label, _icon, groups in MENU_SECTIONS:
         for key, label in iter_section_items(groups):
             if key == page_key:
@@ -460,15 +495,31 @@ def normalize_page_key(page_key: str | None) -> str:
     mapped = LEGACY_PAGE_MAP.get(page_key, page_key)
     if mapped in all_page_keys():
         return mapped
+    try:
+        from modules.erp_router import PAGE_HANDLERS
+
+        if mapped in PAGE_HANDLERS:
+            return mapped
+    except ImportError:
+        pass
     return MENU_DASHBOARD[0]
 
 
 _ACCOUNTS_MANAGER_PAGES = (
-    pages_in_sections("accounts", "procurement", "reports", "contracts", "letters")
-    | {MENU_DASHBOARD[0], "dash_pending", "dash_notifications", "dash_profitability", "proj_profitability"}
+    pages_in_sections("accounts", "inventory", "subcontract", "reports", "approvals")
     | {
+        MENU_DASHBOARD[0],
+        "dash_mgmt",
+        "dash_project",
+        "dash_accounts",
+        "dash_pending",
+        "dash_notifications",
+        "dash_calendar",
+        "dash_profitability",
+        "proj_profitability",
         "master_vendor",
         "master_client",
+        "master_client_create",
         "proj_create",
         "proj_site_budget",
         "rpt_cost_analysis",
@@ -481,14 +532,20 @@ _ACCOUNTS_MANAGER_PAGES = (
         "petty_reports",
         "petty_verification",
         "petty_settlement",
+        "petty_expense",
         "acc_receipt",
         "acc_journal",
+        "proj_bill_client",
+        "proj_bill_ra",
     }
-)
+) | CORRESPONDENCE_PAGES
 
-_ACCOUNTS_EXECUTIVE_PAGES = pages_in_sections("accounts", "procurement") | {
+_ACCOUNTS_EXECUTIVE_PAGES = pages_in_sections("accounts", "inventory") | {
     MENU_DASHBOARD[0],
+    "dash_mgmt",
     "dash_pending",
+    "dash_notifications",
+    "dash_calendar",
     "acc_receipt",
     "acc_payment",
     "acc_payment_voucher",
@@ -499,10 +556,11 @@ _ACCOUNTS_EXECUTIVE_PAGES = pages_in_sections("accounts", "procurement") | {
     "petty_verification",
     "proj_create",
     "master_vendor",
+    "purch_requisition",
+    "purch_order",
 }
 
-_HR_PAYROLL_PAGES = pages_in_sections("hr", "reports") | {
-    MENU_DASHBOARD[0],
+_HR_PAYROLL_PAGES = pages_in_sections("hr", "reports", "dashboard") | {
     "master_employee",
     "master_labour",
     "master_branch",
@@ -511,10 +569,10 @@ _HR_PAYROLL_PAGES = pages_in_sections("hr", "reports") | {
     "hr_staff_payroll",
     "hr_salary_slip",
     "hr_reports",
+    "dash_hr",
 }
 
-_STORE_KEEPER_PAGES = pages_in_sections("inventory", "procurement", "reports") | {
-    MENU_DASHBOARD[0],
+_STORE_KEEPER_PAGES = pages_in_sections("inventory", "reports", "dashboard") | {
     "proj_create",
     "proj_material_planning",
     "store_consumption_control",
@@ -522,13 +580,25 @@ _STORE_KEEPER_PAGES = pages_in_sections("inventory", "procurement", "reports") |
     "master_equipment",
     "purch_grn",
     "store_return",
+    "dash_store",
+    "dash_calendar",
+    "dash_notifications",
 }
 
 _PROJECT_MANAGER_PAGES = (
-    pages_in_sections("projects", "procurement", "inventory", "contracts", "letters", "reports", "tender", "crm")
-    | {MENU_DASHBOARD[0], "dash_pending", "dash_notifications", "dash_profitability", "proj_profitability"}
+    pages_in_sections(
+        "dashboard",
+        "projects",
+        "inventory",
+        "subcontract",
+        "reports",
+        "approvals",
+        "accounts",
+    )
+    | _INTERNAL_PORTAL_ADMIN_PAGES
     | {
         "master_client",
+        "master_client_create",
         "master_contractor_sub",
         "proj_wo_sub",
         "petty_dashboard",
@@ -538,39 +608,35 @@ _PROJECT_MANAGER_PAGES = (
         "appr_leave",
         "appr_purchase",
         "appr_work_order",
+        "master_vendor",
+        "purch_invoice",
+        "proj_bill_client",
+        "proj_bill_ra",
     }
-)
+) | CORRESPONDENCE_PAGES
 
-_SITE_ENGINEER_PAGES = pages_in_sections("projects", "inventory", "accounts", "tender") | {
+_SITE_ENGINEER_PAGES = {
     MENU_DASHBOARD[0],
+    "dash_mgmt",
+    "dash_project",
+    "dash_calendar",
+    "dash_notifications",
+    "dash_pending",
     "proj_create",
+    "proj_boq",
+    "proj_dpr_daily",
+    "proj_measurement_book",
     "proj_material_planning",
-    "store_consumption_control",
-    "proj_wo_sub",
-    "proj_wo_internal",
     "purch_requisition",
     "purch_order",
-    "hr_labour_attendance",
+    "purch_grn",
+    "store_issue",
+    "store_consumption_control",
     "petty_expense",
     "petty_dashboard",
-    "petty_request",
+    "hr_labour_attendance",
     "doc_site",
 }
-
-_CLIENT_PORTAL_PAGES = frozenset(
-    {
-        "portal_dash",
-        "portal_projects",
-        "portal_invoices",
-        "portal_bills",
-        "portal_documents",
-        "portal_progress",
-        "portal_payments",
-        "account_profile",
-    }
-)
-
-_INTERNAL_PORTAL_ADMIN_PAGES = frozenset({"portal_admin_assign"})
 
 ROLE_PAGE_ACCESS: dict[str, set[str]] = {
     "Admin": set(),  # resolved via _full_router_page_keys in allowed_pages_for_role
@@ -603,4 +669,5 @@ def allowed_pages_for_role(role: str) -> set[str]:
     pages = ROLE_PAGE_ACCESS.get(canonical, ROLE_PAGE_ACCESS.get(role, {MENU_DASHBOARD[0]}))
     if canonical in ("Admin", "MD") or role in ("Admin", "MD"):
         return _full_router_page_keys() | ACCOUNT_PAGE_KEYS
-    return pages | ACCOUNT_PAGE_KEYS
+    pages = pages | ACCOUNT_PAGE_KEYS
+    return pages - ADMIN_ONLY_PAGE_KEYS
