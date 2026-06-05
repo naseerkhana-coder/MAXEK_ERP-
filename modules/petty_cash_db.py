@@ -332,7 +332,7 @@ def log_petty_cash_audit(
 
 
 def load_expense_categories() -> list[str]:
-    heads = load_lookup("expense_heads")
+    heads = load_lookup("expense_heads", "head_name")
     if heads:
         return list(heads)
     return [

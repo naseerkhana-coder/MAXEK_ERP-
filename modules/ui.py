@@ -541,8 +541,13 @@ def render_dashboard_home(user_name: str):
         "notifications": dashboard_settings.get("show_notifications", True),
     }
 
+    _action_centre_sections = frozenset(
+        {"pending_approvals", "recent_activities", "site_updates", "recent_payments"}
+    )
     for section_key in section_order:
-        if section_key in ("pending_approvals", "recent_activities", "site_updates"):
+        if section_key in _action_centre_sections:
+            continue
+        if section_key not in section_renderers:
             continue
         if not section_enabled.get(section_key, True):
             continue

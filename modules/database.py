@@ -4123,6 +4123,11 @@ def get_dashboard_settings():
         raw_value = str(row["setting_value"]).strip()
         if key == "section_order":
             order = [item.strip() for item in raw_value.split(",") if item.strip() in DASHBOARD_SECTION_LABELS]
+            # recent_payments is legacy; action centre renders recent_activities instead.
+            order = [
+                "recent_activities" if item == "recent_payments" else item
+                for item in order
+            ]
             remaining = [item for item in DASHBOARD_SECTION_ORDER_DEFAULT if item not in order]
             settings[key] = order + remaining
         elif not key.startswith("role_"):
