@@ -84,6 +84,97 @@ Working directory: `/opt/MAXEK_ERP`
 
 ---
 
+## Post-push VPS steps
+
+**Live path:** production scripts and systemd use **`/var/www/maxek-erp`** (not `/opt/MAXEK_ERP`). Confirm with `systemctl cat maxek-erp` before first deploy.
+
+**Default branch:** GitHub `origin/HEAD` → **`master`**. Merge feature work via PR before `git pull` on the server unless you intentionally deploy a feature branch.
+
+### A. Git pull deploy (preferred after merge to `master`)
+
+```bash
+ssh root@72.61.224.204
+cd /var/www/maxek-erp
+git fetch origin
+git checkout master
+git pull origin master
+bash scripts/server_update.sh
+sudo systemctl restart maxek-api   # if mobile API unit exists
+sudo systemctl is-active maxek-erp maxek-api
+curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8501/
+```
+
+`scripts/server_update.sh` activates `.venv`, runs `pip install -r requirements.txt`, `init_db()`, and restarts `maxek-erp` when the unit is active.
+
+### B. SFTP push deploy (feature branch / hotfix without merge)
+
+From your PC (requires `MAXEK_SSH_PASSWORD` or `--password`):
+
+```powershell
+cd "C:\path\to\MAXEK_ERP"
+$env:MAXEK_SSH_PASSWORD = "your-vps-password"
+python scripts/push_all_updates.py --host 72.61.224.204 --remote-dir /var/www/maxek-erp
+```
+
+Uploads all `modules/*.py`, `web_app.py`, assets; runs `init_db`, optional BOQ repair, `systemctl restart maxek-erp`.
+
+### C. First-time or missing systemd (Streamlit)
+
+```bash
+cat > /etc/systemd/system/maxek-erp.service <<'EOF'
+[Unit]
+Description=MAXEK ERP Streamlit
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/var/www/maxek-erp
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-/var/www/maxek-erp/.env
+ExecStart=/var/www/maxek-erp/.venv/bin/streamlit run web_app.py --server.port 8501 --server.address 127.0.0.1
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl daemon-reload
+systemctl enable --now maxek-erp
+```
+
+Copy `deploy/maxek-api.service` for the FastAPI mobile API on port 8001 if needed.
+
+### D. Pre-deploy backup (production DB)
+
+```bash
+cp /var/www/maxek-erp/database/maxek_payroll.db \
+   /var/www/maxek-erp/backups/maxek_payroll_$(date +%Y%m%d).db
+```
+
+### E. Post-deploy smoke (on VPS)
+
+```bash
+cd /var/www/maxek-erp && source .venv/bin/activate
+python -m pytest -q --tb=no
+python -c "from modules.erp_router import PAGE_HANDLERS; print(len(PAGE_HANDLERS), 'handlers OK')"
+curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8501/
+python scripts/test_smtp.py --to ops@yourcompany.com
+```
+
+### F. Merge feature branch → `master` (GitHub CLI)
+
+```powershell
+cd "C:\path\to\MAXEK_ERP"
+git checkout cursor/client-proj-integr-1580d
+git push -u origin HEAD
+gh pr create --base master --head cursor/client-proj-integr-1580d --title "Deploy: Phase 3 client/project integration" --body "## Summary`n- Phase 3 modules, PDFs, workflows, UAT docs`n- Local: pytest pass, init_db OK`n`n## Test plan`n- [ ] VPS git pull + server_update.sh`n- [ ] Login smoke`n- [ ] SMTP test_smtp.py"
+# After review:
+gh pr merge --merge
+```
+
+---
+
 ## Email (SMTP) for workflow notifications
 
 Set these environment variables before starting Streamlit (or in systemd `Environment=`):

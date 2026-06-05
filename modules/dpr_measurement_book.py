@@ -165,4 +165,6 @@ def page_measurement_book():
                 "Download BBS PDF",
                 data=st.session_state["mb_bbs_pdf_bytes"],
                 file_name=f"bbs_{safe_name}_{date.today().strftime('%Y%m%d')}.pdf",
-                mime="application/pd
+                mime="application/pdf",
+                key="mb_bbs_pdf_dl",
+            )

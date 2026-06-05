@@ -1,0 +1,93 @@
+MAXEK ERP — deployment verification report
+Generated: 2026-06-05 (post-push continuation)
+
+=== LOCAL VERIFY (executed) ===
+branch: cursor/client-proj-integr-1580d
+commit: 094923c (pushed to origin/cursor/client-proj-integr-1580d)
+init_db: OK
+pytest: 92 passed (61s) — system Python 3.13
+pdf_import: OK (generate_worker_salary_slip_pdf)
+page_handlers: 193 (66 navigation keys; import smoke OK after dpr_measurement_book fix)
+streamlit_http_8501: NOT RUNNING (connection refused at verify time)
+
+=== FIX APPLIED (uncommitted — push before VPS) ===
+modules/dpr_measurement_book.py — truncated mime string caused SyntaxError on erp_router import; completed download_button block.
+DEPLOY.md — added "Post-push VPS steps" (paths, git pull, SFTP, systemd, PR merge).
+
+=== VPS DEPLOY (blocked — not executed) ===
+reason: No SSH credentials in this session (MAXEK_SSH_PASSWORD unset; gh auth not configured)
+target_host: 72.61.224.204 (from scripts/push_all_updates.py)
+remote_path: /var/www/maxek-erp
+systemd_units: maxek-erp (Streamlit :8501), maxek-api (uvicorn :8001)
+
+Copy-paste on VPS after merge/push:
+  ssh root@72.61.224.204
+  cd /var/www/maxek-erp
+  cp database/maxek_payroll.db backups/maxek_payroll_$(date +%Y%m%d).db
+  git fetch origin && git pull origin master
+  bash scripts/server_update.sh
+  sudo systemctl restart maxek-api
+  sudo systemctl is-active maxek-erp maxek-api
+  curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8501/
+
+Or SFTP from PC:
+  $env:MAXEK_SSH_PASSWORD = "<vps-password>"
+  python scripts/push_all_updates.py --host 72.61.224.204 --remote-dir /var/www/maxek-erp
+
+=== MERGE TO master ===
+default_branch: master (origin/HEAD -> origin/master)
+feature_branch_commits_ahead_of_master: 6 (094923c and predecessors)
+action: Open PR cursor/client-proj-integr-1580d -> master, merge, then git pull on VPS.
+gh blocked: run `gh auth login` or create PR in GitHub UI.
+Do NOT force-push master.
+
+=== SMTP (documented — ops pending) ===
+Required env (systemd EnvironmentFile or /var/www/maxek-erp/.env):
+  SMTP_HOST, SMTP_USER, SMTP_PASSWORD (or SMTP_PASS)
+Optional: SMTP_PORT (587), SMTP_FROM, SMTP_TLS (1), APP_BASE_URL, ERP_BASE_URL
+Test on VPS:
+  python scripts/test_smtp.py --to ops@yourcompany.com
+  python scripts/test_smtp.py --to ops@yourcompany.com --scenario password_reset
+Populate users.email for workflow and forgot-password recipients.
+
+=== UAT SMOKE (partial) ===
+[PASS] pytest suite
+[PASS] init_db
+[PASS] PAGE_HANDLERS import (after syntax fix)
+[SKIP] Streamlit HTTP 8501 — app not running locally
+[SKIP] Browser page walk — requires running Streamlit + login
+[SKIP] SMTP live send — no credentials in dev
+
+=== PRODUCTION READINESS ===
+Implementation checklist: 79% (38/48 per UAT_READINESS_REPORT.md)
+Phase 1 gate (code): 4/4 PASS
+Deploy pipeline readiness: ~85% (code verified; VPS + SMTP + PR merge remain)
+
+Remaining blockers before new feature dev:
+1. Commit + push dpr_measurement_book fix (blocks Streamlit import on VPS if 094923c deployed as-is)
+2. PR merge feature branch -> master (or explicit SFTP deploy of branch)
+3. VPS git pull / push_all_updates + systemd restart (needs SSH password)
+4. Change default admin password on production
+5. DB backup before deploy
+6. SMTP ops test (test_smtp.py) in production env
+7. Hands-on UAT sign-off per PRODUCTION_DEPLOYMENT_CHECKLIST.md
+
+=== RAW VERIFY LOG ===
+python=C:\Users\rajee\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe
+cwd=C:\Users\rajee\OneDrive - Bab Al Theqa (1)\MAXEK_ERP
+=== git_head exit=0 ===
+094923c90709fddd7c40de7aaef26c568181418c
+=== git_status exit=0 ===
+M DEPLOY.md
+ M modules/dpr_measurement_book.py
+=== git_remote exit=0 ===
+origin	https://github.com/naseerkhana-coder/MAXEK_ERP-.git (fetch)
+origin	https://github.com/naseerkhana-coder/MAXEK_ERP-.git (push)
+=== init_db exit=0 ===
+init_db OK
+=== pytest exit=0 ===
+92 passed in 61.51s
+=== pdf_import exit=0 ===
+import OK generate_worker_salary_slip_pdf
+=== page_handlers ===
+193 handlers OK
