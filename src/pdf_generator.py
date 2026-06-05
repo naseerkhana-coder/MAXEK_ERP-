@@ -1,3 +1,5 @@
+"""Legacy Tk desktop payslip — use modules.document_pdfs for Streamlit ERP."""
+
 from datetime import datetime
 from pathlib import Path
 
@@ -7,6 +9,7 @@ from .settings import PDF_REPORTS
 
 
 def create_payslip_pdf(filename: str, data: dict) -> Path:
+    """Deprecated: prefer modules.document_pdfs.generate_worker_salary_slip_pdf."""
     path = PDF_REPORTS / filename
     c = canvas.Canvas(str(path))
     c.setFont("Helvetica-Bold", 18)

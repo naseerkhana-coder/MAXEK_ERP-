@@ -6,6 +6,7 @@ import pandas as pd
 import streamlit as st
 
 from modules.branding import ERP_LEGAL_NAME
+from modules.document_pdfs import generate_client_invoice_pdf, generate_subcontractor_bill_pdf
 from modules.database import (
     DATE_FMT,
     generate_id,
@@ -58,16 +59,29 @@ def _bill_html(title, header_rows, line_rows, totals, footer=""):
     """
 
 
-def _render_print_download(html, filename):
-    st.markdown("#### Print / Save as PDF")
-    st.caption("Use browser Print (Ctrl+P) and choose 'Save as PDF', or download the HTML file.")
-    st.download_button(
-        "Download Bill (HTML)",
+def _render_print_download(html, filename, *, pdf_bytes=None, pdf_filename=None):
+    st.markdown("#### Download / Print")
+    c1, c2 = st.columns(2)
+    if pdf_bytes and pdf_filename:
+        c1.download_button(
+            "Download PDF",
+            data=pdf_bytes,
+            file_name=pdf_filename,
+            mime="application/pdf",
+            width="stretch",
+            key=f"pdf_{pdf_filename}",
+        )
+    else:
+        c1.caption("PDF not available for this bill.")
+    c2.download_button(
+        "Download HTML",
         data=html,
         file_name=filename,
         mime="text/html",
         width="stretch",
+        key=f"html_{filename}",
     )
+    st.caption("Or use browser Print (Ctrl+P) on the preview below → Save as PDF.")
     st.components.v1.html(html, height=480, scrolling=True)
 
 
@@ -79,6 +93,8 @@ def _render_client_bill_tab():
         st.markdown("#### Pending from DPR (ready to invoice client)")
         show_df = pending_df.copy()
         show_df["pending_amount"] = show_df["pending_qty"] * show_df["approved_rate"]
+        show_df["already_billed_qty"] = show_df["client_billed_quantity"]
+        show_df["balance_billing_qty"] = show_df["pending_qty"]
         st.dataframe(
             show_df[
                 [
@@ -87,6 +103,9 @@ def _render_client_bill_tab():
                     "project_name",
                     "client_name",
                     "boq_number",
+                    "billable_progress",
+                    "already_billed_qty",
+                    "balance_billing_qty",
                     "pending_qty",
                     "approved_rate",
                     "pending_amount",
@@ -180,6 +199,14 @@ def _render_client_bill_tab():
         st.success(f"Bill total: Rs {total:,.2f}")
         remarks = st.text_input("Bill Remarks", key="cb_remarks")
         if st.button("GENERATE CLIENT BILL", type="primary", width="stretch"):
+            from modules.phase3_integration import run_after_client_bill_saved
+            from modules.phase3_integration_db import validate_client_bill_lines
+
+            ok, errs = validate_client_bill_lines(st.session_state.client_bill_draft_lines)
+            if not ok:
+                for err in errs:
+                    st.error(err)
+                st.stop()
             bill_id = generate_id("CBL", "client_bills")
             bill_no = generate_id("CB", "client_bills")
             conn = get_conn()
@@ -235,14 +262,42 @@ def _render_client_bill_tab():
                     )
             conn.commit()
             conn.close()
+            try:
+                run_after_client_bill_saved(project_name)
+            except Exception:
+                pass
             st.session_state.client_bill_draft_lines = []
             st.session_state["print_client_bill_id"] = bill_id
             st.success(f"Client bill created. Bill No: {bill_no}")
             st.rerun()
 
 
-def _render_sub_bill_tab(bill_type, preview_fn, title):
+SUBCONTRACTOR_BILL_MODES = {
+    "Measurement Based Billing (BOQ)": ("Quantity", subcontractor_quantity_bill_preview),
+    "Payroll Based Billing (Attendance)": ("Manpower", subcontractor_manpower_bill_preview),
+}
+
+
+def _render_subcontractor_billing_tab():
+    st.markdown("### Subcontractor Billing")
+    st.caption(
+        "**Measurement Based** — BOQ / quantity entries from subcontractor BOQ. "
+        "**Payroll Based** — attendance × rates (designation-wise labour + OT)."
+    )
+    mode_label = st.radio(
+        "Bill type",
+        list(SUBCONTRACTOR_BILL_MODES.keys()),
+        horizontal=True,
+        key="sub_bill_mode",
+    )
+    bill_type, preview_fn = SUBCONTRACTOR_BILL_MODES[mode_label]
+    _render_sub_bill_tab(bill_type, preview_fn, f"Sub Contractor — {mode_label}", mode_label=mode_label)
+
+
+def _render_sub_bill_tab(bill_type, preview_fn, title, mode_label: str = ""):
     st.markdown(f"### {title}")
+    if mode_label:
+        st.info(f"Billing mode: **{mode_label}**")
     subcontractors = [""] + load_subcontractor_names()
     c1, c2 = st.columns(2)
     sub_name = c1.selectbox("Sub Contractor", subcontractors, key=f"sub_bill_{bill_type}")
@@ -252,13 +307,20 @@ def _render_sub_bill_tab(bill_type, preview_fn, title):
         return
     preview = preview_fn(sub_name, bill_month)
     p1, p2, p3, p4, p5 = st.columns(5)
-    p1.metric("Labour", f"Rs {preview['labour_amount']:,.2f}")
-    p2.metric("OT", f"Rs {preview.get('ot_amount', 0):,.2f}")
-    p3.metric("BOQ Qty", f"Rs {preview['boq_amount']:,.2f}")
-    p4.metric("Advance", f"Rs {preview['advance_amount']:,.2f}")
-    p5.metric("Net Payable", f"Rs {preview['net_amount']:,.2f}")
+    if bill_type == "Quantity":
+        p1.metric("BOQ / Measurement", f"Rs {preview['boq_amount']:,.2f}")
+        p2.metric("Advance", f"Rs {preview['advance_amount']:,.2f}")
+        p3.metric("Net Payable", f"Rs {preview['net_amount']:,.2f}")
+        p4.caption("Labour/OT excluded in measurement mode.")
+        p5.empty()
+    else:
+        p1.metric("Labour", f"Rs {preview['labour_amount']:,.2f}")
+        p2.metric("OT", f"Rs {preview.get('ot_amount', 0):,.2f}")
+        p3.metric("Advance", f"Rs {preview['advance_amount']:,.2f}")
+        p4.metric("Net Payable", f"Rs {preview['net_amount']:,.2f}")
+        p5.caption("BOQ excluded in payroll mode.")
     remarks = st.text_input("Remarks", key=f"sub_rem_{bill_type}")
-    if st.button(f"GENERATE {title.upper()}", type="primary", width="stretch", key=f"gen_{bill_type}"):
+    if st.button(f"GENERATE BILL", type="primary", width="stretch", key=f"gen_{bill_type}"):
         bill_id = generate_id("SBL", "subcontractor_bills")
         labour_total = float(preview["labour_amount"]) + float(preview.get("ot_amount", 0))
         conn = get_conn()
@@ -284,7 +346,7 @@ def _render_sub_bill_tab(bill_type, preview_fn, title):
                 preview["total_amount"],
                 preview["net_amount"],
                 remarks,
-                "Generated",
+                "Draft",
             ),
         )
         log_finance_audit(
@@ -317,7 +379,7 @@ def _render_bill_register_tab():
     )
     sub_df = pd.read_sql_query(
         """
-        SELECT bill_id, bill_date, bill_month, subcontractor_name,
+        SELECT bill_id, document_no, bill_date, bill_month, subcontractor_name,
                COALESCE(bill_type, 'Combined') AS bill_type,
                labour_amount, ot_amount, boq_amount, advance_amount, net_amount, status
         FROM subcontractor_bills ORDER BY id DESC
@@ -329,6 +391,23 @@ def _render_bill_register_tab():
     st.markdown("#### Client Bills")
     st.dataframe(client_df.drop(columns=["bill_id"], errors="ignore"), width="stretch", hide_index=True)
     if not client_df.empty:
+        from modules.client_portal_db import submit_bill_for_client_review
+
+        submit_pick = st.selectbox(
+            "Submit to client for review",
+            [""] + client_df["bill_no"].tolist(),
+            key="reg_client_submit_review",
+        )
+        if submit_pick and st.button("Send to Client Portal", key="reg_client_submit_btn"):
+            bill_id = client_df[client_df["bill_no"] == submit_pick].iloc[0]["bill_id"]
+            ok, err = submit_bill_for_client_review(
+                bill_id, actor=st.session_state.get("user_name", "User")
+            )
+            if ok:
+                st.success(f"Bill {submit_pick} sent for client review.")
+                st.rerun()
+            else:
+                st.error(err)
         cb_pick = st.selectbox("Print client bill", [""] + client_df["bill_no"].tolist(), key="reg_client_bill")
         if cb_pick:
             row = client_df[client_df["bill_no"] == cb_pick].iloc[0]
@@ -362,7 +441,16 @@ def _render_bill_register_tab():
                 line_rows,
                 [("Total Amount", f"Rs {row['total_amount']:,.2f}")],
             )
-            _render_print_download(html, f"{row['bill_no']}.html")
+            try:
+                pdf = generate_client_invoice_pdf(bill_id)
+            except Exception:
+                pdf = None
+            _render_print_download(
+                html,
+                f"{row['bill_no']}.html",
+                pdf_bytes=pdf,
+                pdf_filename=f"{row['bill_no']}.pdf",
+            )
 
     st.markdown("#### Sub Contractor Bills")
     st.dataframe(sub_df, width="stretch", hide_index=True)
@@ -370,25 +458,87 @@ def _render_bill_register_tab():
         sb_pick = st.selectbox("Print sub contractor bill", [""] + sub_df["bill_id"].tolist(), key="reg_sub_bill")
         if sb_pick:
             row = sub_df[sub_df["bill_id"] == sb_pick].iloc[0]
-            html = _bill_html(
-                f"SUB CONTRACTOR BILL — {row['bill_type']}",
-                [
-                    ("Bill ID", row["bill_id"]),
-                    ("Bill Date", row["bill_date"]),
-                    ("Bill Month", row["bill_month"]),
-                    ("Sub Contractor", row["subcontractor_name"]),
-                    ("Bill Type", row["bill_type"]),
-                ],
-                [],
-                [
+            bt = row["bill_type"]
+            totals = [("Advance Deduction", f"Rs {row['advance_amount']:,.2f}"), ("Net Payable", f"Rs {row['net_amount']:,.2f}")]
+            if bt == "Quantity":
+                totals = [
+                    ("BOQ / Measurement Amount", f"Rs {row['boq_amount']:,.2f}"),
+                    *totals,
+                ]
+            elif bt == "Manpower":
+                totals = [
+                    ("Labour Amount", f"Rs {row['labour_amount']:,.2f}"),
+                    ("OT Amount", f"Rs {row.get('ot_amount', 0):,.2f}"),
+                    *totals,
+                ]
+            else:
+                totals = [
                     ("Labour Amount", f"Rs {row['labour_amount']:,.2f}"),
                     ("OT Amount", f"Rs {row.get('ot_amount', 0):,.2f}"),
                     ("BOQ / Quantity Amount", f"Rs {row['boq_amount']:,.2f}"),
-                    ("Advance Deduction", f"Rs {row['advance_amount']:,.2f}"),
-                    ("Net Payable", f"Rs {row['net_amount']:,.2f}"),
+                    *totals,
+                ]
+            mode_title = "Measurement Based" if bt == "Quantity" else ("Payroll Based" if bt == "Manpower" else bt)
+            html = _bill_html(
+                f"SUB CONTRACTOR BILL — {mode_title}",
+                [
+                    ("Bill No", row.get("document_no") or row["bill_id"]),
+                    ("Bill Date", row["bill_date"]),
+                    ("Bill Month", row["bill_month"]),
+                    ("Sub Contractor", row["subcontractor_name"]),
+                    ("Billing Mode", mode_title),
+                    ("Status", row.get("status", "")),
                 ],
+                [],
+                totals,
             )
-            _render_print_download(html, f"{row['bill_id']}.html")
+            try:
+                pdf = generate_subcontractor_bill_pdf(sb_pick)
+            except Exception:
+                pdf = None
+            doc_name = row.get("document_no") or sb_pick
+            _render_print_download(
+                html,
+                f"{doc_name}.html",
+                pdf_bytes=pdf,
+                pdf_filename=f"{doc_name}.pdf",
+            )
+
+    st.markdown("#### Subcontractor bill workflow")
+    if not sub_df.empty:
+        wf_options = {
+            f"{r.get('document_no') or r['bill_id']} | {r['subcontractor_name']} | {r.get('status', '')}": r["bill_id"]
+            for r in sub_df.to_dict("records")
+        }
+        wf_pick = st.selectbox("Select bill for approval", [""] + list(wf_options.keys()), key="sub_bill_wf")
+        if wf_pick:
+            from modules.approval_workflow import normalize_status
+            from modules.workflow_ui import render_workflow_action_panel, render_workflow_status_steps
+
+            bill_id = wf_options[wf_pick]
+            sub_row = sub_df[sub_df["bill_id"] == bill_id].iloc[0]
+            status = normalize_status(sub_row.get("status"), "subcontractor_bill")
+            render_workflow_status_steps(status)
+            if render_workflow_action_panel("subcontractor_bill", bill_id, status, key_prefix="sbl"):
+                st.rerun()
+
+    st.markdown("#### Client bill workflow")
+    if not client_df.empty:
+        cb_wf = {
+            f"{r['bill_no']} | {r['client_name']} | {r.get('status', '')}": r["bill_id"]
+            for r in client_df.to_dict("records")
+        }
+        cb_pick_wf = st.selectbox("Select client bill for approval", [""] + list(cb_wf.keys()), key="client_bill_wf")
+        if cb_pick_wf:
+            from modules.approval_workflow import normalize_status
+            from modules.workflow_ui import render_workflow_action_panel, render_workflow_status_steps
+
+            bill_id = cb_wf[cb_pick_wf]
+            cb_row = client_df[client_df["bill_id"] == bill_id].iloc[0]
+            status = normalize_status(cb_row.get("status"), "client_bill")
+            render_workflow_status_steps(status)
+            if render_workflow_action_panel("client_bill", bill_id, status, key_prefix="cbl"):
+                st.rerun()
 
 
 def page_billing():
@@ -396,19 +546,16 @@ def page_billing():
     tabs = st.tabs(
         [
             "Client Bill",
-            "Sub — Manpower",
-            "Sub — Quantity (BOQ)",
-            "Sub — Combined",
+            "Subcontractor Billing",
+            "Sub — Combined (legacy)",
             "Register & Print",
         ]
     )
     with tabs[0]:
         _render_client_bill_tab()
     with tabs[1]:
-        _render_sub_bill_tab("Manpower", subcontractor_manpower_bill_preview, "Sub Contractor Manpower Bill")
+        _render_subcontractor_billing_tab()
     with tabs[2]:
-        _render_sub_bill_tab("Quantity", subcontractor_quantity_bill_preview, "Sub Contractor Quantity Bill")
+        _render_sub_bill_tab("Combined", subcontractor_bill_preview, "Sub Contractor Combined Bill (legacy)")
     with tabs[3]:
-        _render_sub_bill_tab("Combined", subcontractor_bill_preview, "Sub Contractor Combined Bill")
-    with tabs[4]:
         _render_bill_register_tab()

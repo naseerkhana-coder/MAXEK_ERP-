@@ -48,6 +48,7 @@ from modules.database import (
     save_site_expense_lines,
     set_petty_cash_handler,
 )
+from modules.approval_workflow import WORKFLOW_STATUSES, normalize_status
 from modules.pages import _save_upload
 from modules.roles import (
     can_delete_approved_finance,
@@ -73,7 +74,13 @@ EXPENSE_CATEGORIES = [
 GST_RATES = [0, 5, 12, 18, 28]
 TAX_TYPES = ["CGST+SGST", "IGST"]
 PAYMENT_SOURCES = ["Petty Cash", "Cash", "Bank"]
-EXPENSE_STATUSES = ["Draft", "Submitted", "Verified", "PM Approved", "Approved", "Rejected", "Returned"]
+EXPENSE_STATUSES = list(WORKFLOW_STATUSES) + [
+    "Submitted",
+    "Verified",
+    "PM Approved",
+    "Rejected",
+    "Returned",
+]
 PETTY_PRIORITIES = ["Normal", "Urgent"]
 DIRECT_PAYMENT_TYPES = [
     "Supplier Payment",
@@ -129,6 +136,24 @@ def _is_management():
 
 def _ts():
     return datetime.now().strftime("%d/%m/%Y %H:%M")
+
+
+def _apply_workflow(entity_type: str, entity_id: str, canonical_status: str, comments: str = "", payment_ref: str = ""):
+    from modules.approval_workflow import transition
+
+    return transition(
+        entity_type,
+        entity_id,
+        canonical_status,
+        _user(),
+        _role(),
+        comment=comments,
+        payment_ref=payment_ref,
+    )
+
+
+def _legacy_to_canonical_expense(status: str) -> str:
+    return normalize_status(status, "site_expense")
 
 
 def _calc_tax(taxable, gst_rate, tax_type):
@@ -670,27 +695,33 @@ def _render_petty_cash_request():
     comments = st.text_input("Comments", key=f"pcr_comments_{rid}")
     c1, c2, c3, c4 = st.columns(4)
     if _can_verify() and row["status"] == "Submitted" and c1.button("VERIFY", key=f"pcr_verify_{rid}"):
-        conn = get_conn()
-        conn.execute(
-            "UPDATE petty_cash_requests SET status='Verified', verified_by=?, verified_at=? WHERE request_id=?",
-            (_user(), _ts(), rid),
-        )
-        log_finance_audit(conn, "petty_cash_request", rid, "Verify", _user(), "Submitted", "Verified", comments)
-        conn.commit()
-        conn.close()
-        st.success("Verified.")
-        st.rerun()
+        ok, msg = _apply_workflow("petty_cash", rid, "Checked", comments)
+        if ok:
+            conn = get_conn()
+            conn.execute(
+                "UPDATE petty_cash_requests SET verified_by=?, verified_at=? WHERE request_id=?",
+                (_user(), _ts(), rid),
+            )
+            log_finance_audit(conn, "petty_cash_request", rid, "Verify", _user(), "Submitted", "Verified", comments)
+            conn.commit()
+            conn.close()
+            st.success("Verified.")
+            st.rerun()
+        st.error(msg)
     if _is_management() and row["status"] == "Verified" and c2.button("APPROVE", key=f"pcr_appr_{rid}"):
-        conn = get_conn()
-        conn.execute(
-            "UPDATE petty_cash_requests SET status='Approved', approved_by=?, approved_at=? WHERE request_id=?",
-            (_user(), _ts(), rid),
-        )
-        log_finance_audit(conn, "petty_cash_request", rid, "Approve", _user(), "Verified", "Approved", comments)
-        conn.commit()
-        conn.close()
-        st.success("Approved by management.")
-        st.rerun()
+        ok, msg = _apply_workflow("petty_cash", rid, "Approved", comments)
+        if ok:
+            conn = get_conn()
+            conn.execute(
+                "UPDATE petty_cash_requests SET approved_by=?, approved_at=? WHERE request_id=?",
+                (_user(), _ts(), rid),
+            )
+            log_finance_audit(conn, "petty_cash_request", rid, "Approve", _user(), "Verified", "Approved", comments)
+            conn.commit()
+            conn.close()
+            st.success("Approved by management.")
+            st.rerun()
+        st.error(msg)
     if _is_management() and row["status"] in ("Submitted", "Verified") and c3.button("REJECT", key=f"pcr_rej_{rid}"):
         if not comments.strip():
             st.error("Rejection reason required in comments.")
@@ -710,28 +741,31 @@ def _render_petty_cash_request():
             st.success("Request rejected.")
             st.rerun()
     if _is_accounts_manager() and row["status"] == "Approved" and c4.button("RELEASE AMOUNT", key=f"pcr_rel_{rid}"):
-        ok, msg = check_petty_cash_limit(row["project_name"], float(row["requested_amount"] or 0))
-        if not ok:
-            st.error(msg)
+        ok_lim, msg_lim = check_petty_cash_limit(row["project_name"], float(row["requested_amount"] or 0))
+        if not ok_lim:
+            st.error(msg_lim)
         else:
-            conn = get_conn()
-            conn.execute(
-                """
-                UPDATE petty_cash_requests
-                SET status='Released', released_by=?, released_at=?, released_amount=requested_amount
-                WHERE request_id=?
-                """,
-                (_user(), _ts(), rid),
-            )
-            staff_id = str(row.get("staff_id") or "")
-            staff_name = str(row.get("staff_name") or "")
-            if staff_name:
-                set_petty_cash_handler(row["project_name"], staff_id, staff_name, _user())
-            log_finance_audit(conn, "petty_cash_request", rid, "Release", _user(), "Approved", "Released", comments)
-            conn.commit()
-            conn.close()
-            st.success(f"Rs {float(row['requested_amount']):,.2f} released. Petty cash balance updated.")
-            st.rerun()
+            ok, msg = _apply_workflow("petty_cash", rid, "Payment Released", comments, payment_ref=str(row.get("request_id", "")))
+            if ok:
+                conn = get_conn()
+                conn.execute(
+                    """
+                    UPDATE petty_cash_requests
+                    SET released_by=?, released_at=?, released_amount=requested_amount
+                    WHERE request_id=?
+                    """,
+                    (_user(), _ts(), rid),
+                )
+                staff_id = str(row.get("staff_id") or "")
+                staff_name = str(row.get("staff_name") or "")
+                if staff_name:
+                    set_petty_cash_handler(row["project_name"], staff_id, staff_name, _user())
+                log_finance_audit(conn, "petty_cash_request", rid, "Release", _user(), "Approved", "Released", comments)
+                conn.commit()
+                conn.close()
+                st.success(f"Rs {float(row['requested_amount']):,.2f} released. Petty cash balance updated.")
+                st.rerun()
+            st.error(msg)
     limit = get_project_petty_limit(row.get("project_name", ""))
     handler = get_petty_cash_handler(row.get("project_name", ""))
     if handler.get("staff_name"):
@@ -1215,7 +1249,20 @@ def _render_verification():
         return
 
     comments = st.text_area("Comments / verification notes", key=f"ver_comments_{eid}")
-    st.markdown("#### Actions")
+    from modules.approval_workflow import normalize_status
+    from modules.workflow_ui import render_workflow_action_panel, render_workflow_status_steps
+
+    st.markdown("#### Standard workflow")
+    render_workflow_status_steps(normalize_status(row.get("status"), "site_expense"))
+    if render_workflow_action_panel(
+        "site_expense",
+        eid,
+        row.get("status", ""),
+        key_prefix="se_ver",
+    ):
+        st.rerun()
+
+    st.markdown("#### Legacy actions")
     c1, c2, c3, c4 = st.columns(4)
     if c1.button("APPROVE (Verify)", type="primary", key=f"ver_ok_{eid}"):
         _expense_action(
@@ -1290,6 +1337,19 @@ def _render_approvals():
         if not roles_ok:
             st.warning("Your role cannot action this approval level.")
             continue
+        from modules.approval_workflow import normalize_status
+        from modules.workflow_ui import render_workflow_action_panel, render_workflow_status_steps
+
+        st.markdown("##### Standard workflow")
+        render_workflow_status_steps(normalize_status(row.get("status"), "site_expense"))
+        if render_workflow_action_panel(
+            "site_expense",
+            eid,
+            row.get("status", ""),
+            key_prefix=f"se_appr_{level_status}",
+        ):
+            st.rerun()
+        st.markdown("##### Legacy actions")
         c1, c2, c3 = st.columns(3)
         if c1.button(f"APPROVE → {next_status}", key=f"appr_ok_{level_status}_{eid}"):
             blocked = False

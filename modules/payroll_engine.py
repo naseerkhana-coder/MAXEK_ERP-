@@ -18,13 +18,9 @@ from modules.database import (
 WEEKDAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 ATTENDANCE_STATUSES = ["Present", "Absent", "Leave", "Half Day"]
 PAYROLL_STAFF_TYPES = {"Monthly Staff", "Daily Wage Staff", "Company Staff"}
-PAYROLL_WORKFLOW_STATUSES = (
-    "Draft",
-    "Submitted to MD",
-    "MD Approved",
-    "Rejected",
-    "Sent Back",
-)
+from modules.approval_workflow import WORKFLOW_STATUSES
+
+PAYROLL_WORKFLOW_STATUSES = WORKFLOW_STATUSES + ("Rejected", "Sent Back")
 PAYMENT_MODES = ("Cash", "Bank Transfer", "UPI", "Cheque")
 PAYMENT_STATUSES = ("Pending", "Paid")
 
@@ -229,13 +225,33 @@ def build_month_attendance_summary(employee_id, payroll_month, period_start=None
     if not attendance_df.empty:
         for _, row in attendance_df.iterrows():
             date_str = str(row["attendance_date"])
-            records_by_date[date_str] = row.to_dict()
+            worked = float(row.get("total_hours") or 0)
+            ot = float(row.get("ot_hours") or 0)
+            status = str(row.get("status") or "Present").strip()
+            if date_str in records_by_date:
+                agg = records_by_date[date_str]
+                agg["total_hours"] = float(agg.get("total_hours") or 0) + worked
+                agg["ot_hours"] = float(agg.get("ot_hours") or 0) + ot
+                agg["worked_hours"] = agg["total_hours"]
+                agg["overtime"] = agg["ot_hours"]
+                st_low = status.lower()
+                prev = str(agg.get("status") or "").lower()
+                if st_low == "present" or prev == "present":
+                    agg["status"] = "Present"
+                elif st_low == "half day" or prev == "half day":
+                    agg["status"] = "Half Day"
+                elif st_low == "leave" and prev not in ("present", "half day"):
+                    agg["status"] = "Leave"
+            else:
+                rec = row.to_dict()
+                rec["worked_hours"] = worked
+                rec["overtime"] = ot
+                records_by_date[date_str] = rec
             try:
                 dt = datetime.strptime(date_str[:10], DATE_FMT)
                 min_att_dt = dt if min_att_dt is None else min(min_att_dt, dt)
                 max_att_dt = dt if max_att_dt is None else max(max_att_dt, dt)
             except ValueError:
-                # If a bad date exists, ignore it for range calculation
                 pass
 
     summary = {

@@ -8,7 +8,7 @@ Workflow:
 
 from __future__ import annotations
 
-from modules.roles import is_super_admin, resolve_role_pages
+from modules.roles import CLIENT_PORTAL_ROLE, is_super_admin, resolve_role_pages
 
 # Home screen (sidebar + top bar Dashboard)
 MENU_DASHBOARD = ("dash_mgmt", "Dashboard", "🏠")
@@ -33,12 +33,16 @@ SECTION_DEFAULT_PAGE: dict[str, str] = {
     "procurement": "purch_requisition",
     "inventory": "store_receipt",
     "hr": "master_employee",
-    "accounts": "petty_request",
+    "accounts": "petty_dashboard",
     "contracts": "proj_wo_sub",
     "letters": "doc_incoming",
     "reports": "rpt_proj_status",
     "settings": "settings_users",
+    "account": "account_profile",
 }
+
+# Available to every authenticated role (profile and password).
+ACCOUNT_PAGE_KEYS = frozenset({"account_profile"})
 
 QUICK_ADD_ACTIONS: list[tuple[str, str, str]] = [
     ("purch_requisition", "Material Request", "📋"),
@@ -84,7 +88,11 @@ MENU_SECTIONS: list[MenuSection] = [
                     ("proj_create", "Project Creation"),
                     ("proj_dpr_weekly", "Project Progress"),
                     ("doc_site", "Site Photos"),
-                    ("proj_dpr_daily", "Daily Reports"),
+                    ("proj_dpr_daily", "Daily Progress (DPR)"),
+                    ("proj_measurement_book", "Measurement Book"),
+                    ("proj_material_planning", "Material Planning"),
+                    ("proj_profitability", "Project Profitability"),
+                    ("portal_admin_assign", "Client Portal Access"),
                 ],
             ),
         ],
@@ -135,6 +143,7 @@ MENU_SECTIONS: list[MenuSection] = [
                     ("store_receipt", "Material Inward"),
                     ("store_site_stock", "Stock"),
                     ("store_issue", "Material Issue"),
+                    ("store_consumption_control", "Consumption Control"),
                     ("asset_register", "Asset Register"),
                 ],
             ),
@@ -152,7 +161,8 @@ MENU_SECTIONS: list[MenuSection] = [
                     ("master_employee", "Employees"),
                     ("hr_attendance", "Attendance"),
                     ("hr_leave", "Leave"),
-                    ("hr_payroll", "Payroll"),
+                    ("hr_payroll", "Worker Payroll"),
+                    ("hr_staff_payroll", "Staff Payroll"),
                 ],
             ),
         ],
@@ -166,10 +176,15 @@ MENU_SECTIONS: list[MenuSection] = [
                 "accounts_all",
                 None,
                 [
-                    ("petty_request", "Petty Cash"),
-                    ("petty_expense", "Expenses"),
+                    ("petty_dashboard", "Petty Cash"),
+                    ("petty_request", "Fund Requests"),
+                    ("petty_allocation", "Fund Issue"),
+                    ("petty_expense", "Petty Expenses"),
+                    ("petty_verification", "Expense Approval"),
+                    ("petty_reports", "Petty Reports"),
                     ("purch_invoice", "Invoices"),
                     ("acc_payment", "Payments"),
+                    ("acc_payment_voucher", "Payment Voucher"),
                     ("acc_gst_reports", "GST"),
                 ],
             ),
@@ -220,7 +235,24 @@ MENU_SECTIONS: list[MenuSection] = [
                 [
                     ("rpt_receivable", "Financial Reports"),
                     ("rpt_proj_status", "Project Reports"),
+                    ("dash_profitability", "Project Profitability"),
+                    ("rpt_phase3", "Phase 3 Integration"),
+                    ("rpt_material_planning", "Material Planning Report"),
                     ("store_reports", "Inventory Reports"),
+                ],
+            ),
+        ],
+    ),
+    (
+        "account",
+        "My Account",
+        "👤",
+        [
+            (
+                "account_all",
+                None,
+                [
+                    ("account_profile", "My Profile"),
                 ],
             ),
         ],
@@ -242,6 +274,9 @@ MENU_SECTIONS: list[MenuSection] = [
         ],
     ),
 ]
+
+# Routed in erp_router but hidden from the sidebar (legacy bookmarks / deep links).
+ROUTER_ONLY_PAGE_KEYS = frozenset({"hr_salary_slip"})
 
 CORRESPONDENCE_PAGES = frozenset(
     {
@@ -290,8 +325,9 @@ LEGACY_PAGE_MAP = {
     "inv_material_issue": "store_issue",
     "inv_tools": "master_equipment",
     "site_dpr": "proj_dpr_daily",
+    "measurement_book": "proj_measurement_book",
     "fin_expense_entry": "petty_expense",
-    "fin_petty_cash": "petty_request",
+    "fin_petty_cash": "petty_dashboard",
     "pay_attendance": "hr_attendance",
     "sub_work_orders": "proj_wo_sub",
     "sub_bill_entry": "proj_wo_sub",
@@ -357,7 +393,7 @@ def group_for_page(page_key: str) -> tuple[str, str] | None:
 
 
 def all_page_keys() -> set[str]:
-    keys = {MENU_DASHBOARD[0]}
+    keys = {MENU_DASHBOARD[0]} | set(ROUTER_ONLY_PAGE_KEYS) | set(_CLIENT_PORTAL_PAGES) | _INTERNAL_PORTAL_ADMIN_PAGES
     for _sid, _label, _icon, groups in MENU_SECTIONS:
         keys.update(k for k, _ in iter_section_items(groups))
     return keys
@@ -373,8 +409,24 @@ def pages_in_sections(*section_ids: str) -> set[str]:
 
 
 def page_label(page_key: str) -> str:
+    _portal_labels = {
+        "portal_dash": "Client Dashboard",
+        "portal_projects": "Projects",
+        "portal_invoices": "Invoices",
+        "portal_bills": "Bills for Approval",
+        "portal_documents": "Documents",
+        "portal_progress": "Progress Reports",
+        "portal_payments": "Payment History",
+        "portal_admin_assign": "Client Portal Access",
+    }
+    if page_key in _portal_labels:
+        return _portal_labels[page_key]
+    if page_key == "hr_salary_slip":
+        return "Worker Payroll — Salary Slip"
     if page_key == MENU_DASHBOARD[0]:
         return MENU_DASHBOARD[1]
+    if page_key in {"dash_profitability", "proj_profitability"}:
+        return "Project Profitability"
     for _sid, _label, _icon, groups in MENU_SECTIONS:
         for key, label in iter_section_items(groups):
             if key == page_key:
@@ -413,7 +465,7 @@ def normalize_page_key(page_key: str | None) -> str:
 
 _ACCOUNTS_MANAGER_PAGES = (
     pages_in_sections("accounts", "procurement", "reports", "contracts", "letters")
-    | {MENU_DASHBOARD[0], "dash_pending", "dash_notifications"}
+    | {MENU_DASHBOARD[0], "dash_pending", "dash_notifications", "dash_profitability", "proj_profitability"}
     | {
         "master_vendor",
         "master_client",
@@ -423,6 +475,10 @@ _ACCOUNTS_MANAGER_PAGES = (
         "acc_outstanding",
         "purch_invoice",
         "purch_vendor_payment",
+        "petty_dashboard",
+        "petty_request",
+        "petty_allocation",
+        "petty_reports",
         "petty_verification",
         "petty_settlement",
         "acc_receipt",
@@ -435,8 +491,11 @@ _ACCOUNTS_EXECUTIVE_PAGES = pages_in_sections("accounts", "procurement") | {
     "dash_pending",
     "acc_receipt",
     "acc_payment",
+    "acc_payment_voucher",
     "purch_invoice",
     "petty_expense",
+    "petty_dashboard",
+    "petty_request",
     "petty_verification",
     "proj_create",
     "master_vendor",
@@ -449,6 +508,7 @@ _HR_PAYROLL_PAGES = pages_in_sections("hr", "reports") | {
     "master_branch",
     "master_department",
     "appr_leave",
+    "hr_staff_payroll",
     "hr_salary_slip",
     "hr_reports",
 }
@@ -456,6 +516,8 @@ _HR_PAYROLL_PAGES = pages_in_sections("hr", "reports") | {
 _STORE_KEEPER_PAGES = pages_in_sections("inventory", "procurement", "reports") | {
     MENU_DASHBOARD[0],
     "proj_create",
+    "proj_material_planning",
+    "store_consumption_control",
     "master_material",
     "master_equipment",
     "purch_grn",
@@ -464,13 +526,14 @@ _STORE_KEEPER_PAGES = pages_in_sections("inventory", "procurement", "reports") |
 
 _PROJECT_MANAGER_PAGES = (
     pages_in_sections("projects", "procurement", "inventory", "contracts", "letters", "reports", "tender", "crm")
-    | {MENU_DASHBOARD[0], "dash_pending", "dash_notifications"}
+    | {MENU_DASHBOARD[0], "dash_pending", "dash_notifications", "dash_profitability", "proj_profitability"}
     | {
         "master_client",
         "master_contractor_sub",
         "proj_wo_sub",
-        "petty_expense",
+        "petty_dashboard",
         "petty_request",
+        "petty_expense",
         "hr_labour_attendance",
         "appr_leave",
         "appr_purchase",
@@ -481,14 +544,33 @@ _PROJECT_MANAGER_PAGES = (
 _SITE_ENGINEER_PAGES = pages_in_sections("projects", "inventory", "accounts", "tender") | {
     MENU_DASHBOARD[0],
     "proj_create",
+    "proj_material_planning",
+    "store_consumption_control",
     "proj_wo_sub",
     "proj_wo_internal",
     "purch_requisition",
     "purch_order",
     "hr_labour_attendance",
     "petty_expense",
+    "petty_dashboard",
+    "petty_request",
     "doc_site",
 }
+
+_CLIENT_PORTAL_PAGES = frozenset(
+    {
+        "portal_dash",
+        "portal_projects",
+        "portal_invoices",
+        "portal_bills",
+        "portal_documents",
+        "portal_progress",
+        "portal_payments",
+        "account_profile",
+    }
+)
+
+_INTERNAL_PORTAL_ADMIN_PAGES = frozenset({"portal_admin_assign"})
 
 ROLE_PAGE_ACCESS: dict[str, set[str]] = {
     "Admin": set(),  # resolved via _full_router_page_keys in allowed_pages_for_role
@@ -499,9 +581,10 @@ ROLE_PAGE_ACCESS: dict[str, set[str]] = {
     "Accountant": set(_ACCOUNTS_MANAGER_PAGES) | CORRESPONDENCE_PAGES,
     "Accounts Manager": set(_ACCOUNTS_MANAGER_PAGES) | CORRESPONDENCE_PAGES,
     "Accounts Executive": set(_ACCOUNTS_EXECUTIVE_PAGES),
-    "Project Manager": set(_PROJECT_MANAGER_PAGES),
+    "Project Manager": set(_PROJECT_MANAGER_PAGES) | _INTERNAL_PORTAL_ADMIN_PAGES,
     "Site Engineer": set(_SITE_ENGINEER_PAGES),
     "Store Keeper": set(_STORE_KEEPER_PAGES),
+    CLIENT_PORTAL_ROLE: set(_CLIENT_PORTAL_PAGES),
 }
 
 
@@ -512,10 +595,12 @@ def _full_router_page_keys() -> set[str]:
 
 
 def allowed_pages_for_role(role: str) -> set[str]:
+    if role == CLIENT_PORTAL_ROLE:
+        return set(_CLIENT_PORTAL_PAGES)
     if is_super_admin(role):
-        return _full_router_page_keys()
+        return _full_router_page_keys() | ACCOUNT_PAGE_KEYS
     canonical = resolve_role_pages(role)
     pages = ROLE_PAGE_ACCESS.get(canonical, ROLE_PAGE_ACCESS.get(role, {MENU_DASHBOARD[0]}))
     if canonical in ("Admin", "MD") or role in ("Admin", "MD"):
-        return _full_router_page_keys()
-    return pages
+        return _full_router_page_keys() | ACCOUNT_PAGE_KEYS
+    return pages | ACCOUNT_PAGE_KEYS

@@ -4,13 +4,21 @@
 :root {
   --primary: #0f172a;
   --secondary: #2563eb;
+  --secondary-light: #3b82f6;
   --secondary-dark: #1d4ed8;
   --accent: #10b981;
-  --bg: #f5f7fb;
+  --accent-green: #10b981;
+  --accent-red: #ef4444;
+  --accent-orange: #f97316;
+  --accent-yellow: #eab308;
+  --accent-purple: #8b5cf6;
+  --sidebar-bg: #1e293b;
+  --bg: #f1f5f9;
   --panel: #ffffff;
-  --border: #e5e7eb;
+  --border: #e2e8f0;
   --muted: #64748b;
-  --shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+  --shadow: 0 1px 3px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.06);
+  --radius-card: 12px;
 }
 
 html, body, [class*="css"] {
@@ -26,9 +34,13 @@ section[data-testid="stSidebar"] {
   width: 260px !important;
   min-width: 260px !important;
   max-width: 260px !important;
-  background: linear-gradient(180deg, #0b2348 0%, #061528 100%) !important;
-  border-right: 1px solid rgba(255, 255, 255, 0.06) !important;
+  background: var(--sidebar-bg) !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
   transition: width 0.2s ease, min-width 0.2s ease, max-width 0.2s ease !important;
+  position: sticky !important;
+  top: 0 !important;
+  height: 100vh !important;
+  overflow-y: auto !important;
 }
 
 body.maxek-sidebar-collapsed section[data-testid="stSidebar"] {
@@ -227,7 +239,23 @@ section[data-testid="stSidebar"] div.stTextInput > div > div > input::placeholde
   bottom: 6px;
   width: 3px;
   border-radius: 0 3px 3px 0;
-  background: #93c5fd;
+  background: var(--secondary-light);
+}
+
+[data-testid="stSidebar"] div[data-testid="stHorizontalBlock"]:has([data-testid="column"]:nth-child(2))
+  [data-testid="column"]:first-child div.stButton > button[kind="primary"]::after,
+[data-testid="stSidebar"] div[data-testid="stHorizontalBlock"]:has([data-testid="column"]:nth-child(2))
+  [data-testid="column"]:first-child div.stButton > button[data-testid="stBaseButton-primary"]::after {
+  content: "";
+  position: absolute;
+  left: 0.55rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--secondary-light);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.35);
 }
 
 /* Sub-menu rows (label + star) */
@@ -334,17 +362,131 @@ section[data-testid="stSidebar"] div.stTextInput > div > div > input::placeholde
   font-size: 0.76rem;
 }
 
-/* —— Top application bar (logo, project search, 7 modules, actions) —— */
+.maxek-sidebar-help-card {
+  margin-top: 0.85rem;
+  padding: 0.85rem 0.75rem;
+  border-radius: var(--radius-card);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.maxek-sidebar-help-card strong {
+  display: block;
+  color: #f8fafc;
+  font-size: 0.82rem;
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+}
+
+.maxek-sidebar-help-card span {
+  display: block;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+/* —— Top application bar (logo, search, date, bell, profile + module nav) —— */
 .maxek-top-bar {
   position: sticky;
   top: 0;
   z-index: 20;
-  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  min-height: 60px;
+  background: #ffffff;
   border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 0.55rem 0.65rem 0.35rem;
-  margin-bottom: 0.75rem;
+  border-radius: var(--radius-card);
+  padding: 0.5rem 0.85rem 0.45rem;
+  margin-bottom: 0.85rem;
   box-shadow: var(--shadow);
+}
+
+.maxek-top-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 44px;
+}
+
+.maxek-header-date-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0.35rem 0.65rem;
+  border-radius: 8px;
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  color: var(--primary);
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+  line-height: 1.25;
+}
+
+.maxek-header-date-chip span {
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.maxek-header-bell-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.35rem;
+  height: 2.35rem;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  font-size: 1rem;
+}
+
+.maxek-header-bell-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 1.1rem;
+  height: 1.1rem;
+  padding: 0 0.25rem;
+  border-radius: 999px;
+  background: var(--accent-red);
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #fff;
+}
+
+.maxek-header-user-v2 {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.25rem 0.15rem 0.25rem 0.35rem;
+}
+
+.maxek-header-user-v2 .maxek-header-user-text {
+  text-align: left;
+  line-height: 1.2;
+}
+
+.maxek-header-user-v2 .maxek-header-user-name {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.maxek-header-user-v2 .maxek-header-user-meta {
+  font-size: 0.68rem;
+  color: var(--muted);
+  margin-top: 0.1rem;
+}
+
+.maxek-top-nav-row {
+  border-top: 1px solid var(--border);
+  margin-top: 0.45rem;
+  padding-top: 0.4rem;
 }
 
 .maxek-header-logo {
@@ -369,9 +511,23 @@ section[data-testid="stSidebar"] div.stTextInput > div > div > input::placeholde
   font-size: 0.72rem !important;
   min-height: 2.15rem !important;
   height: 2.15rem !important;
-  padding: 0.25rem 0.35rem !important;
+  padding: 0.25rem 0.45rem !important;
   border-radius: 8px !important;
   white-space: nowrap;
+}
+
+.maxek-top-bar [data-testid="column"]:has(.maxek-header-date-chip) {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.maxek-top-bar [data-testid="column"]:has(.maxek-header-user-v2) div.stButton > button {
+  font-size: 0.68rem !important;
+  min-height: 1.75rem !important;
+  height: 1.75rem !important;
+  padding: 0.15rem 0.45rem !important;
+  margin-top: 0.15rem;
 }
 
 .maxek-top-bar div.stButton > button[kind="primary"] {
@@ -578,57 +734,93 @@ div[data-testid="column"]:has(.maxek-header-user-block) div.stButton > button:ho
 
 .maxek-kpi-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 1rem;
-  margin-bottom: 1.5rem;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.maxek-kpi-grid-wide {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+@media (max-width: 1200px) {
+  .maxek-kpi-grid,
+  .maxek-kpi-grid-wide {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .maxek-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .maxek-kpi-card {
-  border-radius: 16px;
-  padding: 1.15rem 1.15rem;
-  transition: transform 0.2s ease;
-  min-height: 156px;
+  border-radius: var(--radius-card);
+  padding: 0.85rem 0.95rem;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  min-height: 108px;
+  border-top: 3px solid var(--secondary);
 }
 
+.maxek-kpi-card.accent-blue { border-top-color: var(--secondary); }
+.maxek-kpi-card.accent-green { border-top-color: var(--accent-green); }
+.maxek-kpi-card.accent-red { border-top-color: var(--accent-red); }
+.maxek-kpi-card.accent-orange { border-top-color: var(--accent-orange); }
+.maxek-kpi-card.accent-yellow { border-top-color: var(--accent-yellow); }
+.maxek-kpi-card.accent-purple { border-top-color: var(--accent-purple); }
+.maxek-kpi-card.accent-slate { border-top-color: #94a3b8; }
+
 .maxek-kpi-card:hover {
-  transform: translateY(-2px);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1);
 }
 
 .maxek-kpi-label {
-  font-size: 0.78rem;
+  font-size: 0.7rem;
   color: var(--muted);
   font-weight: 600;
-  margin-top: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: 0.45rem;
 }
 
 .maxek-kpi-value {
-  font-size: 1.8rem;
+  font-size: 1.55rem;
   font-weight: 700;
-  color: #111827;
-  margin-top: 0.25rem;
+  color: #0f172a;
+  margin-top: 0.15rem;
+  line-height: 1.15;
 }
 
 .maxek-kpi-icon {
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: #eff6ff;
-  font-size: 1.25rem;
+  font-size: 1.05rem;
 }
 
+.maxek-kpi-card.accent-green .maxek-kpi-icon { background: #ecfdf5; }
+.maxek-kpi-card.accent-red .maxek-kpi-icon { background: #fef2f2; }
+.maxek-kpi-card.accent-orange .maxek-kpi-icon { background: #fff7ed; }
+.maxek-kpi-card.accent-yellow .maxek-kpi-icon { background: #fefce8; }
+.maxek-kpi-card.accent-purple .maxek-kpi-icon { background: #f5f3ff; }
+
 .maxek-kpi-helper {
-  margin-top: 0.7rem;
-  color: var(--secondary);
-  font-size: 0.78rem;
-  font-weight: 600;
+  margin-top: 0.35rem;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 500;
 }
 
 .maxek-panel {
-  border-radius: 14px;
-  padding: 1.25rem 1.5rem;
+  border-radius: var(--radius-card);
+  padding: 1.15rem 1.25rem;
   margin-bottom: 1rem;
 }
 
@@ -639,10 +831,10 @@ div[data-testid="column"]:has(.maxek-header-user-block) div.stButton > button:ho
 }
 
 .maxek-overview-card {
-  border-radius: 16px;
-  padding: 1.15rem 1.2rem;
-  min-height: 210px;
-  margin-bottom: 1rem;
+  border-radius: var(--radius-card);
+  padding: 1rem 1.1rem;
+  min-height: 190px;
+  margin-bottom: 0.85rem;
 }
 
 .maxek-overview-title {
@@ -1128,8 +1320,305 @@ div[data-testid="stForm"] h3 {
   font-size: 0.82rem;
 }
 
+/* —— Page shell: breadcrumbs, title, toolbar —— */
+.maxek-page-head {
+  margin-bottom: 0.75rem;
+}
+
+.maxek-breadcrumbs {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--muted);
+  margin-bottom: 0.35rem;
+  letter-spacing: 0.01em;
+}
+
+.maxek-breadcrumbs a,
+.maxek-breadcrumbs strong {
+  color: var(--secondary);
+  font-weight: 600;
+}
+
+.maxek-page-title {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--primary);
+  letter-spacing: -0.02em;
+}
+
+.maxek-page-subtitle {
+  margin: 0.25rem 0 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.maxek-page-toolbar-wrap {
+  margin: 0.65rem 0 0.85rem;
+}
+
+.maxek-page-toolbar-wrap [data-testid="column"] button {
+  font-size: 0.78rem !important;
+  font-weight: 600 !important;
+  min-height: 2.35rem !important;
+  height: 2.35rem !important;
+  border-radius: 8px !important;
+  width: 100% !important;
+}
+
+.maxek-toolbar-attendance [data-testid="column"]:nth-child(1) button {
+  background: #ffffff !important;
+  border: 1px solid var(--border) !important;
+  color: var(--primary) !important;
+}
+
+.maxek-toolbar-attendance [data-testid="column"]:nth-child(2) button {
+  background: var(--secondary) !important;
+  border: none !important;
+  color: #fff !important;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.28) !important;
+}
+
+.maxek-toolbar-attendance [data-testid="column"]:nth-child(3) button {
+  background: var(--accent-green) !important;
+  border: none !important;
+  color: #fff !important;
+}
+
+.maxek-toolbar-attendance [data-testid="column"]:nth-child(4) button {
+  background: var(--accent-purple) !important;
+  border: none !important;
+  color: #fff !important;
+}
+
+.maxek-toolbar-attendance [data-testid="column"]:nth-child(5) button {
+  background: #ffffff !important;
+  border: 1px solid var(--border) !important;
+  color: var(--primary) !important;
+}
+
+.maxek-attendance-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+  gap: 0.85rem;
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .maxek-attendance-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.maxek-quick-actions-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.65rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--border);
+}
+
+/* —— Attendance entry —— */
+.maxek-attendance-page {
+  margin-bottom: 0.5rem;
+}
+
+.maxek-attendance-title-wrap h2 {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.maxek-attendance-title-wrap p {
+  margin: 0.2rem 0 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.maxek-attendance-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin: 0 0 0.85rem;
+}
+
+@media (max-width: 1200px) {
+  .maxek-attendance-kpi-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .maxek-attendance-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.maxek-attendance-kpi-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 0.75rem 0.85rem;
+  box-shadow: var(--shadow);
+  border-top: 3px solid var(--secondary);
+}
+
+.maxek-attendance-kpi-card.accent-blue { border-top-color: var(--secondary); }
+.maxek-attendance-kpi-card.accent-green { border-top-color: var(--accent-green); }
+.maxek-attendance-kpi-card.accent-red { border-top-color: var(--accent-red); }
+.maxek-attendance-kpi-card.accent-orange { border-top-color: var(--accent-orange); }
+.maxek-attendance-kpi-card.accent-yellow { border-top-color: var(--accent-yellow); }
+.maxek-attendance-kpi-card.accent-purple { border-top-color: var(--accent-purple); }
+.maxek-attendance-kpi-card.accent-slate { border-top-color: var(--accent-red); }
+
+.maxek-attendance-form-card [data-testid="stHorizontalBlock"] {
+  gap: 0.45rem;
+}
+
+.maxek-attendance-form-card [data-testid="column"] .stTextInput,
+.maxek-attendance-form-card [data-testid="column"] .stNumberInput,
+.maxek-attendance-form-card [data-testid="column"] .stSelectbox,
+.maxek-attendance-form-card [data-testid="column"] .stDateInput {
+  margin-bottom: 0.15rem;
+}
+
+.maxek-attendance-table-wrap [data-testid="stDataFrame"] {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  overflow: hidden;
+}
+
+.maxek-attendance-table-wrap [data-testid="column"]:last-child button {
+  font-size: 0.76rem !important;
+}
+
+.maxek-attendance-kpi-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.maxek-attendance-kpi-value {
+  font-size: 1.45rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin-top: 0.2rem;
+}
+
+.maxek-attendance-kpi-helper {
+  font-size: 0.68rem;
+  color: var(--muted);
+  margin-top: 0.15rem;
+}
+
+.maxek-attendance-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 0.85rem 1rem 1rem;
+  box-shadow: var(--shadow);
+  margin-bottom: 0.85rem;
+}
+
+.maxek-attendance-card-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0 0 0.65rem;
+  padding-bottom: 0.45rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.maxek-attendance-quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  justify-content: flex-end;
+  align-items: center;
+  margin-bottom: 0.35rem;
+}
+
+.maxek-attendance-salary-board {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin: 0.5rem 0 0.85rem;
+}
+
+.maxek-attendance-salary-panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 0.85rem 1rem;
+  box-shadow: var(--shadow);
+  position: sticky;
+  top: 80px;
+}
+
+.maxek-attendance-salary-panel h4 {
+  margin: 0 0 0.55rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--primary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.maxek-attendance-salary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.4rem 0.65rem;
+}
+
+.maxek-attendance-net {
+  grid-column: 1 / -1;
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  color: #fff;
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+  margin-top: 0.35rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.maxek-attendance-net strong {
+  font-size: 1.2rem;
+  color: #fff;
+}
+
+.maxek-attendance-table-wrap {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 0.75rem 0.85rem;
+  margin-top: 0.5rem;
+  box-shadow: var(--shadow);
+}
+
+.maxek-attendance-edit-banner {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  padding: 0.55rem 0.75rem;
+  margin-bottom: 0.65rem;
+  font-size: 0.82rem;
+  color: #1e40af;
+}
+
 @media (max-width: 1100px) {
   .maxek-payroll-board {
+    grid-template-columns: 1fr;
+  }
+
+  .maxek-attendance-salary-board {
     grid-template-columns: 1fr;
   }
 }

@@ -12,8 +12,13 @@ STEEL_DIAGRAM_DIR = Path(__file__).resolve().parents[1] / "assets" / "dpr_steel"
 SHAPE_DIAGRAM_FILES = {
     "CHAIR": "chair.png",
     "RING": "ring.png",
+    "STIRRUP": "ring.png",
     "STARTER": "starter.png",
+    "L_BAR": "starter.png",
+    "U_BAR": "starter.png",
     "BENT_BAR": "starter.png",
+    "BENT_UP": "starter.png",
+    "STRAIGHT": "starter.png",
 }
 
 # Standard TMT / rebar diameters (mm)
@@ -73,6 +78,52 @@ BUILTIN_STEEL_SHAPES = [
             {"key": "hook", "label": "Hook length (mm)", "mult": 1.0},
         ],
         "diagram_hint": "Vertical + hook per bar (enter Nos for bar count)",
+    },
+    {
+        "shape_code": "STIRRUP",
+        "shape_name": "Stirrup",
+        "input_unit": "mm",
+        "layout": "ring_6",
+        "terms": [
+            {"key": "length_1", "label": "A / L1 (mm)", "mult": 1.0},
+            {"key": "length_2", "label": "B / L2 (mm)", "mult": 1.0},
+            {"key": "width_1", "label": "C / W1 (mm)", "mult": 1.0},
+            {"key": "width_2", "label": "D / W2 (mm)", "mult": 1.0},
+            {"key": "bend_1", "label": "E (mm)", "mult": 1.0},
+            {"key": "bend_2", "label": "F (mm)", "mult": 1.0},
+        ],
+        "diagram_hint": "Stirrup perimeter: A+B+C+D+E+F (mm) → length",
+    },
+    {
+        "shape_code": "L_BAR",
+        "shape_name": "L Bar",
+        "input_unit": "mm",
+        "terms": [
+            {"key": "leg_1", "label": "A (mm)", "mult": 1.0},
+            {"key": "leg_2", "label": "B (mm)", "mult": 1.0},
+        ],
+        "diagram_hint": "A + B (mm)",
+    },
+    {
+        "shape_code": "U_BAR",
+        "shape_name": "U Bar",
+        "input_unit": "mm",
+        "terms": [
+            {"key": "leg_1", "label": "A (mm)", "mult": 1.0},
+            {"key": "leg_2", "label": "B (mm)", "mult": 1.0},
+            {"key": "leg_3", "label": "C (mm)", "mult": 1.0},
+        ],
+        "diagram_hint": "A + B + C (mm)",
+    },
+    {
+        "shape_code": "BENT_UP",
+        "shape_name": "Bent Up Bar",
+        "input_unit": "mm",
+        "terms": [
+            {"key": "leg_1", "label": "A (mm)", "mult": 1.0},
+            {"key": "leg_2", "label": "B (mm)", "mult": 1.0},
+        ],
+        "diagram_hint": "(A + B) × bend factor (mm)",
     },
 ]
 

@@ -4,6 +4,7 @@ from datetime import datetime
 
 import streamlit as st
 
+from modules.approval_workflow import WORKFLOW_STATUSES, normalize_status
 from modules.database import (
     DATE_FMT,
     DATE_INPUT_FMT,
@@ -16,7 +17,7 @@ from modules.database import (
     update_material_request_status,
 )
 
-MATERIAL_STATUSES = ["Pending", "Approved", "Rejected", "Issued"]
+MATERIAL_STATUSES = list(WORKFLOW_STATUSES) + ["Pending", "Rejected", "Issued"]
 MATERIAL_UNITS = ["Nos", "Kg", "Bag", "Meter", "Litre", "Ton", "SQM", "M3"]
 
 
@@ -123,7 +124,15 @@ def _render_action_block(df, title, actions, key_prefix):
     for col, (label, status) in zip(cols, actions):
         btn_type = "primary" if status == "Approved" or status == "Issued" else "secondary"
         if col.button(label, type=btn_type, width="stretch", key=f"{key_prefix}_{status}_{request_id}"):
-            if update_material_request_status(request_id, status):
+            canon = {"Approved": "Approved", "Rejected": "Draft", "Issued": "Paid", "Pending": "Prepared"}.get(
+                status, status
+            )
+            if update_material_request_status(
+                request_id,
+                canon,
+                actor=_current_user(),
+                role=_current_role(),
+            ):
                 st.success(f"Request {request_id} marked as {status}.")
                 st.rerun()
             else:

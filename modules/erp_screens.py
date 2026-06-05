@@ -33,8 +33,10 @@ from modules.erp_data import (
     load_leave_requests,
     load_low_stock_items,
     load_overtime_entries,
+    load_purchase_orders,
     load_purchase_quotations,
     load_purchase_rfqs,
+    save_purchase_order,
     load_simple_master,
     load_site_wise_stock,
     load_stock_adjustments,
@@ -322,6 +324,89 @@ def page_quotation_comparison():
     if not quotes.empty:
         st.markdown("**Comparison**")
         st.dataframe(quotes.sort_values("quoted_amount"), use_container_width=True, hide_index=True)
+
+
+def page_purchase_order():
+    """Purchase orders with standard approval workflow."""
+    from modules.approval_workflow import normalize_status
+    from modules.workflow_ui import render_workflow_action_panel, render_workflow_status_steps
+
+    ensure_erp_extension_tables()
+    st.subheader("Purchase Order")
+    st.caption("Create PO → Submit → Check → Approve → Release Payment → Mark Paid")
+
+    vendors = load_vendors()
+    vendor_names = [""] + (vendors["supplier_name"].tolist() if not vendors.empty else [])
+    projects = [""] + load_project_names()
+
+    with st.form("po_create_form", clear_on_submit=True):
+        c1, c2, c3 = st.columns(3)
+        po_date = c1.date_input("PO date", value=datetime.now().date(), format=DATE_INPUT_FMT)
+        vendor = c2.selectbox("Vendor", vendor_names)
+        project = c3.selectbox("Project", projects)
+        amount = st.number_input("Total amount (Rs)", min_value=0.0, step=100.0)
+        remarks = st.text_input("Remarks")
+        if st.form_submit_button("CREATE PO (DRAFT)", type="primary", use_container_width=True):
+            if not vendor:
+                st.error("Vendor is required.")
+            elif amount <= 0:
+                st.error("Amount must be greater than zero.")
+            else:
+                conn = get_conn()
+                doc_no = next_document_number("purchase_order", conn=conn)
+                conn.commit()
+                conn.close()
+                po_id = save_purchase_order(
+                    {
+                        "document_no": doc_no,
+                        "po_date": po_date.strftime(DATE_FMT),
+                        "vendor_name": vendor,
+                        "project_name": project,
+                        "total_amount": float(amount),
+                        "remarks": remarks.strip(),
+                        "status": "Draft",
+                    },
+                    _actor(),
+                )
+                st.success(f"Purchase order created: {doc_no or po_id}")
+                st.rerun()
+
+    df = load_purchase_orders()
+    if df.empty:
+        st.info("No purchase orders yet.")
+        return
+
+    st.markdown("#### Purchase order register")
+    show_cols = [
+        c
+        for c in [
+            "po_id",
+            "document_no",
+            "po_date",
+            "vendor_name",
+            "project_name",
+            "total_amount",
+            "status",
+        ]
+        if c in df.columns
+    ]
+    st.dataframe(df[show_cols], use_container_width=True, hide_index=True)
+
+    options = {
+        f"{r.get('document_no') or r['po_id']} | {r.get('vendor_name', '')} | Rs {float(r.get('total_amount') or 0):,.0f} | {r.get('status', '')}": r[
+            "po_id"
+        ]
+        for r in df.to_dict("records")
+    }
+    pick = st.selectbox("Select PO for workflow", [""] + list(options.keys()), key="po_wf_pick")
+    if not pick:
+        return
+    po_id = options[pick]
+    row = df[df["po_id"] == po_id].iloc[0].to_dict()
+    status = normalize_status(row.get("status"), "purchase_order")
+    render_workflow_status_steps(status)
+    if render_workflow_action_panel("purchase_order", po_id, status, key_prefix="po"):
+        st.rerun()
 
 
 def page_grn():

@@ -1,4 +1,4 @@
-"""Master data entry screens for MAXEL ERP."""
+"""Master data entry screens for MAXEK ERP."""
 
 from datetime import datetime
 

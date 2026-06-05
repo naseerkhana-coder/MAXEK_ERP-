@@ -1015,6 +1015,46 @@ def _render_finance_register():
             st.info("No expense invoices yet.")
         else:
             st.dataframe(df, width="stretch", hide_index=True)
+            if "invoice_id" in df.columns:
+                from modules.document_pdfs import generate_purchase_invoice_pdf
+
+                inv_labels = {
+                    f"{row.get('supplier', '')} | {row.get('invoice_no', '')} | {row.get('expense_date', '')}": row[
+                        "invoice_id"
+                    ]
+                    for _, row in df.iterrows()
+                }
+                inv_pick = st.selectbox("Download purchase invoice PDF", [""] + list(inv_labels.keys()), key="fin_inv_pdf")
+                if inv_pick and st.button("Generate invoice PDF", key="fin_inv_pdf_btn"):
+                    try:
+                        pdf_bytes = generate_purchase_invoice_pdf(inv_labels[inv_pick])
+                        st.download_button(
+                            "Download PDF",
+                            data=pdf_bytes,
+                            file_name=f"purchase_invoice_{inv_labels[inv_pick]}.pdf",
+                            mime="application/pdf",
+                            key="fin_inv_pdf_dl",
+                        )
+                    except Exception as exc:
+                        st.error(str(exc))
+            st.markdown("#### Vendor bill workflow")
+            inv_wf = {
+                f"{row.get('document_no') or row.get('invoice_id')} | {row.get('supplier', '')} | {row.get('status', '')}": row[
+                    "invoice_id"
+                ]
+                for _, row in df.iterrows()
+            }
+            wf_pick = st.selectbox("Select invoice for approval", [""] + list(inv_wf.keys()), key="vendor_bill_wf")
+            if wf_pick:
+                from modules.approval_workflow import normalize_status
+                from modules.workflow_ui import render_workflow_action_panel, render_workflow_status_steps
+
+                invoice_id = inv_wf[wf_pick]
+                inv_row = df[df["invoice_id"] == invoice_id].iloc[0]
+                status = normalize_status(inv_row.get("status"), "vendor_bill")
+                render_workflow_status_steps(status)
+                if render_workflow_action_panel("vendor_bill", invoice_id, status, key_prefix="vbl"):
+                    st.rerun()
         return
 
     status = None

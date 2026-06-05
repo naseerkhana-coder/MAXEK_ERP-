@@ -27,7 +27,7 @@ _QUICK_ACCESS = (
     ("purch_invoice", "Purchase Invoice"),
     ("proj_boq", "BOQ Entry"),
     ("store_issue", "Material Issue"),
-    ("hr_payroll", "Payroll Processing"),
+    ("hr_payroll", "Worker Payroll"),
 )
 
 
@@ -342,6 +342,15 @@ def render_erp_sidebar(user_name: str, allowed_pages=None) -> None:
     st.markdown("</div>", unsafe_allow_html=True)
 
     if not _collapsed():
+        st.markdown(
+            """
+            <div class="maxek-sidebar-help-card">
+              <strong>Need Help?</strong>
+              <span>Contact your system administrator or open Settings → Users for access requests.</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
         st.markdown(
             f"""
             <div class="maxek-sidebar-footer">

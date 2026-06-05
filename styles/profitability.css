@@ -1,0 +1,123 @@
+/* Project Profitability Dashboard — mobile-friendly cards */
+.maxek-profit-shell {
+  margin-bottom: 1rem;
+}
+
+.maxek-profit-filter-bar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.maxek-profit-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.maxek-profit-card {
+  background: var(--panel, #fff);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: var(--radius-card, 12px);
+  padding: 0.85rem 1rem;
+  box-shadow: var(--shadow);
+}
+
+.maxek-profit-card .label {
+  font-size: 0.72rem;
+  color: var(--muted, #64748b);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.25rem;
+}
+
+.maxek-profit-card .value {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--primary, #0f172a);
+}
+
+.maxek-profit-card .sub {
+  font-size: 0.75rem;
+  color: var(--muted, #64748b);
+  margin-top: 0.2rem;
+}
+
+.maxek-profit-head-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.5rem;
+}
+
+.maxek-profit-head-tile {
+  background: #f8fafc;
+  border-radius: 8px;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid #e2e8f0;
+}
+
+.maxek-profit-head-tile strong {
+  display: block;
+  font-size: 0.95rem;
+}
+
+.maxek-profit-head-tile span {
+  font-size: 0.7rem;
+  color: #64748b;
+}
+
+.profit-light-green {
+  border-left: 4px solid #10b981;
+}
+
+.profit-light-yellow {
+  border-left: 4px solid #eab308;
+}
+
+.profit-light-red {
+  border-left: 4px solid #ef4444;
+}
+
+.profit-light-critical {
+  border-left: 4px solid #b91c1c;
+  background: #fef2f2;
+}
+
+.maxek-profit-badge {
+  display: inline-block;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.profit-badge-green {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.profit-badge-yellow {
+  background: #fef9c3;
+  color: #854d0e;
+}
+
+.profit-badge-red {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.profit-badge-critical {
+  background: #fecaca;
+  color: #7f1d1d;
+}
+
+@media (max-width: 640px) {
+  .maxek-profit-kpi-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .maxek-profit-card .value {
+    font-size: 1rem;
+  }
+}

@@ -1,0 +1,11 @@
+/* Petty Cash — mobile-friendly metrics and tables */
+.petty-metric-row [data-testid="column"] {
+  min-width: 140px;
+}
+
+@media (max-width: 768px) {
+  .petty-metric-row [data-testid="column"] {
+    flex: 1 1 100%;
+    min-width: 100%;
+  }
+}

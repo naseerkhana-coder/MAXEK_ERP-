@@ -1,4 +1,4 @@
-# MAXEL ERP SYSTEM
+# MAXEK ERP SYSTEM
 
 ## Run locally
 
@@ -38,6 +38,10 @@ Construction Company ERP System
 
 ## Project Overview
 MAXEK ERP System is a professional ERP platform designed for construction company operations, labor management, payroll management, client and project tracking, subcontractor management, payments, expenses, and daily office usage.
+
+**Approved Phase 1 requirements:** [docs/FINAL_REQUIREMENTS_CONFIRMATION.md](docs/FINAL_REQUIREMENTS_CONFIRMATION.md) · **Gap analysis:** [docs/PHASE1_GAP_ANALYSIS.md](docs/PHASE1_GAP_ANALYSIS.md) · **Executive summary:** [docs/PHASE1_EXECUTIVE_SUMMARY.md](docs/PHASE1_EXECUTIVE_SUMMARY.md)
+
+**UAT:** [docs/UAT_HANDOFF.md](docs/UAT_HANDOFF.md) (post-deploy login & credentials) · [docs/UAT_ACCEPTANCE_CRITERIA.md](docs/UAT_ACCEPTANCE_CRITERIA.md) · [docs/UAT_TEST_CASES.md](docs/UAT_TEST_CASES.md) · [docs/UAT_READINESS_REPORT.md](docs/UAT_READINESS_REPORT.md) · [docs/REMAINING_PARTIAL_ITEMS_REVIEW.md](docs/REMAINING_PARTIAL_ITEMS_REVIEW.md) (10 partial items, go-live sign-off) · [docs/PRODUCTION_DEPLOYMENT_CHECKLIST.md](docs/PRODUCTION_DEPLOYMENT_CHECKLIST.md)
 
 The system should support daily business operations with a clean modern UI, role-based access, automation of repetitive tasks, and a structure that can grow from SQLite to PostgreSQL in the future.
 
@@ -83,6 +87,21 @@ Site Petty Cash → Expense Entry → Invoice Upload → Accounts Verification �
 ```
 
 Screen routing: `modules/erp_router.py` · New module screens: `modules/erp_screens.py` · Data layer: `modules/erp_data.py`
+
+### PDF document templates
+
+Shared layout: `modules/pdf_templates.py` (company block, tables, ₹ formatting, signature). Generators: `modules/document_pdfs.py`.
+
+| Document | Generator | UI path |
+|----------|-----------|---------|
+| Worker salary slip (8hr/10hr) | `generate_worker_salary_slip_pdf` | HR → Worker Payroll → **Salary Slip** tab |
+| Staff payslip | `generate_staff_payslip_pdf` | HR → Staff Payroll → **Payroll Register** → Download PDF |
+| Client invoice / bill | `generate_client_invoice_pdf` | Project → Billing → **Register & Print** |
+| Sub-contractor bill | `generate_subcontractor_bill_pdf` | Project → Billing → **Register & Print** |
+| Purchase / expense invoice | `generate_purchase_invoice_pdf` | Accounts → Finance Register → Expense invoices |
+| Payment voucher | `generate_payment_voucher_pdf` | `document_pdfs` (wire to finance UI when needed) |
+
+Legacy Tk payslip (`src/pdf_generator.py`) is superseded by the modules above.
 
 ## Important UI Requirements
 - Modern clean UI

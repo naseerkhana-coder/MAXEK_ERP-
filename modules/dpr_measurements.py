@@ -44,9 +44,271 @@ def unit_entry_label(unit_family):
         "KG": "Kilogram (KG) — enter total quantity",
         "RM": "Running metre (RM) — Length × Qty",
         "NOS": "Numbers (NOS) — enter quantity",
-        "TON": "Steel (TON/MT) — shape code, dimensions, dia, nos → weight in MT",
+        "TON": "Steel (TON/MT) — BBS or shape → weight in MT",
     }
     return labels.get(unit_family, f"Unit {unit_family}")
+
+
+def boq_measurement_type_label(unit_family: str) -> str:
+    """Human-readable measurement type from BOQ unit."""
+    unit_family = normalize_boq_unit(unit_family)
+    mapping = {
+        "M3": "Volume (M3)",
+        "SQM": "Area (M2/SQM)",
+        "RM": "Running metre",
+        "NOS": "Count (Nos)",
+        "KG": "Weight (Kg)",
+        "TON": "Steel (Ton/MT)",
+    }
+    return mapping.get(unit_family, unit_family or "General")
+
+
+def should_use_average_width(widths: list) -> bool:
+    """Use average width when two or more non-zero widths are entered."""
+    return len(_parse_values(widths)) >= 2
+
+
+BBS_SHAPE_OPTIONS = (
+    ("STRAIGHT", "Straight Bar"),
+    ("RING", "Ring"),
+    ("STIRRUP", "Stirrup"),
+    ("L_BAR", "L Bar"),
+    ("U_BAR", "U Bar"),
+    ("BENT_UP", "Bent Up Bar"),
+    ("BENT_BAR", "Bent Bar"),
+    ("CUSTOM", "Custom Shape"),
+)
+
+
+def bbs_shape_label(shape_code: str) -> str:
+    code = str(shape_code or "").strip().upper()
+    for key, label in BBS_SHAPE_OPTIONS:
+        if key == code:
+            return label
+    return code or "Shape"
+
+
+def compute_bbs_length_m(shape_code: str, dims: dict) -> float:
+    """Total cut length (m) from shape code and leg fields A–F (mm unless noted)."""
+    code = str(shape_code or "STRAIGHT").strip().upper()
+    a = float(dims.get("dim_a") or dims.get("a") or 0)
+    b = float(dims.get("dim_b") or dims.get("b") or 0)
+    c = float(dims.get("dim_c") or dims.get("c") or 0)
+    d = float(dims.get("dim_d") or dims.get("d") or 0)
+    e = float(dims.get("dim_e") or dims.get("e") or 0)
+    f = float(dims.get("dim_f") or dims.get("f") or 0)
+    length_m = float(dims.get("length_m") or 0)
+
+    if length_m > 0:
+        return round(length_m, 4)
+
+    mm_total = 0.0
+    if code in {"STRAIGHT", "CUSTOM"}:
+        mm_total = a or length_m * 1000
+    elif code in {"RING", "STIRRUP"}:
+        mm_total = a + b + c + d + e + f
+        if mm_total <= 0:
+            mm_total = 2 * (a + b) if a and b else 0
+    elif code == "L_BAR":
+        mm_total = a + b
+    elif code == "U_BAR":
+        mm_total = a + b + c
+    elif code in {"BENT_UP", "BENT_BAR"}:
+        bend = float(dims.get("bend_factor") or dims.get("bend") or 1.0) or 1.0
+        mm_total = (a + b) * bend
+    else:
+        mm_total = sum(v for v in (a, b, c, d, e, f) if v > 0)
+
+    if mm_total <= 0:
+        return 0.0
+    return round(mm_total / 1000.0, 4)
+
+
+def compute_steel_bbs_row(
+    bar_mark: str,
+    dia_mm: float,
+    spacing_mm: float,
+    nos: float,
+    length_m: float,
+    *,
+    shape_code: str = "STRAIGHT",
+    dim_a: float = 0,
+    dim_b: float = 0,
+    dim_c: float = 0,
+    dim_d: float = 0,
+    dim_e: float = 0,
+    dim_f: float = 0,
+    shape_image_path: str = "",
+) -> dict:
+    dims = {
+        "dim_a": dim_a,
+        "dim_b": dim_b,
+        "dim_c": dim_c,
+        "dim_d": dim_d,
+        "dim_e": dim_e,
+        "dim_f": dim_f,
+        "length_m": length_m,
+    }
+    cut_length_m = compute_bbs_length_m(shape_code, dims)
+    if cut_length_m <= 0 and length_m > 0:
+        cut_length_m = float(length_m)
+    weight_kg = steel_bbs_weight_kg(nos, cut_length_m, dia_mm)
+    weight_mt = round(weight_kg / 1000.0, 4)
+    return {
+        "bar_mark": (bar_mark or "").strip(),
+        "shape_code": str(shape_code or "STRAIGHT").upper(),
+        "shape_name": bbs_shape_label(shape_code),
+        "diameter_mm": float(dia_mm or 0),
+        "spacing_mm": float(spacing_mm or 0),
+        "nos": float(nos or 0),
+        "dim_a": float(dim_a or 0),
+        "dim_b": float(dim_b or 0),
+        "dim_c": float(dim_c or 0),
+        "dim_d": float(dim_d or 0),
+        "dim_e": float(dim_e or 0),
+        "dim_f": float(dim_f or 0),
+        "length_m": cut_length_m,
+        "weight_kg": weight_kg,
+        "weight_mt": weight_mt,
+        "shape_image_path": shape_image_path or "",
+        "remarks": "",
+    }
+
+
+def measurement_include_in_bill(default_yes: bool = True) -> int:
+    return 1 if default_yes else 0
+
+
+def steel_bbs_weight_kg(nos: float, length_m: float, dia_mm: float) -> float:
+    if nos <= 0 or length_m <= 0 or dia_mm <= 0:
+        return 0.0
+    return round((float(dia_mm) ** 2 * float(length_m) * float(nos)) / 162.0, 4)
+
+
+def steel_bbs_weight_mt(nos: float, length_m: float, dia_mm: float) -> float:
+    return round(steel_bbs_weight_kg(nos, length_m, dia_mm) / 1000.0, 4)
+
+
+def sum_measurement_rows(rows: list, unit_family: str) -> float:
+    """Sum calculated quantities across measurement rows (same unit family)."""
+    unit_family = normalize_boq_unit(unit_family)
+    return round(
+        sum(float(r.get("calculated_quantity") or 0) for r in (rows or [])),
+        4,
+    )
+
+
+def sum_billable_measurement_rows(rows: list) -> float:
+    """Sum quantities marked for client billing."""
+    return round(
+        sum(
+            float(r.get("calculated_quantity") or 0)
+            for r in (rows or [])
+            if int(r.get("include_in_client_bill", 1) or 0) == 1
+        ),
+        4,
+    )
+
+
+def build_structured_measurement_record(
+    unit_family: str,
+    *,
+    length: float = 0,
+    width: float = 0,
+    width_2: float = 0,
+    width_3: float = 0,
+    depth: float = 0,
+    height: float = 0,
+    thickness: float = 0,
+    nos: float = 0,
+    force_average_width: bool | None = None,
+) -> dict:
+    """
+    Single measurement row with explicit L/W/W2/W3/D/H/thickness/Nos.
+    Average width applies when W2 or W3 is filled (or force_average_width=True).
+    """
+    unit_family = normalize_boq_unit(unit_family)
+    widths = [width, width_2, width_3]
+    depths = []
+    if depth > 0:
+        depths.append(depth)
+    elif height > 0:
+        depths.append(height)
+    elif thickness > 0:
+        depths.append(thickness)
+    lengths = [length] if length > 0 else []
+    use_avg = force_average_width
+    if use_avg is None:
+        use_avg = should_use_average_width(widths)
+    method = "Average" if use_avg and should_use_average_width(widths) else "Normal"
+    qty = float(nos or 0) if unit_family == "NOS" else float(nos or 0)
+    if unit_family == "NOS":
+        qty = max(qty, float(nos or 0))
+    calc = compute_measurement(unit_family, lengths, widths, depths, qty, method)
+    record = build_measurement_record(unit_family, method, lengths, widths, depths, qty)
+    record["width_3"] = float(width_3 or 0)
+    record["thickness"] = float(thickness or 0)
+    record["height"] = float(height or 0)
+    dims = json.loads(record.get("dimensions_json") or "{}")
+    dims.update(
+        {
+            "width_3": float(width_3 or 0),
+            "thickness": float(thickness or 0),
+            "height": float(height or 0),
+            "structured_row": True,
+        }
+    )
+    record["dimensions_json"] = json.dumps(dims)
+    record["preview_lines"] = calc.get("preview_lines") or record.get("preview_lines")
+    return record
+
+
+def bbs_rows_to_steel_measurements(bbs_rows: list) -> list:
+    """Convert steel BBS schedule rows to DPR measurement records (TON)."""
+    out = []
+    for row in bbs_rows or []:
+        mt = float(row.get("weight_mt") or steel_bbs_weight_mt(
+            row.get("nos", 0), row.get("length_m", 0), row.get("diameter_mm", 0)
+        ))
+        if mt <= 0:
+            continue
+        mark = row.get("bar_mark") or "BBS"
+        dia = float(row.get("diameter_mm") or 0)
+        dims = {
+            "bbs": True,
+            "bar_mark": mark,
+            "shape_code": row.get("shape_code") or "STRAIGHT",
+            "diameter_mm": dia,
+            "spacing_mm": float(row.get("spacing_mm") or 0),
+            "nos": float(row.get("nos") or 0),
+            "dim_a": float(row.get("dim_a") or 0),
+            "dim_b": float(row.get("dim_b") or 0),
+            "dim_c": float(row.get("dim_c") or 0),
+            "dim_d": float(row.get("dim_d") or 0),
+            "dim_e": float(row.get("dim_e") or 0),
+            "dim_f": float(row.get("dim_f") or 0),
+            "length_m": float(row.get("length_m") or 0),
+            "weight_kg": float(row.get("weight_kg") or 0),
+            "shape_image_path": row.get("shape_image_path") or "",
+        }
+        out.append(
+            {
+                "measurement_type": f"Steel BBS {mark}",
+                "measurement_method": "BBS",
+                "unit": "TON",
+                "qty": float(row.get("nos") or 0),
+                "nos": float(row.get("nos") or 0),
+                "dia_mm": dia,
+                "length_1": float(row.get("length_m") or 0),
+                "calculated_quantity": mt,
+                "dimensions_json": json.dumps(dims),
+                "preview_lines": [
+                    f"BBS {mark}: Ø{dia:g}mm × L{row.get('length_m', 0):g}m × {row.get('nos', 0):g} nos",
+                    f"Weight = {mt:g} MT",
+                ],
+            }
+        )
+    return out
 
 
 def _parse_values(raw_list):

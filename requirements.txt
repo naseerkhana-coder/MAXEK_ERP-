@@ -5,3 +5,4 @@ reportlab
 streamlit
 fastapi
 uvicorn[standard]
+bcrypt

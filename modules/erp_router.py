@@ -6,8 +6,10 @@ from collections.abc import Callable
 
 import streamlit as st
 
+from modules.account_pages import page_account_profile
 from modules.billing import page_billing
 from modules.dpr import page_dpr
+from modules.dpr_measurement_book import page_measurement_book
 from modules.finance import page_finance, page_finance_accounts_hub
 from modules.navigation import all_page_keys, page_label
 from modules.pages import (
@@ -39,6 +41,7 @@ from modules.erp_screens import (
     page_material_return,
     page_overtime_management,
     page_purchase_requisition,
+    page_purchase_order,
     page_quotation_comparison,
     page_rfq_management,
     page_site_wise_stock,
@@ -94,6 +97,18 @@ def _open_subcontractors(hint_tab: str | None = None):
     page_subcontractors()
 
 
+def _open_client_portal(page_key: str):
+    from modules.client_portal import portal_page_handler
+
+    portal_page_handler(page_key)
+
+
+def page_portal_admin_assignments():
+    from modules.client_portal import page_portal_admin_assignments
+
+    page_portal_admin_assignments()
+
+
 def _coming_soon(title: str, workflow: str = "") -> Callable[[], None]:
     def handler():
         st.subheader(title)
@@ -123,6 +138,12 @@ def page_dash_notifications():
 
     st.subheader("Notifications")
     _render_dashboard_notifications()
+
+
+def page_dash_profitability():
+    from modules.project_profitability import page_project_profitability
+
+    page_project_profitability()
 
 
 # —— Masters ——
@@ -158,7 +179,9 @@ def page_masters_users_route():
 
 # —— Finance ——
 def page_fin_expense_entry():
-    _open_finance("expense")
+    from modules.petty_cash import page_petty_expenses
+
+    page_petty_expenses()
 
 
 def page_fin_purchase_invoice():
@@ -166,11 +189,38 @@ def page_fin_purchase_invoice():
 
 
 def page_fin_petty_cash():
-    _open_finance("petty")
+    from modules.petty_cash import page_petty_cash
+
+    tab = st.session_state.pop("_petty_initial_tab", "dashboard")
+    page_petty_cash(initial_tab=tab)
+
+
+def page_petty_fund_requests():
+    from modules.petty_cash import page_petty_cash
+
+    page_petty_cash(initial_tab="request")
+
+
+def page_petty_fund_issue():
+    from modules.petty_cash import page_petty_cash
+
+    page_petty_cash(initial_tab="issue")
+
+
+def page_petty_reports():
+    from modules.petty_cash import page_petty_cash
+
+    page_petty_cash(initial_tab="reports")
 
 
 def page_fin_payments():
     _open_finance_hub("payment_out")
+
+
+def page_payment_voucher():
+    from modules.payment_voucher import page_payment_voucher as _page
+
+    _page()
 
 
 def page_fin_receipts():
@@ -263,6 +313,12 @@ def page_inv_material_issue():
     page_material_issue()
 
 
+def page_material_planning():
+    from modules.material_planning import page_material_planning as _page
+
+    _page()
+
+
 def page_inv_tools():
     from modules.inventory import page_tools
 
@@ -299,9 +355,14 @@ def page_pay_payroll():
     page_worker_payroll()
 
 
+def page_pay_staff_payroll():
+    page_payroll()
+
+
 def page_pay_payslips():
     from modules.worker_payroll import page_worker_payroll
 
+    st.session_state["wp_default_tab"] = "Salary Slip"
     page_worker_payroll()
 
 
@@ -388,6 +449,18 @@ def page_rpt_project():
     page_reports()
 
 
+def page_rpt_phase3():
+    from modules.phase3_integration import page_phase3_reports
+
+    page_phase3_reports()
+
+
+def page_rpt_material_planning():
+    from modules.material_planning import page_material_planning as _page
+
+    _page()
+
+
 def page_rpt_inventory():
     _open_store("register")
 
@@ -418,10 +491,9 @@ def page_appr_payment():
 
 
 def page_appr_petty():
-    from modules.finance_workflow import render_approval_inbox
+    from modules.petty_cash import page_petty_expense_approval
 
-    st.subheader("Petty Cash Approval")
-    render_approval_inbox("Petty Cash", ["Submitted", "Verified", "PM Approved"])
+    page_petty_expense_approval()
 
 
 # —— Correspondence / Documents ——
@@ -483,6 +555,7 @@ def page_corr_archive():
 PAGE_ROUTES: dict[str, Callable[[], None]] = {
     # Dashboard
     "dash_mgmt": page_dashboard,
+    "dash_profitability": page_dash_profitability,
     "dash_project": page_rpt_project,
     "dash_accounts": page_rpt_financial,
     "dash_hr": page_pay_attendance,
@@ -529,6 +602,7 @@ PAGE_ROUTES: dict[str, Callable[[], None]] = {
     # Project Management
     "proj_setup": lambda: _open_clients("projects"),
     "proj_create": lambda: _open_clients("projects"),
+    "proj_profitability": page_dash_profitability,
     "proj_code": lambda: _open_clients("projects"),
     "proj_client_link": lambda: _open_clients("projects"),
     "proj_contract_value": lambda: _open_clients("projects"),
@@ -543,6 +617,8 @@ PAGE_ROUTES: dict[str, Callable[[], None]] = {
     "proj_wo_internal": page_sub_work_orders,
     "proj_wo_sub": page_sub_work_orders,
     "proj_dpr_daily": page_site_dpr,
+    "proj_measurement_book": page_measurement_book,  # also available as tab inside page_dpr()
+    "proj_material_planning": page_material_planning,
     "proj_dpr_weekly": page_proj_progress,
     "proj_dpr_monthly": page_proj_progress,
     "proj_bill_client": page_boq_billing,
@@ -557,7 +633,7 @@ PAGE_ROUTES: dict[str, Callable[[], None]] = {
     "purch_requisition": page_purchase_requisition,
     "purch_rfq": page_rfq_management,
     "purch_quotation": page_quotation_comparison,
-    "purch_order": page_inv_purchase,
+    "purch_order": page_purchase_order,
     "purch_grn": page_grn,
     "purch_invoice": page_fin_purchase_invoice,
     "purch_vendor_payment": page_sub_payments,
@@ -565,6 +641,7 @@ PAGE_ROUTES: dict[str, Callable[[], None]] = {
     # Store & Inventory
     "store_receipt": page_inv_stock,
     "store_issue": page_inv_material_issue,
+    "store_consumption_control": page_material_planning,
     "store_return": page_material_return,
     "store_transfer": page_stock_transfer,
     "store_adjustment": page_stock_adjustment,
@@ -578,6 +655,7 @@ PAGE_ROUTES: dict[str, Callable[[], None]] = {
     "hr_transfer": page_employee_transfer,
     "hr_overtime": page_overtime_management,
     "hr_payroll": page_pay_payroll,
+    "hr_staff_payroll": page_pay_staff_payroll,
     "hr_salary_slip": page_pay_payslips,
     "hr_labour_attendance": page_pay_attendance,
     "hr_reports": page_rpt_payroll,
@@ -586,6 +664,7 @@ PAGE_ROUTES: dict[str, Callable[[], None]] = {
     "acc_cost_center": page_proj_budget,
     "acc_receipt": page_fin_receipts,
     "acc_payment": page_fin_payments,
+    "acc_payment_voucher": page_payment_voucher,
     "acc_journal": page_fin_journal,
     "acc_contra": page_fin_contra,
     "acc_bank_recon": page_bank_reconciliation,
@@ -600,14 +679,15 @@ PAGE_ROUTES: dict[str, Callable[[], None]] = {
     "acc_cash_book": page_fin_receipts,
     "acc_bank_book": page_fin_payments,
     # Petty Cash
-    "petty_request": page_fin_petty_cash,
-    "petty_allocation": page_fin_petty_cash,
+    "petty_dashboard": page_fin_petty_cash,
+    "petty_request": page_petty_fund_requests,
+    "petty_allocation": page_petty_fund_issue,
     "petty_expense": page_fin_expense_entry,
     "petty_invoice": page_fin_purchase_invoice,
     "petty_verification": page_appr_petty,
     "petty_approval": page_appr_petty,
-    "petty_settlement": page_fin_petty_cash,
-    "petty_reports": page_fin_petty_cash,
+    "petty_settlement": page_petty_fund_issue,
+    "petty_reports": page_petty_reports,
     # Asset & Equipment
     "asset_register": page_asset_register,
     "asset_allocation": page_asset_transfer,
@@ -655,11 +735,24 @@ PAGE_ROUTES: dict[str, Callable[[], None]] = {
     "rpt_gst": page_rpt_gst,
     "rpt_stock": page_rpt_inventory,
     "rpt_material_consumption": page_rpt_inventory,
+    "rpt_phase3": page_rpt_phase3,
+    "rpt_material_planning": page_rpt_material_planning,
     "rpt_attendance": page_pay_attendance,
     "rpt_payroll": page_rpt_payroll,
     "rpt_company_profit": page_rpt_profit_loss,
     "rpt_project_profit": page_rpt_profit_loss,
     "rpt_cash_flow": page_rpt_financial,
+    # Client portal (client role + admin assignment screen)
+    "portal_dash": lambda: _open_client_portal("portal_dash"),
+    "portal_projects": lambda: _open_client_portal("portal_projects"),
+    "portal_invoices": lambda: _open_client_portal("portal_invoices"),
+    "portal_bills": lambda: _open_client_portal("portal_bills"),
+    "portal_documents": lambda: _open_client_portal("portal_documents"),
+    "portal_progress": lambda: _open_client_portal("portal_progress"),
+    "portal_payments": lambda: _open_client_portal("portal_payments"),
+    "portal_admin_assign": page_portal_admin_assignments,
+    # My Account (all roles)
+    "account_profile": page_account_profile,
     # Settings & Administration
     "settings_users": page_settings_users,
     "settings_roles": page_settings_users,
