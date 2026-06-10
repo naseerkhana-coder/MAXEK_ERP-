@@ -1404,6 +1404,9 @@ def init_db():
             ("duty_category", "TEXT"),
             ("daily_wage", "REAL"),
             ("ot_eligible", "TEXT"),
+            ("email", "TEXT"),
+            ("work_flow", "TEXT"),
+            ("working_hours", "TEXT"),
         ),
         "employee_advance": (
             ("employee_id", "TEXT"),
@@ -4353,10 +4356,23 @@ def _alpha_key(text: str) -> str:
     return "".join(ch for ch in str(text or "") if ch.isalpha()).upper()
 
 
+def _subcontractor_id_letter_prefix(subcontractor_id: str) -> str:
+    """Leading alphabetic prefix from a subcontractor master id (e.g. NA100 -> NA, MA100 -> MA)."""
+    sid = str(subcontractor_id or "").strip().upper()
+    letters: list[str] = []
+    for ch in sid:
+        if ch.isalpha():
+            letters.append(ch)
+        else:
+            break
+    prefix = "".join(letters)
+    return prefix if len(prefix) >= 2 else ""
+
+
 def _derive_unique_sub_code(sub_name: str) -> str:
     """
-    Subcontractor code rules:
-    - Prefer 1st + 2nd letter (MA for Maksood, IM for Imran)
+    Subcontractor / worker letter-prefix rules:
+    - Prefer 1st + 2nd letter (NA for Naseer, MA for Maksood)
     - If that 2-letter prefix is already used by another subcontractor, use 1st + 3rd letter.
     - If still colliding, try 1st + 4th, 1st + 5th... until unique.
     """
@@ -4416,7 +4432,7 @@ def next_subcontractor_id(sub_name: str) -> str:
 
 
 def _sub_code_from_name_or_id(sub_name: str) -> str:
-    """If subcontractor exists with alphabetic prefix, reuse it; else derive from name."""
+    """Reuse subcontractor master id prefix when registered; else derive from name (NA, MA, …)."""
     name = str(sub_name or "").strip()
     if not name:
         return "WK"
@@ -4427,9 +4443,9 @@ def _sub_code_from_name_or_id(sub_name: str) -> str:
     ).fetchone()
     conn.close()
     if row:
-        sid = str(row[0] or "").strip().upper()
-        if len(sid) >= 2 and sid[:2].isalpha():
-            return sid[:2]
+        prefix = _subcontractor_id_letter_prefix(str(row[0] or ""))
+        if prefix:
+            return prefix
     return _derive_unique_sub_code(name)
 
 
@@ -5053,22 +5069,24 @@ def get_employee(employee_id):
 
 
 def next_worker_id(sub_name):
+    """Next subcontractor worker id: same letter prefix as sub master, number from 101 (NA101, MA102, …)."""
     code = _sub_code_from_name_or_id(sub_name)
     conn = get_conn()
     cur = conn.cursor()
-    cur.execute(
-        "SELECT worker_id FROM workers WHERE UPPER(COALESCE(worker_id,'')) LIKE ?",
-        (f"{code}%",),
-    )
     max_num = 100
-    for (raw,) in cur.fetchall():
-        text = str(raw or "").strip().upper()
-        if not text.startswith(code):
-            continue
-        try:
-            max_num = max(max_num, int(text[len(code) :]))
-        except ValueError:
-            continue
+    for table, col in (("workers", "worker_id"), ("employees", "employee_id")):
+        cur.execute(
+            f"SELECT {col} FROM {table} WHERE UPPER(COALESCE({col},'')) LIKE ?",
+            (f"{code}%",),
+        )
+        for (raw,) in cur.fetchall():
+            text = str(raw or "").strip().upper()
+            if not text.startswith(code):
+                continue
+            try:
+                max_num = max(max_num, int(text[len(code) :]))
+            except ValueError:
+                continue
     conn.close()
     return f"{code}{max_num + 1}"
 
@@ -5883,7 +5901,10 @@ def kpi_stats():
           AND UPPER(COALESCE(status,'')) NOT IN ('SETTLED', 'PAID', 'APPROVED')
         """
     ) or scalar_query(
-        "SELECT COUNT(*) FROM expenses WHERE UPPER(COALESCE(status,'')) IN ('PENDING', 'SUBMITTED')"
+        """
+        SELECT COUNT(*) FROM site_expenses
+        WHERE UPPER(COALESCE(status,'')) IN ('PENDING', 'SUBMITTED', 'VERIFIED', 'PM APPROVED', 'DRAFT')
+        """
     )
     material_requests_open = scalar_query(
         "SELECT COUNT(*) FROM material_requests WHERE UPPER(COALESCE(status,'')) IN ('PENDING', 'SUBMITTED', 'OPEN', 'DRAFT')"
@@ -7110,3 +7131,163 @@ def save_material_issue(data, actor=""):
         raise
     finally:
         conn.close()
+
+
+EMPLOYEE_MASTER_CATEGORIES = ("Company Staff", "Daily Worker", "Subcontractor")
+
+_CATEGORY_TO_EMPLOYEE_TYPE = {
+    "Company Staff": "Company Staff",
+    "Daily Worker": "Daily Wage Staff",
+    "Subcontractor": "Sub Contractor Worker",
+}
+
+_EMPLOYEE_TYPE_TO_CATEGORY = {
+    "Company Staff": "Company Staff",
+    "Monthly Staff": "Company Staff",
+    "Daily Wage Staff": "Daily Worker",
+    "Company Worker": "Daily Worker",
+    "Sub Contractor Worker": "Subcontractor",
+    "Labour Supply Worker": "Subcontractor",
+    "Site Worker": "Subcontractor",
+}
+
+
+def employee_category_from_type(employee_type: str) -> str:
+    return _EMPLOYEE_TYPE_TO_CATEGORY.get(str(employee_type or "").strip(), "Company Staff")
+
+
+def employee_type_from_category(category: str) -> str:
+    return _CATEGORY_TO_EMPLOYEE_TYPE.get(str(category or "").strip(), "Company Staff")
+
+
+def preview_employee_code(category: str, subcontractor_name: str = "") -> str:
+    """Next employee/worker ID preview for Employee Master form."""
+    if str(category or "").strip() == "Subcontractor":
+        sub = str(subcontractor_name or "").strip()
+        return next_worker_id(sub) if sub else "— select subcontractor —"
+    return generate_id("EMP", "employees")
+
+
+def find_duplicate_employee_ids() -> list[dict]:
+    """Return groups of duplicate employee_id values (data integrity check)."""
+    conn = get_conn()
+    df = pd.read_sql_query(
+        """
+        SELECT employee_id, COUNT(*) AS row_count
+        FROM employees
+        WHERE COALESCE(TRIM(employee_id), '') != ''
+        GROUP BY employee_id
+        HAVING COUNT(*) > 1
+        ORDER BY employee_id
+        """,
+        conn,
+    )
+    conn.close()
+    if df.empty:
+        return []
+    return [{"employee_id": row["employee_id"], "row_count": int(row["row_count"])} for _, row in df.iterrows()]
+
+
+def employee_id_exists(employee_id: str, exclude_id: str | None = None) -> bool:
+    eid = str(employee_id or "").strip()
+    if not eid:
+        return False
+    conn = get_conn()
+    if exclude_id:
+        row = conn.execute(
+            "SELECT 1 FROM employees WHERE employee_id = ? AND employee_id != ? LIMIT 1",
+            (eid, exclude_id),
+        ).fetchone()
+    else:
+        row = conn.execute("SELECT 1 FROM employees WHERE employee_id = ? LIMIT 1", (eid,)).fetchone()
+    conn.close()
+    return row is not None
+
+
+def load_employee_designation_access_rows(limit: int = 500) -> pd.DataFrame:
+    """Rows for Employee Designation & Workflow Access table."""
+    conn = get_conn()
+    df = pd.read_sql_query(
+        """
+        SELECT
+            e.employee_id,
+            e.employee_name,
+            COALESCE(e.designation, '') AS designation,
+            COALESCE(e.department, '') AS department,
+            COALESCE(e.reporting_manager, '') AS reporting_manager,
+            COALESCE(e.work_flow, '') AS work_flow,
+            COALESCE(e.working_hours, '') AS working_hours,
+            COALESCE(e.employee_type, '') AS employee_type,
+            COALESCE(u.role, '') AS user_role
+        FROM employees e
+        LEFT JOIN users u ON u.employee_id = e.employee_id
+        ORDER BY e.employee_name COLLATE NOCASE
+        LIMIT ?
+        """,
+        conn,
+        params=(max(1, min(int(limit), 2000)),),
+    )
+    conn.close()
+    if df.empty:
+        return df
+
+    def _workflow_label(row) -> str:
+        wf = str(row.get("work_flow") or "").strip()
+        if wf:
+            return wf
+        role = str(row.get("user_role") or "").strip()
+        return role if role else "No workflow role"
+
+    df["workflow_access"] = df.apply(_workflow_label, axis=1)
+    df["reporting_manager"] = df["reporting_manager"].replace("", "—")
+    return df
+
+
+def load_employee_manager_options() -> list[str]:
+    """Active employees suitable as reporting managers."""
+    conn = get_conn()
+    df = pd.read_sql_query(
+        """
+        SELECT employee_id, employee_name, COALESCE(designation, '') AS designation
+        FROM employees
+        WHERE UPPER(COALESCE(status, 'ACTIVE')) IN ('ACTIVE', '')
+        ORDER BY employee_name COLLATE NOCASE
+        """,
+        conn,
+    )
+    conn.close()
+    options = [""]
+    for _, row in df.iterrows():
+        label = f"{row['employee_name']}"
+        desig = str(row.get("designation") or "").strip()
+        if desig:
+            label = f"{label} ({desig})"
+        options.append(label)
+    managers = load_managers()
+    for name in managers:
+        if name and name not in options and name != "— No manager —":
+            options.append(name)
+    return options
+
+
+def resolve_reporting_manager_label(employee_name: str, designation: str = "") -> str:
+    name = str(employee_name or "").strip()
+    if not name:
+        return ""
+    desig = str(designation or "").strip()
+    return f"{name} ({desig})" if desig else name
+
+
+def reporting_manager_from_label(label: str) -> str:
+    text = str(label or "").strip()
+    if not text or text == "—":
+        return ""
+    if " (" in text and text.endswith(")"):
+        return text.rsplit(" (", 1)[0].strip()
+    return text
+
+
+def load_workflow_role_options() -> list[str]:
+    from modules.roles import ERP_USER_ROLES
+
+    return [""] + [r for r in ERP_USER_ROLES if r != "Client"]
