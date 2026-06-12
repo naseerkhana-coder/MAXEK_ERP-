@@ -12,10 +12,16 @@ $PatchFiles = @(
     "app.py",
     "workflow_service.py",
     "wsgi.py",
-    "templates\accounts_book.html",
+    "templates\boq.html",
+    "templates\clients.html",
+    "templates\projects.html",
+    "templates\users.html",
     "templates\staff.html",
     "templates\workers.html",
     "static\js\app.js",
+    "static\js\master-forms.js",
+    "static\js\boq-forms.js",
+    "static\css\maxek-dashboard.css",
     "deploy\migrate_production.py",
     "deploy\VPS_PATCH_maxek-erp-flask.txt"
 )

@@ -1,6 +1,6 @@
 {% extends 'base_maxek.html' %}
 {% from 'macros/erp_ui.html' import approval_badge, erp_pagination %}
-{% set page_title = 'Clients' %}
+{% set page_title = 'Client Registration' %}
 {% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; Projects &gt; Clients' %}
 {% block page_actions %}
 <a href="{{ url_for('projects') }}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-layer-group"></i> Projects</a>
@@ -9,14 +9,16 @@
 {% block content %}
 <div class="module-layout">
   <div class="erp-form-card" id="add-client">
-    <h3 class="erp-form-title">Add Client</h3>
+    <h3 class="erp-form-title">Client Registration</h3>
     <form method="post" class="erp-form-grid">
-      <div class="erp-field span-2"><input name="client_name" placeholder=" " required><label>Client Name</label></div>
-      <div class="erp-field"><input name="company_name" placeholder=" "><label>Company Name</label></div>
-      <div class="erp-field"><input name="mobile" placeholder=" "><label>Mobile</label></div>
-      <div class="erp-field"><input type="email" name="email" placeholder=" "><label>Email</label></div>
-      <div class="erp-field span-2"><textarea name="address" placeholder=" "></textarea><label>Address</label></div>
+      <div class="erp-field"><input name="client_code_display" placeholder=" " readonly value="{{ next_client_code }}"><label>Client ID (Auto)</label></div>
+      <div class="erp-field span-2"><input name="company_name" placeholder=" " required><label>Company Name</label></div>
+      <div class="erp-field span-2"><input name="contact_person" placeholder=" " required><label>Contact Person Name</label></div>
+      <div class="erp-field"><input name="mobile" placeholder=" " required><label>Mobile Number</label></div>
       <div class="erp-field"><input name="gst_number" placeholder=" "><label>GST Number</label></div>
+      <div class="erp-field"><input name="pan_number" placeholder=" "><label>PAN Number</label></div>
+      <div class="erp-field"><input type="email" name="email" placeholder=" "><label>Email ID</label></div>
+      <div class="erp-field span-2"><textarea name="address" placeholder=" "></textarea><label>Address</label></div>
       <div class="erp-field"><select name="status"><option selected>Active</option><option>Inactive</option></select><label>Status</label></div>
       <div class="erp-form-actions"><button class="erp-btn erp-btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Save Client</button></div>
     </form>
@@ -33,18 +35,20 @@
     </div>
     <div class="erp-table-scroll">
       <table class="erp-table erp-table-module">
-        <thead><tr><th>#</th><th>Name</th><th>Company</th><th>Mobile</th><th>Status</th></tr></thead>
+        <thead><tr><th>ID</th><th>Code</th><th>Company</th><th>Contact</th><th>Mobile</th><th>GST</th><th>Status</th></tr></thead>
         <tbody>
           {% for row in rows %}
           <tr>
             <td>{{ row.id }}</td>
-            <td>{{ row.client_name }}</td>
-            <td>{{ row.company_name }}</td>
-            <td>{{ row.mobile }}</td>
+            <td>{{ row.client_code or '—' }}</td>
+            <td>{{ row.company_name or row.client_name }}</td>
+            <td>{{ row.contact_person or '—' }}</td>
+            <td>{{ row.mobile or '—' }}</td>
+            <td>{{ row.gst_number or '—' }}</td>
             <td>{{ approval_badge(row.status) }}</td>
           </tr>
           {% else %}
-          <tr><td colspan="5">No client records yet.</td></tr>
+          <tr><td colspan="7">No client records yet.</td></tr>
           {% endfor %}
         </tbody>
       </table>
