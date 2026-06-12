@@ -1,0 +1,40 @@
+MAXEK ERP — VPS PATCH (WinSCP)
+================================
+VPS app folder: /var/www/maxek-erp-flask/
+Local PC folder: C:\Users\rajee\Documents\New project\MAXEK_ERP\
+
+Upload these files (overwrite on server). DO NOT upload database/maxek.db or .env
+
+REQUIRED — BOQ Creation patch
+-----------------------------
+app.py                              -> /var/www/maxek-erp-flask/app.py
+workflow_service.py                 -> /var/www/maxek-erp-flask/workflow_service.py
+templates/boq.html                  -> /var/www/maxek-erp-flask/templates/boq.html
+static/js/boq-forms.js              -> /var/www/maxek-erp-flask/static/js/boq-forms.js
+static/css/maxek-dashboard.css      -> /var/www/maxek-erp-flask/static/css/maxek-dashboard.css
+
+ALSO INCLUDE (if not yet on server from prior patch)
+----------------------------------------------------
+templates/clients.html              -> /var/www/maxek-erp-flask/templates/clients.html
+templates/projects.html             -> /var/www/maxek-erp-flask/templates/projects.html
+templates/users.html                -> /var/www/maxek-erp-flask/templates/users.html
+static/js/master-forms.js           -> /var/www/maxek-erp-flask/static/js/master-forms.js
+
+AFTER UPLOAD (SSH on VPS)
+-------------------------
+cd /var/www/maxek-erp-flask
+bash deploy/vps_backup.sh /var/www/maxek-erp-flask
+source venv/bin/activate
+export MAXEK_SKIP_DEMO_SEED=1
+python deploy/migrate_production.py
+sudo chown -R www-data:www-data database static/uploads
+sudo systemctl restart maxek-erp
+sudo systemctl status maxek-erp
+
+VERIFY
+------
+Projects > BOQ Creation:
+- Project dropdown shows ID + name (no BOQ date)
+- Add up to 25 line items on one page
+- Qty × Rate auto-calculates line amount and grand total
+- Save shows BOQ summary list with total amount

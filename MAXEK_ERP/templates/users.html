@@ -13,11 +13,28 @@
 <div class="module-layout">
   <div class="erp-form-card" id="user-form">
     <h3 class="erp-form-title">{% if edit_user %}Edit User{% else %}Create User{% endif %}</h3>
-    <form method="post" class="erp-form-grid">
+    <form method="post" class="erp-form-grid" data-master-form="user">
       {% if edit_user %}<input type="hidden" name="user_id" value="{{ edit_user.id }}">{% endif %}
-      <div class="erp-field"><input name="username" placeholder=" " required value="{{ edit_user.username if edit_user else '' }}"><label>Username</label></div>
+
+      <div class="erp-field span-2">
+        <select name="staff_id" id="staff_id">
+          <option value="">Select employee from master</option>
+          {% for s in staff_rows %}
+          <option value="{{ s.id }}"
+            data-code="{{ s.employee_code }}"
+            data-name="{{ s.staff_name }}"
+            data-dept="{{ s.department or '' }}"
+            data-desig="{{ s.designation_id or '' }}"
+            {% if edit_user and edit_user.staff_id and edit_user.staff_id|string == s.id|string %}selected{% endif %}>
+            {{ s.employee_code }} — {{ s.staff_name }}
+          </option>
+          {% endfor %}
+        </select>
+        <label>Employee (Auto ID + Name)</label>
+      </div>
+      <div class="erp-field"><input name="username" placeholder=" " required value="{{ edit_user.username if edit_user else '' }}"><label>Username (Login ID)</label></div>
       <div class="erp-field"><input type="password" name="password" placeholder=" " {% if not edit_user %}required{% endif %}><label>{% if edit_user %}New Password (optional){% else %}Password{% endif %}</label></div>
-      <div class="erp-field"><input name="employee_name" placeholder=" " required value="{{ edit_user.employee_name if edit_user else '' }}"><label>Employee Name</label></div>
+      <div class="erp-field"><input name="employee_name" placeholder=" " required readonly value="{{ edit_user.employee_name if edit_user else '' }}"><label>Employee Name</label></div>
       <div class="erp-field">
         <select name="department" required>
           <option value="">Select</option>
@@ -59,6 +76,112 @@
         </select>
         <label>Status</label>
       </div>
+
+      <div class="span-2" data-maker-panel {% if not edit_user or edit_user.workflow_role != 'Maker' %}hidden{% endif %}>
+        <h4 class="erp-form-subtitle">Maker Module Assignments (max {{ max_maker_slots }})</h4>
+        <p class="erp-hint">Assign which department and workflow module this maker can handle. Add up to {{ max_maker_slots }} tabs.</p>
+        <div data-maker-rows data-max="{{ max_maker_slots }}">
+          {% set slots = maker_assignments if maker_assignments else [] %}
+          {% if slots %}
+            {% for slot in slots %}
+            <div class="erp-form-grid maker-row" data-maker-row style="margin-bottom:0.75rem;align-items:end;">
+              <div class="erp-field">
+                <select name="maker_department[]">
+                  <option value="">Department</option>
+                  {% for dept in departments %}
+                  <option value="{{ dept }}" {% if slot.department == dept %}selected{% endif %}>{{ dept }}</option>
+                  {% endfor %}
+                </select>
+                <label>Handle Department</label>
+              </div>
+              <div class="erp-field">
+                <select name="maker_module[]">
+                  <option value="">Workflow module / tool</option>
+                  {% for m in workflow_modules %}
+                  <option value="{{ m.module_id }}" {% if slot.module_id == m.module_id %}selected{% endif %}>{{ m.module_name }}</option>
+                  {% endfor %}
+                </select>
+                <label>Module to Handle</label>
+              </div>
+              <div class="erp-field">
+                <select name="maker_status[]">
+                  <option value="Active" {% if slot.status == 'Active' %}selected{% endif %}>Active</option>
+                  <option value="Inactive" {% if slot.status == 'Inactive' %}selected{% endif %}>Inactive</option>
+                </select>
+                <label>Status</label>
+              </div>
+              <div class="erp-field">
+                <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-maker-remove><i class="fa-solid fa-trash"></i> Remove</button>
+              </div>
+            </div>
+            {% endfor %}
+          {% else %}
+            <div class="erp-form-grid maker-row" data-maker-row style="margin-bottom:0.75rem;align-items:end;">
+              <div class="erp-field">
+                <select name="maker_department[]">
+                  <option value="">Department</option>
+                  {% for dept in departments %}
+                  <option value="{{ dept }}">{{ dept }}</option>
+                  {% endfor %}
+                </select>
+                <label>Handle Department</label>
+              </div>
+              <div class="erp-field">
+                <select name="maker_module[]">
+                  <option value="">Workflow module / tool</option>
+                  {% for m in workflow_modules %}
+                  <option value="{{ m.module_id }}">{{ m.module_name }}</option>
+                  {% endfor %}
+                </select>
+                <label>Module to Handle</label>
+              </div>
+              <div class="erp-field">
+                <select name="maker_status[]">
+                  <option value="Active" selected>Active</option>
+                  <option value="Inactive">Inactive</option>
+                </select>
+                <label>Status</label>
+              </div>
+              <div class="erp-field">
+                <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-maker-remove><i class="fa-solid fa-trash"></i> Remove</button>
+              </div>
+            </div>
+          {% endif %}
+
+          <div class="erp-form-grid maker-row" data-maker-row data-maker-row-template hidden style="margin-bottom:0.75rem;align-items:end;">
+            <div class="erp-field">
+              <select name="maker_department[]">
+                <option value="">Department</option>
+                {% for dept in departments %}
+                <option value="{{ dept }}">{{ dept }}</option>
+                {% endfor %}
+              </select>
+              <label>Handle Department</label>
+            </div>
+            <div class="erp-field">
+              <select name="maker_module[]">
+                <option value="">Workflow module / tool</option>
+                {% for m in workflow_modules %}
+                <option value="{{ m.module_id }}">{{ m.module_name }}</option>
+                {% endfor %}
+              </select>
+              <label>Module to Handle</label>
+            </div>
+            <div class="erp-field">
+              <select name="maker_status[]">
+                <option value="Active" selected>Active</option>
+                <option value="Inactive">Inactive</option>
+              </select>
+              <label>Status</label>
+            </div>
+            <div class="erp-field">
+              <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-maker-remove><i class="fa-solid fa-trash"></i> Remove</button>
+            </div>
+          </div>
+        </div>
+        <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-maker-add><i class="fa-solid fa-plus"></i> Add assignment tab</button>
+      </div>
+
       <div class="erp-form-actions span-2">
         <button class="erp-btn erp-btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Save User</button>
         {% if edit_user %}<a href="{{ url_for('user_settings') }}" class="erp-btn erp-btn-ghost">Cancel</a>{% endif %}
@@ -117,19 +240,7 @@
     {{ erp_pagination(rows|length) }}
   </div>
 </div>
-
-<div class="erp-table-panel" style="margin-top: 1rem;">
-  <div class="erp-table-toolbar"><h3 class="erp-table-title">Permission Matrix</h3></div>
-  <div class="erp-table-scroll" style="padding: 1rem;">
-    <table class="erp-table erp-table-module">
-      <thead><tr><th>Workflow Access</th><th>Permissions</th></tr></thead>
-      <tbody>
-        <tr><td><strong>Maker</strong></td><td>View own records · Create · Edit rejected · Save</td></tr>
-        <tr><td><strong>Checker</strong></td><td>View assigned · Edit assigned · Verify · Reject</td></tr>
-        <tr><td><strong>Approver</strong></td><td>View pending approvals · Approve · Reject</td></tr>
-        <tr><td><strong>Administrator</strong></td><td>Full access · Reopen approved · Workflow config · User management</td></tr>
-      </tbody>
-    </table>
-  </div>
-</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/master-forms.js') }}"></script>
 {% endblock %}

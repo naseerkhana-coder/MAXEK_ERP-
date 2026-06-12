@@ -196,6 +196,7 @@ ALLOWED_RECORD_TABLES = {
     "head_office_expenses",
     "subcontract_requests",
     "boq_items",
+    "boq_master",
     "dpr_entries",
     "manager_tasks",
     "account_transactions",

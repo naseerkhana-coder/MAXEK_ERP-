@@ -1,27 +1,103 @@
 {% extends 'base_maxek.html' %}
 {% from 'macros/erp_ui.html' import approval_badge, erp_pagination %}
-{% set page_title = 'Projects' %}
+{% set page_title = 'Project Creation' %}
 {% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; Projects' %}
 {% block page_actions %}
+<a href="{{ url_for('clients') }}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-building"></i> Clients</a>
 <a href="#add-project" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> New Project</a>
 {% endblock %}
 {% block content %}
 <div class="module-layout">
   <div class="erp-form-card" id="add-project">
-    <h3 class="erp-form-title">Add Project</h3>
-    <form method="post" class="erp-form-grid">
+    <h3 class="erp-form-title">Project Creation</h3>
+    <form method="post" enctype="multipart/form-data" class="erp-form-grid" data-master-form="project">
+      <div class="erp-field span-2">
+        <select name="project_type" required>
+          <option value="Government">Government Project</option>
+          <option value="Private" selected>Private Project</option>
+        </select>
+        <label>Project Type</label>
+      </div>
+      <div class="erp-field"><input name="project_code_display" placeholder=" " readonly value="{{ next_project_code }}"><label>Project ID (Auto)</label></div>
       <div class="erp-field span-2"><input name="project_name" placeholder=" " required><label>Project Name</label></div>
-      <div class="erp-field span-2 erp-field-with-action">
-        <select name="client_id"><option value="">Select client</option>{% for item in clients %}<option value="{{ item.id }}">{{ item.client_name }}</option>{% endfor %}</select><label>Client</label>
+
+      <div class="erp-field span-2" data-project-section="government" hidden>
+        <select name="gov_department">
+          <option value="">Select department</option>
+          {% for dept in gov_departments %}
+          <option value="{{ dept }}">{{ dept }}</option>
+          {% endfor %}
+        </select>
+        <label>Department</label>
+      </div>
+      <div class="erp-field" data-project-section="government" hidden><input name="agreement_number" placeholder=" "><label>Agreement Number</label></div>
+      <div class="erp-field" data-project-section="government" hidden><input name="agreement_date" type="date" placeholder=" "><label>Agreement Date</label></div>
+      <div class="erp-field" data-project-section="government" hidden><input name="completion_time" placeholder=" "><label>Completion Time</label></div>
+      <div class="erp-field" data-project-section="government" hidden><input name="quoted_amount" type="number" step="0.01" placeholder=" "><label>Quoted Amount</label></div>
+      <div class="erp-field" data-project-section="government" hidden><input name="security_deposit_pct" type="number" step="0.01" placeholder=" "><label>Security Deposit %</label></div>
+      <div class="erp-field span-2" data-project-section="government" hidden>
+        <select name="guarantee_type">
+          <option value="">Select guarantee type</option>
+          {% for gt in guarantee_types %}
+          <option value="{{ gt }}">{{ gt }}</option>
+          {% endfor %}
+        </select>
+        <label>Performance / Bank Guarantee</label>
+      </div>
+
+      <div class="erp-form-subtitle span-2" data-guarantee-section="bank" data-project-section="government" hidden>Bank Guarantee Details</div>
+      <div class="erp-field" data-guarantee-section="bank" data-project-section="government" hidden><input name="bank_guarantee_number" placeholder=" "><label>Bank Guarantee Number</label></div>
+      <div class="erp-field" data-guarantee-section="bank" data-project-section="government" hidden><input name="bank_guarantee_issued_date" type="date" placeholder=" "><label>Issued Date</label></div>
+      <div class="erp-field" data-guarantee-section="bank" data-project-section="government" hidden><input name="bank_guarantee_expiry_date" type="date" placeholder=" "><label>Expiry Date</label></div>
+      <div class="erp-field" data-guarantee-section="bank" data-project-section="government" hidden><input name="bank_guarantee_amount" type="number" step="0.01" placeholder=" "><label>Bank Guarantee Amount</label></div>
+      <div class="erp-field span-2" data-guarantee-section="bank" data-project-section="government" hidden>
+        <input type="file" name="bank_guarantee_document" accept=".pdf,.jpg,.jpeg,.png">
+        <label>Attach Bank Guarantee Document</label>
+      </div>
+
+      <div class="erp-form-subtitle span-2" data-project-section="government" hidden>Security Deposit (Treasury)</div>
+      <div class="erp-field" data-project-section="government" hidden><input name="treasury_deposit_number" placeholder=" "><label>Treasury Deposit Number</label></div>
+      <div class="erp-field" data-project-section="government" hidden><input name="security_deposit_amount" type="number" step="0.01" placeholder=" "><label>Deposit Amount</label></div>
+      <div class="erp-field" data-project-section="government" hidden><input name="security_deposit_issued_date" type="date" placeholder=" "><label>Issued Date</label></div>
+      <div class="erp-field" data-project-section="government" hidden><input name="security_deposit_maturity_date" type="date" placeholder=" "><label>Maturity Date</label></div>
+      <div class="erp-field span-2" data-project-section="government" hidden>
+        <input type="file" name="security_deposit_document" accept=".pdf,.jpg,.jpeg,.png">
+        <label>Attach Security Deposit Document</label>
+      </div>
+      <div class="erp-field span-2" data-project-section="government" hidden>
+        <input type="file" name="agreement_document" accept=".pdf,.jpg,.jpeg,.png">
+        <label>Attach Agreement Copy</label>
+      </div>
+
+      <div class="erp-field span-2 erp-field-with-action" data-project-section="private">
+        <select name="client_id">
+          <option value="">Select client (optional)</option>
+          {% for item in clients %}
+          <option value="{{ item.id }}">{{ item.company_name or item.client_name }}{% if item.contact_person %} — {{ item.contact_person }}{% endif %}</option>
+          {% endfor %}
+        </select>
+        <label>Client Name</label>
         <button type="button" class="erp-inline-action" data-modal-open="new-client-modal"><i class="fa-solid fa-building-circle-arrow-right"></i> New Client</button>
       </div>
+      <div class="erp-field span-2" data-project-section="private">
+        <input name="private_client_name" placeholder=" ">
+        <label>Client Name (if not in list)</label>
+      </div>
+      <div class="erp-field" data-project-section="private"><input name="work_order_number" placeholder=" "><label>Work Order Number</label></div>
+      <div class="erp-field" data-project-section="private"><input name="work_order_date" type="date" placeholder=" "><label>Work Order Date</label></div>
+      <div class="erp-field" data-project-section="private"><input name="work_order_amount" type="number" step="0.01" placeholder=" "><label>Work Order Amount</label></div>
+      <div class="erp-field span-2" data-project-section="private"><input name="project_contact_person" placeholder=" "><label>Contact Person for Project</label></div>
+      <div class="erp-field span-2" data-project-section="private">
+        <input type="file" name="work_order_document" accept=".pdf,.jpg,.jpeg,.png">
+        <label>Attach Work Order Document</label>
+      </div>
+
       <div class="erp-field"><input name="location" placeholder=" "><label>Location</label></div>
-      <div class="erp-field"><input name="project_manager" placeholder=" "><label>Project Manager</label></div>
       <div class="erp-field"><input name="start_date" type="date" placeholder=" "><label>Start Date</label></div>
       <div class="erp-field"><input name="end_date" type="date" placeholder=" "><label>End Date</label></div>
       <div class="erp-field"><input name="budget" type="number" step="0.01" placeholder=" "><label>Budget</label></div>
       <div class="erp-field"><select name="status"><option selected>Active</option><option>Completed</option><option>On Hold</option></select><label>Status</label></div>
-      <div class="erp-form-actions"><button class="erp-btn erp-btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Save Project</button></div>
+      <div class="erp-form-actions span-2"><button class="erp-btn erp-btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Save Project</button></div>
     </form>
   </div>
 
@@ -36,18 +112,19 @@
     </div>
     <div class="erp-table-scroll">
       <table class="erp-table erp-table-module">
-        <thead><tr><th>#</th><th>Name</th><th>Client</th><th>Location</th><th>Status</th></tr></thead>
+        <thead><tr><th>Code</th><th>Name</th><th>Type</th><th>Client / Dept</th><th>Amount</th><th>Status</th></tr></thead>
         <tbody>
           {% for row in rows %}
           <tr>
-            <td>{{ row.id }}</td>
+            <td>{{ row.project_code or row.id }}</td>
             <td>{{ row.project_name }}</td>
-            <td>{{ row.client_name or '—' }}</td>
-            <td>{{ row.location }}</td>
+            <td>{{ row.project_type or 'Private' }}</td>
+            <td>{% if row.project_type == 'Government' %}{{ row.gov_department or '—' }}{% else %}{{ row.private_client_name or row.company_name or row.client_name or '—' }}{% endif %}</td>
+            <td>{% if row.project_type == 'Government' %}{{ row.quoted_amount or '—' }}{% else %}{{ row.work_order_amount or row.budget or '—' }}{% endif %}</td>
             <td>{{ approval_badge(row.status) }}</td>
           </tr>
           {% else %}
-          <tr><td colspan="5">No project records yet.</td></tr>
+          <tr><td colspan="6">No project records yet.</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -61,19 +138,20 @@
   <div class="erp-modal-card" role="dialog" aria-modal="true" aria-labelledby="new-client-title">
     <div class="erp-modal-header">
       <div>
-        <h3 id="new-client-title">New Client Creation</h3>
+        <h3 id="new-client-title">New Client Registration</h3>
         <p>Add the client here, then continue creating the project.</p>
       </div>
       <button type="button" class="erp-modal-close" data-modal-close aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
     </div>
     <form method="post" class="erp-form-grid">
       <input type="hidden" name="form_action" value="create_client">
-      <div class="erp-field span-2"><input name="client_name" placeholder=" " required><label>Client Name</label></div>
-      <div class="erp-field span-2"><input name="company_name" placeholder=" "><label>Company Name</label></div>
-      <div class="erp-field"><input name="mobile" placeholder=" "><label>Mobile</label></div>
-      <div class="erp-field"><input name="email" type="email" placeholder=" "><label>Email</label></div>
-      <div class="erp-field span-2"><input name="address" placeholder=" "><label>Address</label></div>
+      <div class="erp-field span-2"><input name="company_name" placeholder=" " required><label>Company Name</label></div>
+      <div class="erp-field span-2"><input name="contact_person" placeholder=" " required><label>Contact Person Name</label></div>
+      <div class="erp-field"><input name="mobile" placeholder=" " required><label>Mobile Number</label></div>
       <div class="erp-field"><input name="gst_number" placeholder=" "><label>GST Number</label></div>
+      <div class="erp-field"><input name="pan_number" placeholder=" "><label>PAN Number</label></div>
+      <div class="erp-field"><input name="email" type="email" placeholder=" "><label>Email ID</label></div>
+      <div class="erp-field span-2"><textarea name="address" placeholder=" "></textarea><label>Address</label></div>
       <div class="erp-field"><select name="status"><option selected>Active</option><option>Inactive</option></select><label>Status</label></div>
       <div class="erp-form-actions">
         <button type="button" class="erp-btn erp-btn-ghost" data-modal-close>Cancel</button>
@@ -82,4 +160,7 @@
     </form>
   </div>
 </div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/master-forms.js') }}"></script>
 {% endblock %}

@@ -1,4 +1,4 @@
-from flask import Flask, g, render_template, request, redirect, url_for, session, flash, send_from_directory
+from flask import Flask, g, render_template, request, redirect, url_for, session, flash, send_from_directory, jsonify
 from werkzeug.utils import secure_filename
 import sqlite3
 import os
@@ -140,12 +140,22 @@ PHOTOS_DIR = os.path.join(BASE_DIR, "static", "photos")
 UPLOADS_DIR = os.path.join(BASE_DIR, "static", "uploads")
 STAFF_DOCS_DIR = os.path.join(UPLOADS_DIR, "staff")
 WORKER_DOCS_DIR = os.path.join(UPLOADS_DIR, "workers")
+CLIENT_DOCS_DIR = os.path.join(UPLOADS_DIR, "clients")
+PROJECT_DOCS_DIR = os.path.join(UPLOADS_DIR, "projects")
 
 os.makedirs(REPORTS_DIR, exist_ok=True)
 os.makedirs(PHOTOS_DIR, exist_ok=True)
 os.makedirs(UPLOADS_DIR, exist_ok=True)
 os.makedirs(STAFF_DOCS_DIR, exist_ok=True)
 os.makedirs(WORKER_DOCS_DIR, exist_ok=True)
+os.makedirs(CLIENT_DOCS_DIR, exist_ok=True)
+os.makedirs(PROJECT_DOCS_DIR, exist_ok=True)
+
+GOV_DEPARTMENTS = ["PWD", "NH", "KIIFB", "Kerala PWD", "NHAI", "Other"]
+GUARANTEE_TYPES = ["Performance Guarantee", "Bank Guarantee", "Both"]
+MAX_MAKER_ASSIGNMENTS = 15
+BOQ_UNITS = ["Nos", "Sqm", "Sqft", "Rmt", "Kg", "MT", "Ltr", "Cum", "Hour", "Day", "LS", "Set", "Bag"]
+MAX_BOQ_LINES = 25
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 app.secret_key = "change-this-secret"
@@ -226,6 +236,142 @@ def generate_worker_code(db, worker_category, subcontractor_id=None):
         if number.isdigit():
             max_code = max(max_code, int(number))
     return f"WRK{max_code + 1}"
+
+
+def generate_client_code(db):
+    rows = db.execute("SELECT client_code FROM clients WHERE client_code LIKE 'CLT%'").fetchall()
+    max_code = 100
+    for row in rows:
+        code = str(row["client_code"] or "").strip().upper()
+        number = code[3:]
+        if number.isdigit():
+            max_code = max(max_code, int(number))
+    return f"CLT{max_code + 1}"
+
+
+def generate_project_code(db):
+    rows = db.execute("SELECT project_code FROM projects WHERE project_code LIKE 'PRJ%'").fetchall()
+    max_code = 100
+    for row in rows:
+        code = str(row["project_code"] or "").strip().upper()
+        number = code[3:]
+        if number.isdigit():
+            max_code = max(max_code, int(number))
+    return f"PRJ{max_code + 1}"
+
+
+def get_workflow_modules():
+    return query_db(
+        "SELECT module_id, module_name FROM workflow_master WHERE status='Active' ORDER BY module_name"
+    )
+
+
+def ensure_user_maker_assignments_table(db):
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS user_maker_assignments(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            slot_no INTEGER NOT NULL,
+            department TEXT,
+            module_id TEXT,
+            status TEXT DEFAULT 'Active',
+            UNIQUE(user_id, slot_no),
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        )
+    """)
+
+
+def save_user_maker_assignments(db, user_id, departments, module_ids, statuses):
+    ensure_user_maker_assignments_table(db)
+    db.execute("DELETE FROM user_maker_assignments WHERE user_id=?", (user_id,))
+    for idx, dept in enumerate(departments):
+        module_id = module_ids[idx] if idx < len(module_ids) else ""
+        status = statuses[idx] if idx < len(statuses) else "Active"
+        dept = (dept or "").strip()
+        module_id = (module_id or "").strip()
+        if not dept and not module_id:
+            continue
+        db.execute(
+            "INSERT INTO user_maker_assignments(user_id, slot_no, department, module_id, status) "
+            "VALUES(?,?,?,?,?)",
+            (user_id, idx + 1, dept, module_id, status or "Active"),
+        )
+
+
+def get_user_maker_assignments(db, user_id):
+    ensure_user_maker_assignments_table(db)
+    return query_db(
+        "SELECT * FROM user_maker_assignments WHERE user_id=? ORDER BY slot_no",
+        (user_id,),
+    )
+
+
+def ensure_boq_master_table(db):
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS boq_master(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            boq_number TEXT,
+            project_id INTEGER,
+            total_amount REAL DEFAULT 0,
+            line_count INTEGER DEFAULT 0,
+            created_by TEXT,
+            approval_status TEXT DEFAULT 'Pending Checker',
+            created_at TEXT,
+            FOREIGN KEY(project_id) REFERENCES projects(id)
+        )
+    """)
+
+
+def generate_boq_number(db):
+    rows = db.execute("SELECT boq_number FROM boq_master WHERE boq_number LIKE 'BOQ%'").fetchall()
+    max_code = 100
+    for row in rows:
+        code = str(row["boq_number"] or "").strip().upper()
+        number = code[3:]
+        if number.isdigit():
+            max_code = max(max_code, int(number))
+    return f"BOQ{max_code + 1}"
+
+
+def get_project_options_for_boq():
+    return query_db(
+        "SELECT id, project_code, project_name FROM projects "
+        "WHERE status IS NULL OR status != 'Inactive' ORDER BY project_name"
+    )
+
+
+def _parse_boq_line_items():
+    descriptions = request.form.getlist("item_description[]")
+    quantities = request.form.getlist("quantity[]")
+    units = request.form.getlist("unit[]")
+    rates = request.form.getlist("rate[]")
+    lines = []
+    row_count = max(len(descriptions), len(quantities), len(units), len(rates))
+    for idx in range(min(row_count, MAX_BOQ_LINES)):
+        desc = (descriptions[idx] if idx < len(descriptions) else "").strip()
+        qty_raw = quantities[idx] if idx < len(quantities) else ""
+        rate_raw = rates[idx] if idx < len(rates) else ""
+        unit = (units[idx] if idx < len(units) else "").strip() or BOQ_UNITS[0]
+        if unit not in BOQ_UNITS:
+            unit = BOQ_UNITS[0]
+        if not desc and not str(qty_raw).strip() and not str(rate_raw).strip():
+            continue
+        if not desc:
+            return None, "Each BOQ line item must have a description."
+        try:
+            qty = float(qty_raw or 0)
+            rate = float(rate_raw or 0)
+        except ValueError:
+            return None, "Enter valid quantity and rate for all BOQ line items."
+        lines.append({
+            "line_no": len(lines) + 1,
+            "item_description": desc,
+            "quantity": qty,
+            "unit": unit,
+            "rate": rate,
+            "amount": round(qty * rate, 2),
+        })
+    return lines, None
 
 
 DEFAULT_DEPARTMENTS = [
@@ -610,6 +756,40 @@ def init_db():
     _ensure_column(db, "petty_cash", "approval_status", "TEXT DEFAULT 'Pending Checker'")
     _ensure_column(db, "attendance", "approval_status", "TEXT DEFAULT 'Pending Checker'")
     _ensure_column(db, "salary", "approval_status", "TEXT DEFAULT 'Pending Checker'")
+    _ensure_column(db, "clients", "client_code", "TEXT")
+    _ensure_column(db, "clients", "contact_person", "TEXT")
+    _ensure_column(db, "clients", "pan_number", "TEXT")
+    _ensure_column(db, "projects", "project_code", "TEXT")
+    _ensure_column(db, "projects", "project_type", "TEXT")
+    _ensure_column(db, "projects", "gov_department", "TEXT")
+    _ensure_column(db, "projects", "agreement_number", "TEXT")
+    _ensure_column(db, "projects", "agreement_date", "TEXT")
+    _ensure_column(db, "projects", "completion_time", "TEXT")
+    _ensure_column(db, "projects", "quoted_amount", "REAL")
+    _ensure_column(db, "projects", "security_deposit_pct", "REAL")
+    _ensure_column(db, "projects", "guarantee_type", "TEXT")
+    _ensure_column(db, "projects", "bank_guarantee_number", "TEXT")
+    _ensure_column(db, "projects", "bank_guarantee_issued_date", "TEXT")
+    _ensure_column(db, "projects", "bank_guarantee_expiry_date", "TEXT")
+    _ensure_column(db, "projects", "bank_guarantee_amount", "REAL")
+    _ensure_column(db, "projects", "treasury_deposit_number", "TEXT")
+    _ensure_column(db, "projects", "security_deposit_amount", "REAL")
+    _ensure_column(db, "projects", "security_deposit_issued_date", "TEXT")
+    _ensure_column(db, "projects", "security_deposit_maturity_date", "TEXT")
+    _ensure_column(db, "projects", "agreement_document", "TEXT")
+    _ensure_column(db, "projects", "bank_guarantee_document", "TEXT")
+    _ensure_column(db, "projects", "security_deposit_document", "TEXT")
+    _ensure_column(db, "projects", "work_order_number", "TEXT")
+    _ensure_column(db, "projects", "work_order_date", "TEXT")
+    _ensure_column(db, "projects", "work_order_amount", "REAL")
+    _ensure_column(db, "projects", "project_contact_person", "TEXT")
+    _ensure_column(db, "projects", "private_client_name", "TEXT")
+    _ensure_column(db, "projects", "work_order_document", "TEXT")
+    _ensure_column(db, "users", "staff_id", "INTEGER")
+    _ensure_column(db, "boq_items", "boq_id", "INTEGER")
+    _ensure_column(db, "boq_items", "line_no", "INTEGER")
+    ensure_user_maker_assignments_table(db)
+    ensure_boq_master_table(db)
     _create_transaction_tables(cursor)
     db.commit()
     ensure_department_master(db)
@@ -753,7 +933,7 @@ NAV_GROUPS = [
         "icon": "fa-layer-group",
         "items": [
             {"endpoint": "projects", "label": "Project List", "active_endpoints": ["projects"]},
-            {"endpoint": "boq_management", "label": "BOQ", "active_endpoints": ["boq_management"]},
+            {"endpoint": "boq_management", "label": "BOQ Creation", "active_endpoints": ["boq_management"]},
             {"endpoint": "dpr_entry", "label": "Progress Monitoring", "active_endpoints": ["dpr_entry"]},
             {"endpoint": "project_expenses", "label": "Project Costing", "active_endpoints": ["project_expenses"]},
             {"endpoint": "reports", "label": "Project Reports", "active_endpoints": ["reports", "workflow_audit_report"]},
@@ -1279,62 +1459,192 @@ def subcontractors():
 @app.route("/clients", methods=["GET", "POST"])
 @login_required
 def clients():
+    db = get_db()
     if request.method == "POST":
-        _create_client_from_form()
-        flash("Client saved.")
+        if _create_client_from_form():
+            flash("Client saved.")
         return redirect(url_for("clients"))
     rows = query_db("SELECT * FROM clients ORDER BY id DESC")
-    return render_template("clients.html", rows=rows)
+    next_client_code = generate_client_code(db)
+    return render_template("clients.html", rows=rows, next_client_code=next_client_code)
 
 
 def _create_client_from_form():
-    client_name = request.form.get("client_name", "").strip()
     company_name = request.form.get("company_name", "").strip()
+    contact_person = request.form.get("contact_person", "").strip()
+    client_name = request.form.get("client_name", "").strip() or company_name or contact_person
     mobile = request.form.get("mobile", "").strip()
     email = request.form.get("email", "").strip()
     address = request.form.get("address", "").strip()
     gst_number = request.form.get("gst_number", "").strip()
+    pan_number = request.form.get("pan_number", "").strip()
     status = request.form.get("status", "Active").strip()
+    if not company_name:
+        flash("Company name is required.")
+        return False
     db = get_db()
+    client_code = generate_client_code(db)
     db.execute(
-        "INSERT INTO clients(client_name, company_name, mobile, email, address, gst_number, status) VALUES(?,?,?,?,?,?,?)",
-        (client_name, company_name, mobile, email, address, gst_number, status)
+        "INSERT INTO clients(client_code, client_name, company_name, contact_person, mobile, email, "
+        "address, gst_number, pan_number, status) VALUES(?,?,?,?,?,?,?,?,?,?)",
+        (
+            client_code, client_name, company_name, contact_person, mobile, email,
+            address, gst_number, pan_number, status,
+        ),
     )
     db.commit()
+    return True
+
+
+@app.route("/api/staff/<int:staff_id>")
+@login_required
+def api_staff_detail(staff_id):
+    row = query_db(
+        "SELECT s.*, d.designation_name FROM staff s "
+        "LEFT JOIN designations d ON s.designation_id = d.id WHERE s.id=?",
+        (staff_id,),
+        one=True,
+    )
+    if not row:
+        return jsonify({"error": "Not found"}), 404
+    return jsonify(dict(row))
 
 
 @app.route("/projects", methods=["GET", "POST"])
 @login_required
 def projects():
-    clients = query_db("SELECT id, client_name FROM clients ORDER BY client_name")
+    db = get_db()
+    clients = query_db(
+        "SELECT id, client_name, company_name, contact_person FROM clients ORDER BY company_name, client_name"
+    )
     if request.method == "POST":
         if request.form.get("form_action") == "create_client":
-            _create_client_from_form()
-            flash("Client saved. Select it in the project form.")
+            if _create_client_from_form():
+                flash("Client saved. Select it in the project form.")
             return redirect(url_for("projects") + "#add-project")
+
+        project_type = request.form.get("project_type", "Private").strip()
         project_name = request.form.get("project_name", "").strip()
-        client_id = request.form.get("client_id", "")
+        client_id = request.form.get("client_id", "") or None
+        private_client_name = request.form.get("private_client_name", "").strip()
         location = request.form.get("location", "").strip()
         start_date = request.form.get("start_date", "").strip()
         end_date = request.form.get("end_date", "").strip()
-        project_manager = request.form.get("project_manager", "").strip()
+        project_manager = ""
         budget = request.form.get("budget", "0").strip()
         status = request.form.get("status", "Active").strip()
+        gov_department = request.form.get("gov_department", "").strip()
+        agreement_number = request.form.get("agreement_number", "").strip()
+        agreement_date = request.form.get("agreement_date", "").strip()
+        completion_time = request.form.get("completion_time", "").strip()
+        quoted_amount = request.form.get("quoted_amount", "0").strip()
+        security_deposit_pct = request.form.get("security_deposit_pct", "0").strip()
+        guarantee_type = request.form.get("guarantee_type", "").strip()
+        bank_guarantee_number = request.form.get("bank_guarantee_number", "").strip()
+        bank_guarantee_issued_date = request.form.get("bank_guarantee_issued_date", "").strip()
+        bank_guarantee_expiry_date = request.form.get("bank_guarantee_expiry_date", "").strip()
+        bank_guarantee_amount = request.form.get("bank_guarantee_amount", "0").strip()
+        treasury_deposit_number = request.form.get("treasury_deposit_number", "").strip()
+        security_deposit_amount = request.form.get("security_deposit_amount", "0").strip()
+        security_deposit_issued_date = request.form.get("security_deposit_issued_date", "").strip()
+        security_deposit_maturity_date = request.form.get("security_deposit_maturity_date", "").strip()
+        work_order_number = request.form.get("work_order_number", "").strip()
+        work_order_date = request.form.get("work_order_date", "").strip()
+        work_order_amount = request.form.get("work_order_amount", "0").strip()
+        project_contact_person = request.form.get("project_contact_person", "").strip()
+
+        if not project_name:
+            flash("Project name is required.")
+            return redirect(url_for("projects"))
+
         try:
             budget_val = float(budget or 0)
+            quoted_val = float(quoted_amount or 0)
+            sd_pct_val = float(security_deposit_pct or 0)
+            bg_amount_val = float(bank_guarantee_amount or 0)
+            sd_amount_val = float(security_deposit_amount or 0)
+            wo_amount_val = float(work_order_amount or 0)
         except ValueError:
-            flash("Enter a valid budget amount.")
+            flash("Enter valid numeric amounts.")
             return redirect(url_for("projects"))
-        db = get_db()
+
+        agreement_document = save_file(request.files.get("agreement_document"), PROJECT_DOCS_DIR)
+        bank_guarantee_document = save_file(
+            request.files.get("bank_guarantee_document"), PROJECT_DOCS_DIR
+        )
+        security_deposit_document = save_file(
+            request.files.get("security_deposit_document"), PROJECT_DOCS_DIR
+        )
+        work_order_document = save_file(request.files.get("work_order_document"), PROJECT_DOCS_DIR)
+
+        project_code = generate_project_code(db)
+        if project_type == "Government":
+            private_client_name = ""
+            client_id = None
+            work_order_number = ""
+            work_order_date = ""
+            wo_amount_val = 0
+            work_order_document = work_order_document or ""
+            project_contact_person = ""
+        else:
+            gov_department = ""
+            agreement_number = ""
+            agreement_date = ""
+            completion_time = ""
+            quoted_val = wo_amount_val or budget_val
+            sd_pct_val = 0
+            guarantee_type = ""
+            bank_guarantee_number = ""
+            bank_guarantee_issued_date = ""
+            bank_guarantee_expiry_date = ""
+            bg_amount_val = 0
+            treasury_deposit_number = ""
+            sd_amount_val = 0
+            security_deposit_issued_date = ""
+            security_deposit_maturity_date = ""
+            agreement_document = ""
+            bank_guarantee_document = ""
+            security_deposit_document = ""
+
         db.execute(
-            "INSERT INTO projects(project_name, client_id, location, start_date, end_date, project_manager, budget, status) VALUES(?,?,?,?,?,?,?,?)",
-            (project_name, client_id or None, location, start_date, end_date, project_manager, budget_val, status)
+            "INSERT INTO projects("
+            "project_code, project_name, project_type, client_id, private_client_name, location, "
+            "start_date, end_date, project_manager, budget, status, gov_department, agreement_number, "
+            "agreement_date, completion_time, quoted_amount, security_deposit_pct, guarantee_type, "
+            "bank_guarantee_number, bank_guarantee_issued_date, bank_guarantee_expiry_date, "
+            "bank_guarantee_amount, treasury_deposit_number, security_deposit_amount, "
+            "security_deposit_issued_date, security_deposit_maturity_date, agreement_document, "
+            "bank_guarantee_document, security_deposit_document, work_order_number, work_order_date, "
+            "work_order_amount, project_contact_person, work_order_document"
+            ") VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                project_code, project_name, project_type, client_id, private_client_name, location,
+                start_date, end_date, project_manager, budget_val, status, gov_department,
+                agreement_number, agreement_date, completion_time, quoted_val, sd_pct_val,
+                guarantee_type, bank_guarantee_number, bank_guarantee_issued_date,
+                bank_guarantee_expiry_date, bg_amount_val, treasury_deposit_number, sd_amount_val,
+                security_deposit_issued_date, security_deposit_maturity_date, agreement_document,
+                bank_guarantee_document, security_deposit_document, work_order_number,
+                work_order_date, wo_amount_val, project_contact_person, work_order_document,
+            ),
         )
         db.commit()
-        flash("Project saved.")
+        flash(f"Project saved. Project ID: {project_code}")
         return redirect(url_for("projects"))
-    rows = query_db("SELECT p.*, c.client_name FROM projects p LEFT JOIN clients c ON p.client_id = c.id ORDER BY p.id DESC")
-    return render_template("projects.html", rows=rows, clients=clients)
+
+    rows = query_db(
+        "SELECT p.*, c.client_name, c.company_name FROM projects p "
+        "LEFT JOIN clients c ON p.client_id = c.id ORDER BY p.id DESC"
+    )
+    next_project_code = generate_project_code(db)
+    return render_template(
+        "projects.html",
+        rows=rows,
+        clients=clients,
+        gov_departments=GOV_DEPARTMENTS,
+        guarantee_types=GUARANTEE_TYPES,
+        next_project_code=next_project_code,
+    )
 
 
 @app.route("/workers", methods=["GET", "POST"])
@@ -1804,53 +2114,77 @@ def user_settings():
 
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "").strip()
+        staff_id = request.form.get("staff_id", "") or None
         employee_name = request.form.get("employee_name", "").strip()
         department = request.form.get("department", "").strip()
         designation_id = request.form.get("designation_id") or None
         role = request.form.get("role", "Maker").strip()
         workflow_role = request.form.get("workflow_role", "Maker").strip()
         status = request.form.get("status", "Active").strip()
+        maker_departments = request.form.getlist("maker_department[]")
+        maker_modules = request.form.getlist("maker_module[]")
+        maker_statuses = request.form.getlist("maker_status[]")
+
+        if staff_id and not employee_name:
+            srow = db.execute(
+                "SELECT staff_name FROM staff WHERE id=?", (staff_id,)
+            ).fetchone()
+            if srow:
+                employee_name = srow["staff_name"]
 
         if not username or not employee_name:
-            flash("Username and Employee Name are required.")
+            flash("Select employee from master and ensure username is set.")
             return redirect(url_for("user_settings"))
 
+        saved_user_id = user_id
         if user_id:
             if password:
                 db.execute(
-                    "UPDATE users SET username=?, password=?, employee_name=?, department=?, "
+                    "UPDATE users SET username=?, password=?, staff_id=?, employee_name=?, department=?, "
                     "designation_id=?, role=?, workflow_role=?, status=? WHERE id=?",
-                    (username, password, employee_name, department, designation_id,
+                    (username, password, staff_id, employee_name, department, designation_id,
                      role, workflow_role, status, user_id),
                 )
             else:
                 db.execute(
-                    "UPDATE users SET username=?, employee_name=?, department=?, "
+                    "UPDATE users SET username=?, staff_id=?, employee_name=?, department=?, "
                     "designation_id=?, role=?, workflow_role=?, status=? WHERE id=?",
-                    (username, employee_name, department, designation_id,
+                    (username, staff_id, employee_name, department, designation_id,
                      role, workflow_role, status, user_id),
                 )
+            saved_user_id = user_id
             flash("User updated successfully.")
         else:
             if not password:
                 flash("Password is required for new users.")
                 return redirect(url_for("user_settings"))
             try:
-                db.execute(
-                    "INSERT INTO users(username, password, employee_name, department, "
-                    "designation_id, role, workflow_role, status) VALUES(?,?,?,?,?,?,?,?)",
-                    (username, password, employee_name, department, designation_id,
+                cur = db.execute(
+                    "INSERT INTO users(username, password, staff_id, employee_name, department, "
+                    "designation_id, role, workflow_role, status) VALUES(?,?,?,?,?,?,?,?,?)",
+                    (username, password, staff_id, employee_name, department, designation_id,
                      role, workflow_role, status),
                 )
+                saved_user_id = cur.lastrowid
                 flash("User created successfully.")
             except sqlite3.IntegrityError:
                 flash("Username already exists.")
                 return redirect(url_for("user_settings"))
+
+        if saved_user_id and workflow_role == "Maker":
+            save_user_maker_assignments(
+                db, saved_user_id, maker_departments, maker_modules, maker_statuses
+            )
+        elif saved_user_id:
+            ensure_user_maker_assignments_table(db)
+            db.execute("DELETE FROM user_maker_assignments WHERE user_id=?", (saved_user_id,))
+
         db.commit()
         return redirect(url_for("user_settings"))
 
     edit_id = request.args.get("edit")
     edit_user = None
+    maker_assignments = []
     if edit_id:
         edit_user = query_db(
             "SELECT u.*, d.designation_name FROM users u "
@@ -1858,6 +2192,16 @@ def user_settings():
             (edit_id,),
             one=True,
         )
+        if edit_user:
+            maker_assignments = get_user_maker_assignments(db, edit_id)
+
+    staff_rows = query_db(
+        "SELECT s.id, s.employee_code, s.staff_name, s.department, s.designation_id, "
+        "d.designation_name FROM staff s "
+        "LEFT JOIN designations d ON s.designation_id = d.id "
+        "WHERE s.status='Active' ORDER BY s.staff_name"
+    )
+    workflow_modules = get_workflow_modules()
 
     rows = query_db(
         "SELECT u.*, d.designation_name FROM users u "
@@ -1881,6 +2225,10 @@ def user_settings():
         workflow_roles=workflow_roles,
         system_roles=system_roles,
         edit_user=edit_user,
+        staff_rows=staff_rows,
+        workflow_modules=workflow_modules,
+        maker_assignments=maker_assignments,
+        max_maker_slots=MAX_MAKER_ASSIGNMENTS,
     )
 
 
@@ -2565,47 +2913,98 @@ def _render_standard_module(module_id, table, endpoint, module_title, form_field
 @app.route("/boq-management", methods=["GET", "POST"])
 @login_required
 def boq_management():
-    amount_expr = "ROUND(COALESCE(quantity, 0) * COALESCE(rate, 0), 2)"
-    fields = [
-        {"name": "project_id", "label": "Project", "type": "select", "required": True, "options": _project_options()},
-        {"name": "boq_date", "label": "BOQ Date", "type": "date", "required": True},
-        {"name": "item_code", "label": "Item Code", "type": "text", "required": False},
-        {"name": "item_description", "label": "Item Description", "type": "textarea", "required": True},
-        {"name": "quantity", "label": "Quantity", "type": "number", "required": True},
-        {"name": "unit", "label": "Unit", "type": "text", "required": True},
-        {"name": "rate", "label": "Rate", "type": "number", "required": True},
-        {"name": "remarks", "label": "Remarks", "type": "textarea", "required": False},
-    ]
-    return _render_standard_module(
-        "boq", "boq_items", "boq_management", "BOQ Management", fields,
-        ["Date", "Project", "Item", "Qty", "Amount"],
-        ["boq_date", "project_name", "item_description", "quantity", "amount"],
-        f"SELECT b.*, p.project_name, {amount_expr} AS amount FROM boq_items b LEFT JOIN projects p ON b.project_id = p.id WHERE b.id=?",
-        f"SELECT b.*, p.project_name, {amount_expr} AS amount FROM boq_items b LEFT JOIN projects p ON b.project_id = p.id ORDER BY b.id DESC",
-        "project_id, boq_date, item_code, item_description, quantity, unit, rate, amount, remarks, created_by, approval_status",
-        lambda: (
-            request.form.get("project_id") or None,
-            request.form.get("boq_date", ""),
-            request.form.get("item_code", ""),
-            request.form.get("item_description", ""),
-            float(request.form.get("quantity") or 0),
-            request.form.get("unit", ""),
-            float(request.form.get("rate") or 0),
-            float(request.form.get("quantity") or 0) * float(request.form.get("rate") or 0),
-            request.form.get("remarks", ""),
-        ),
-        "UPDATE boq_items SET project_id=?, boq_date=?, item_code=?, item_description=?, quantity=?, unit=?, rate=?, amount=?, remarks=? WHERE id=?",
-        lambda: (
-            request.form.get("project_id") or None,
-            request.form.get("boq_date", ""),
-            request.form.get("item_code", ""),
-            request.form.get("item_description", ""),
-            float(request.form.get("quantity") or 0),
-            request.form.get("unit", ""),
-            float(request.form.get("rate") or 0),
-            float(request.form.get("quantity") or 0) * float(request.form.get("rate") or 0),
-            request.form.get("remarks", ""),
-        ),
+    db = get_db()
+    ensure_boq_master_table(db)
+
+    if request.method == "POST":
+        project_id = request.form.get("project_id", "").strip()
+        lines, parse_error = _parse_boq_line_items()
+
+        if not project_id:
+            flash("Select a project.")
+            return redirect(url_for("boq_management") + "#boq-form")
+        if parse_error:
+            flash(parse_error)
+            return redirect(url_for("boq_management") + "#boq-form")
+        if not lines:
+            flash("Add at least one BOQ line item with a description.")
+            return redirect(url_for("boq_management") + "#boq-form")
+        if len(lines) > MAX_BOQ_LINES:
+            flash(f"Maximum {MAX_BOQ_LINES} line items allowed per BOQ.")
+            return redirect(url_for("boq_management") + "#boq-form")
+
+        boq_number = generate_boq_number(db)
+        total_amount = round(sum(line["amount"] for line in lines), 2)
+        created_by = session.get("username", "")
+        created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        db.execute(
+            "INSERT INTO boq_master(boq_number, project_id, total_amount, line_count, "
+            "created_by, approval_status, created_at) VALUES(?,?,?,?,?,?,?)",
+            (
+                boq_number,
+                project_id,
+                total_amount,
+                len(lines),
+                created_by,
+                RECORD_PENDING_CHECKER,
+                created_at,
+            ),
+        )
+        boq_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+        for line in lines:
+            db.execute(
+                "INSERT INTO boq_items(boq_id, line_no, project_id, item_description, quantity, unit, "
+                "rate, amount, created_by, approval_status) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                (
+                    boq_id, line["line_no"], project_id, line["item_description"],
+                    line["quantity"], line["unit"], line["rate"], line["amount"],
+                    created_by, RECORD_PENDING_CHECKER,
+                ),
+            )
+
+        create_approval_request(
+            db, "boq", boq_id, "boq_master", created_by, session.get("user_id")
+        )
+        db.commit()
+        flash(
+            f"BOQ {boq_number} saved — {len(lines)} item(s), total amount {total_amount:,.2f}."
+        )
+        return redirect(url_for("boq_management", view=boq_id))
+
+    view_id = request.args.get("view", type=int)
+    view_boq = None
+    view_lines = []
+    if view_id:
+        view_boq = query_db(
+            "SELECT m.*, p.project_code, p.project_name FROM boq_master m "
+            "LEFT JOIN projects p ON m.project_id = p.id WHERE m.id=?",
+            (view_id,),
+            one=True,
+        )
+        if view_boq:
+            view_lines = query_db(
+                "SELECT * FROM boq_items WHERE boq_id=? ORDER BY line_no, id",
+                (view_id,),
+            )
+
+    projects = get_project_options_for_boq()
+    next_boq_number = generate_boq_number(db)
+    rows = query_db(
+        "SELECT m.*, p.project_code, p.project_name FROM boq_master m "
+        "LEFT JOIN projects p ON m.project_id = p.id ORDER BY m.id DESC"
+    )
+
+    return render_template(
+        "boq.html",
+        projects=projects,
+        next_boq_number=next_boq_number,
+        boq_units=BOQ_UNITS,
+        max_boq_lines=MAX_BOQ_LINES,
+        rows=[dict(r) for r in rows],
+        view_boq=dict(view_boq) if view_boq else None,
+        view_lines=[dict(line) for line in view_lines],
     )
 
 
