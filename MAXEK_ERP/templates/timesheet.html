@@ -1,0 +1,47 @@
+{% extends 'base_maxek.html' %}
+{% from 'macros/erp_ui.html' import role_status_badge, maker_row_actions, erp_pagination %}
+{% set page_title = 'Timesheet' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; HR &gt; Timesheet' %}
+{% block page_actions %}
+<a href="{{ url_for('attendance') }}" class="erp-btn erp-btn-primary"><i class="fa-solid fa-calendar-check"></i> Mark Attendance</a>
+{% endblock %}
+{% block content %}
+<div class="erp-table-panel" data-erp-table>
+  <div class="erp-table-toolbar">
+    <h3 class="erp-table-title">Time Sheet Entries</h3>
+    <div class="erp-table-controls">
+      <div class="erp-table-search"><i class="fa-solid fa-magnifying-glass"></i><input type="search" data-table-search placeholder="Search timesheet..."></div>
+      <button type="button" class="erp-btn erp-btn-ghost" data-table-filter><i class="fa-solid fa-filter"></i> Filter</button>
+      <button type="button" class="erp-btn erp-btn-ghost" data-table-export="timesheet"><i class="fa-solid fa-file-export"></i> Export</button>
+    </div>
+  </div>
+  <div class="erp-table-scroll">
+    <table class="erp-table erp-table-module">
+      <thead>
+        <tr>
+          <th>Worker</th><th>Project</th><th>Date</th><th>Start</th><th>End</th>
+          <th>Break</th><th>Worked</th><th>OT</th><th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>{{ row.worker_name or '—' }}</td>
+          <td>{{ row.project_name or '—' }}</td>
+          <td>{{ row.attendance_date }}</td>
+          <td>{{ row.start_time }}</td>
+          <td>{{ row.end_time }}</td>
+          <td>{{ row.break_hours }}</td>
+          <td>{{ row.worked_hours }}</td>
+          <td>{{ row.overtime }}</td>
+          <td>{{ role_status_badge(row.approval_status or 'Pending Checker', 'maker') }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9">No timesheet records yet. Add attendance entries to populate this view.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {{ erp_pagination(rows|length) }}
+</div>
+{% endblock %}

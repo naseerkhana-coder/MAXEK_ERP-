@@ -21,3 +21,12 @@ build/
 
 # Excel output
 attendance.xlsx
+
+# MAXEK ERP — production secrets and data (use private backup repo instead)
+MAXEK_ERP/database/*.db
+MAXEK_ERP/deploy/github_backup.env
+MAXEK_ERP/.github_backup_repo/
+MAXEK_ERP/backups/
+MAXEK_ERP/deploy/*.zip
+MAXEK_ERP/photos/
+MAXEK_ERP/reports/**/*.xlsx

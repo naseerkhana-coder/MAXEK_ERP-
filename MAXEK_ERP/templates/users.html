@@ -1,0 +1,135 @@
+{% extends 'base_maxek.html' %}
+{% from 'macros/erp_ui.html' import workflow_badge, erp_pagination %}
+{% set page_title = 'User Settings' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('settings') ~ '">Settings</a> &gt; Users' %}
+{% block page_actions %}
+<a href="{{ url_for('user_settings') }}#user-form" class="erp-btn erp-btn-primary"><i class="fa-solid fa-user-plus"></i> Add User</a>
+{% endblock %}
+{% block content %}
+<div class="erp-validation" style="margin-bottom: 1rem;">
+  <strong>Workflow Access:</strong> Maker · Checker · Approver · Administrator (full access)
+</div>
+
+<div class="module-layout">
+  <div class="erp-form-card" id="user-form">
+    <h3 class="erp-form-title">{% if edit_user %}Edit User{% else %}Create User{% endif %}</h3>
+    <form method="post" class="erp-form-grid">
+      {% if edit_user %}<input type="hidden" name="user_id" value="{{ edit_user.id }}">{% endif %}
+      <div class="erp-field"><input name="username" placeholder=" " required value="{{ edit_user.username if edit_user else '' }}"><label>Username</label></div>
+      <div class="erp-field"><input type="password" name="password" placeholder=" " {% if not edit_user %}required{% endif %}><label>{% if edit_user %}New Password (optional){% else %}Password{% endif %}</label></div>
+      <div class="erp-field"><input name="employee_name" placeholder=" " required value="{{ edit_user.employee_name if edit_user else '' }}"><label>Employee Name</label></div>
+      <div class="erp-field">
+        <select name="department" required>
+          <option value="">Select</option>
+          {% for dept in departments %}
+          <option value="{{ dept }}" {% if edit_user and edit_user.department == dept %}selected{% endif %}>{{ dept }}</option>
+          {% endfor %}
+        </select>
+        <label>Department</label>
+      </div>
+      <div class="erp-field">
+        <select name="designation_id">
+          <option value="">Select designation</option>
+          {% for d in designations %}
+          <option value="{{ d.id }}" {% if edit_user and edit_user.designation_id|string == d.id|string %}selected{% endif %}>{{ d.designation_name }}</option>
+          {% endfor %}
+        </select>
+        <label>Designation</label>
+      </div>
+      <div class="erp-field">
+        <select name="role" required>
+          {% for r in system_roles %}
+          <option value="{{ r }}" {% if edit_user and edit_user.role == r %}selected{% endif %}>{{ r }}</option>
+          {% endfor %}
+        </select>
+        <label>Role</label>
+      </div>
+      <div class="erp-field">
+        <select name="workflow_role" required>
+          {% for wr in workflow_roles %}
+          <option value="{{ wr }}" {% if edit_user and edit_user.workflow_role == wr %}selected{% endif %}>{{ wr }}</option>
+          {% endfor %}
+        </select>
+        <label>Workflow Access</label>
+      </div>
+      <div class="erp-field">
+        <select name="status" required>
+          <option value="Active" {% if not edit_user or edit_user.status == 'Active' %}selected{% endif %}>Active</option>
+          <option value="Inactive" {% if edit_user and edit_user.status == 'Inactive' %}selected{% endif %}>Inactive</option>
+        </select>
+        <label>Status</label>
+      </div>
+      <div class="erp-form-actions span-2">
+        <button class="erp-btn erp-btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Save User</button>
+        {% if edit_user %}<a href="{{ url_for('user_settings') }}" class="erp-btn erp-btn-ghost">Cancel</a>{% endif %}
+      </div>
+    </form>
+  </div>
+
+  <div class="erp-table-panel" data-erp-table>
+    <div class="erp-table-toolbar">
+      <h3 class="erp-table-title">System Users</h3>
+      <div class="erp-table-controls">
+        <div class="erp-table-search"><i class="fa-solid fa-magnifying-glass"></i><input type="search" data-table-search placeholder="Search users..."></div>
+      </div>
+    </div>
+    <div class="erp-table-scroll">
+      <table class="erp-table erp-table-module">
+        <thead>
+          <tr>
+            <th>Username</th>
+            <th>Employee</th>
+            <th>Department</th>
+            <th>Designation</th>
+            <th>Workflow Access</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          <tr>
+            <td>{{ row.username }}</td>
+            <td>{{ row.employee_name or '—' }}</td>
+            <td>{{ row.department or '—' }}</td>
+            <td>{{ row.designation_name or '—' }}</td>
+            <td>{{ workflow_badge(row.workflow_role or '—') }}</td>
+            <td><span class="status-pill {{ 'active' if row.status == 'Active' else 'pending' }}">{{ row.status }}</span></td>
+            <td>
+              <div class="workflow-row-actions">
+                <a href="{{ url_for('user_settings', edit=row.id) }}#user-form" class="erp-btn erp-btn-ghost erp-btn-sm">Edit</a>
+                <form method="post" style="display:inline;">
+                  <input type="hidden" name="action" value="toggle">
+                  <input type="hidden" name="user_id" value="{{ row.id }}">
+                  <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">
+                    {{ 'Deactivate' if row.status == 'Active' else 'Activate' }}
+                  </button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="7">No users configured.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {{ erp_pagination(rows|length) }}
+  </div>
+</div>
+
+<div class="erp-table-panel" style="margin-top: 1rem;">
+  <div class="erp-table-toolbar"><h3 class="erp-table-title">Permission Matrix</h3></div>
+  <div class="erp-table-scroll" style="padding: 1rem;">
+    <table class="erp-table erp-table-module">
+      <thead><tr><th>Workflow Access</th><th>Permissions</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Maker</strong></td><td>View own records · Create · Edit rejected · Save</td></tr>
+        <tr><td><strong>Checker</strong></td><td>View assigned · Edit assigned · Verify · Reject</td></tr>
+        <tr><td><strong>Approver</strong></td><td>View pending approvals · Approve · Reject</td></tr>
+        <tr><td><strong>Administrator</strong></td><td>Full access · Reopen approved · Workflow config · User management</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

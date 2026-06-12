@@ -1,0 +1,12 @@
+body {
+  background: #f8f9fa;
+}
+.card {
+  border: 0;
+}
+.navbar-brand {
+  font-weight: 700;
+}
+.table th, .table td {
+  vertical-align: middle;
+}
