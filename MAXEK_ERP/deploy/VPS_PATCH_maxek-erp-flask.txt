@@ -1,0 +1,39 @@
+MAXEK ERP — VPS PATCH (WinSCP)
+================================
+VPS app folder: /var/www/maxek-erp-flask/
+Local PC folder: C:\Users\rajee\Documents\New project\MAXEK_ERP\
+
+Upload these files (overwrite on server). DO NOT upload database/maxek.db or .env
+
+REQUIRED — your 3 files
+---------------------
+app.py                          -> /var/www/maxek-erp-flask/app.py
+workflow_service.py             -> /var/www/maxek-erp-flask/workflow_service.py
+templates/accounts_book.html    -> /var/www/maxek-erp-flask/templates/accounts_book.html
+
+REQUIRED — employee master works with app.py (upload together)
+--------------------------------------------------------------
+templates/staff.html            -> /var/www/maxek-erp-flask/templates/staff.html
+templates/workers.html          -> /var/www/maxek-erp-flask/templates/workers.html
+static/js/app.js                -> /var/www/maxek-erp-flask/static/js/app.js
+
+RECOMMENDED
+-----------
+wsgi.py                         -> /var/www/maxek-erp-flask/wsgi.py
+deploy/migrate_production.py    -> /var/www/maxek-erp-flask/deploy/migrate_production.py
+
+AFTER UPLOAD (SSH on VPS)
+-------------------------
+cd /var/www/maxek-erp-flask
+bash deploy/vps_backup.sh /var/www/maxek-erp-flask
+source venv/bin/activate
+export MAXEK_SKIP_DEMO_SEED=1
+python deploy/migrate_production.py
+sudo mkdir -p static/uploads/staff static/uploads/workers
+sudo chown -R www-data:www-data static/uploads database
+sudo systemctl restart maxek-erp
+sudo systemctl status maxek-erp
+
+VERIFY
+------
+Open Employee Master and Accounts (Cash Book / Bank Book) on the live site.
