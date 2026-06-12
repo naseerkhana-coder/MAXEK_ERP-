@@ -81,6 +81,30 @@ DPR_STATUS_BILLED = "Billed"
 DPR_STATUS_REJECTED = "Rejected"
 
 
+def _dpr_module_can(username: str, erp_role: str, workflow_step: str, legacy_roles: frozenset[str]) -> bool:
+    """ERP role gate, overridden by per-user DPR module permissions when configured."""
+    from modules.roles import is_super_admin
+    from modules.user_workflow_permissions import (
+        check_user_module_permission,
+        user_has_any_module_permissions,
+    )
+
+    if is_super_admin(erp_role):
+        return True
+    if user_has_any_module_permissions(username):
+        ok, _ = check_user_module_permission(username, "dpr", workflow_step, erp_role)
+        return ok
+    return erp_role in legacy_roles
+
+
+def _session_identity() -> tuple[str, str, str]:
+    return (
+        st.session_state.get("user_name", "User"),
+        st.session_state.get("user_role", "Admin"),
+        st.session_state.get("username", st.session_state.get("user_name", "User")),
+    )
+
+
 def _avg_dim(value_1, value_2):
     values = [float(v) for v in (value_1, value_2) if v is not None and float(v) > 0]
     if not values:
@@ -1746,20 +1770,27 @@ def _render_new_dpr_tab():
             DPR_STATUS_DRAFT,
         )
     if c_submit.button("SUBMIT DPR (full DPR)", type="primary", width="stretch"):
-        _save_dpr(
-            dpr_date,
-            project_name,
-            project_id,
-            site_pick,
-            staff_map,
-            remarks,
-            weather,
-            equipment_usage,
-            delay_reason,
-            doc_upload,
-            site_photo,
-            DPR_STATUS_SUBMITTED,
-        )
+        _, role, username = _session_identity()
+        if not _dpr_module_can(username, role, "Prepared", frozenset({"Admin", "Project Manager", "Site Engineer"})):
+            st.error(
+                "You are not assigned as **Maker** for **Daily Progress (DPR)**. "
+                "Ask Super Admin to update **Users** or **Maker–Checker Setup**."
+            )
+        else:
+            _save_dpr(
+                dpr_date,
+                project_name,
+                project_id,
+                site_pick,
+                staff_map,
+                remarks,
+                weather,
+                equipment_usage,
+                delay_reason,
+                doc_upload,
+                site_photo,
+                DPR_STATUS_SUBMITTED,
+            )
 
 
 def _save_dpr(
@@ -1985,6 +2016,7 @@ def _render_dpr_approval_actions(pending_df, pick_key, prefix, role, can_act, ap
 
 
 def _render_approvals_tab(role):
+    _, _, username = _session_identity()
     conn = get_conn()
     st.markdown("### Engineer & Client Approval")
     st.caption("Reject sends the DPR back to **New DPR** as a draft for editing and resubmission.")
@@ -2016,7 +2048,12 @@ def _render_approvals_tab(role):
             "dpr_eng_pick",
             "dpr_eng",
             role,
-            role in {"Admin", "Project Manager"},
+            _dpr_module_can(
+                username,
+                role,
+                "Checked",
+                frozenset({"Admin", "Project Manager"}),
+            ),
             DPR_STATUS_ENGINEER_APPROVED,
             """
             UPDATE dpr_reports
@@ -2035,7 +2072,7 @@ def _render_approvals_tab(role):
             "dpr_cli_pick",
             "dpr_cli",
             role,
-            role in {"Admin", "MD"},
+            _dpr_module_can(username, role, "Approved", frozenset({"Admin", "MD"})),
             DPR_STATUS_CLIENT_APPROVED,
             """
             UPDATE dpr_reports

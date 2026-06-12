@@ -128,8 +128,15 @@ def page_dashboard():
 
 def page_dash_pending():
     from modules.finance_workflow import render_approval_inbox
+    from modules.user_workflow_permissions import load_open_follow_ups
 
     st.subheader("Pending Approvals")
+    username = st.session_state.get("username", st.session_state.get("user_name", ""))
+    follow_ups = load_open_follow_ups(username)
+    if not follow_ups.empty:
+        st.markdown("#### MD follow-ups assigned to you")
+        st.dataframe(follow_ups, width="stretch", hide_index=True)
+        st.divider()
     render_approval_inbox("Pending", ["Submitted", "Verified", "PM Approved"])
 
 
@@ -405,6 +412,12 @@ def page_settings_system():
 def page_settings_users():
     st.session_state.settings_focus = "users"
     page_settings()
+
+
+def page_settings_workflow_assign():
+    from modules.workflow_assignments_ui import page_workflow_assignments
+
+    page_workflow_assignments()
 
 
 def page_settings_dashboard():
@@ -859,6 +872,7 @@ PAGE_ROUTES: dict[str, Callable[[], None]] = {
     "account_profile": page_account_profile,
     # Settings & Administration
     "settings_users": page_settings_users,
+    "settings_workflow_assign": page_settings_workflow_assign,
     "settings_roles": page_settings_users,
     "settings_email": page_settings_email,
     "settings_whatsapp": page_settings_system,

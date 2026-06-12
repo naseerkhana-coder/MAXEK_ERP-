@@ -23,7 +23,7 @@ VALID_TRANSITIONS: dict[str, tuple[str, ...]] = {
     "Draft": ("Prepared",),
     "Prepared": ("Checked", "Draft"),
     "Checked": ("Approved", "Prepared"),
-    "Approved": ("Payment Released",),
+    "Approved": ("Payment Released", "Checked", "Prepared", "Draft"),
     "Payment Released": ("Paid",),
     "Paid": (),
 }
@@ -266,7 +266,23 @@ def legacy_status_label(canonical: str) -> str:
     return canonical
 
 
-def can_transition(current: str, new_status: str) -> bool:
+def can_transition(current: str, new_status: str, *, role: str = "") -> bool:
+    cur = normalize_status(current)
+    nxt = normalize_status(new_status)
+    if cur == nxt:
+        return True
+    allowed = VALID_TRANSITIONS.get(cur, ())
+    if nxt not in allowed:
+        return False
+    if cur == "Approved" and nxt in {"Checked", "Prepared", "Draft"}:
+        from modules.roles import is_super_admin
+
+        return is_super_admin(role)
+    return True
+
+
+def _legacy_can_transition(current: str, new_status: str) -> bool:
+    """Backward-compatible check without role (returns False for MD-only returns)."""
     cur = normalize_status(current)
     nxt = normalize_status(new_status)
     if cur == nxt:
@@ -325,6 +341,18 @@ def ensure_approval_workflow_schema(conn=None) -> None:
     if own:
         conn.commit()
         conn.close()
+    try:
+        from modules.workflow_assignments_db import ensure_workflow_assignments_schema
+
+        ensure_workflow_assignments_schema(conn if not own else None)
+    except Exception:
+        pass
+    try:
+        from modules.user_workflow_permissions import ensure_user_workflow_permissions_schema
+
+        ensure_user_workflow_permissions_schema(conn if not own else None)
+    except Exception:
+        pass
 
 
 def log_workflow_audit(
@@ -438,6 +466,9 @@ def transition(
     role: str,
     comment: str = "",
     payment_ref: str = "",
+    *,
+    actor_username: str = "",
+    return_to_username: str = "",
 ) -> tuple[bool, str]:
     """
     Apply a workflow transition. Returns (success, message).
@@ -457,11 +488,65 @@ def transition(
         old_raw = row.get("_workflow_status") or row.get(cfg["status_column"]) or ""
         old_canon = normalize_status(old_raw, entity_type)
 
-        if not can_transition(old_canon, canonical_new):
+        from modules.roles import is_super_admin
+
+        is_md_return = (
+            old_canon == "Approved"
+            and canonical_new in {"Checked", "Prepared", "Draft"}
+        )
+
+        if not can_transition(old_canon, canonical_new, role=role):
             return False, f"Cannot move from {old_canon} to {canonical_new}."
 
-        if not _role_may_apply(role, action, entity_type):
+        if is_md_return:
+            if not is_super_admin(role):
+                return False, "Only MD / Super Admin can send approved documents back."
+            if not (return_to_username or "").strip():
+                return False, "Select a staff member to handle this follow-up."
+            action = "md_return"
+        elif not _role_may_apply(role, action, entity_type):
             return False, f"Role '{role}' cannot perform '{action}' on {entity_type}."
+
+        from modules.workflow_assignments_db import (
+            check_named_assignee,
+            resolve_entity_project,
+        )
+        from modules.workflow_access import check_workflow_access_for_step
+        from modules.user_workflow_permissions import (
+            check_user_module_permission,
+            create_follow_up,
+        )
+
+        uname = (actor_username or actor).strip()
+        project_name = resolve_entity_project(row, entity_type)
+
+        if not is_md_return:
+            assign_ok, assign_msg = check_named_assignee(
+                uname,
+                entity_type,
+                canonical_new,
+                project_name,
+            )
+            if not assign_ok:
+                return False, assign_msg
+
+            access_ok, access_msg = check_workflow_access_for_step(
+                uname,
+                role,
+                canonical_new,
+                full_name=actor,
+            )
+            if not access_ok:
+                return False, access_msg
+
+            mod_ok, mod_msg = check_user_module_permission(
+                uname,
+                entity_type,
+                canonical_new,
+                role,
+            )
+            if not mod_ok:
+                return False, mod_msg
 
         stored_status = status_for_storage(entity_type, canonical_new)
         table = cfg["table"]
@@ -505,6 +590,21 @@ def transition(
             params,
         )
 
+        audit_comment = comment
+        audit_changes: dict[str, str] = {}
+        if is_md_return:
+            handler = return_to_username.strip()
+            create_follow_up(
+                entity_type,
+                entity_id,
+                handler,
+                assigned_by=actor,
+                note=comment,
+                conn=conn,
+            )
+            audit_changes["return_to"] = handler
+            audit_comment = f"{comment} | MD assigned follow-up to {handler}".strip(" |")
+
         log_workflow_audit(
             conn,
             entity_type,
@@ -513,10 +613,34 @@ def transition(
             actor,
             old_raw,
             stored_status,
-            comment,
+            audit_comment,
             payment_ref,
+            changes=audit_changes,
         )
         conn.commit()
+
+        if is_md_return:
+            try:
+                conn2 = get_conn()
+                conn2.execute(
+                    """
+                    INSERT INTO dashboard_notifications(
+                        user_name, title, detail, entity_type, entity_id, is_read, created_at
+                    ) VALUES(?,?,?,?,?,0,?)
+                    """,
+                    (
+                        return_to_username.strip(),
+                        f"Follow-up: {entity_type}",
+                        f"{actor} returned {entity_id} for your action. {comment}".strip(),
+                        entity_type,
+                        entity_id,
+                        _ts(),
+                    ),
+                )
+                conn2.commit()
+                conn2.close()
+            except Exception:
+                pass
 
         try:
             from modules.notifications import notify_workflow_transition

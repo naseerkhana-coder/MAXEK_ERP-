@@ -19,6 +19,7 @@ from modules.roles import (
     can_mark_paid_workflow,
     can_prepare_workflow,
     can_release_payment_workflow,
+    is_super_admin,
 )
 
 _ACTION_LABELS = {
@@ -28,13 +29,22 @@ _ACTION_LABELS = {
     "release_payment": "Release Payment",
     "mark_paid": "Mark Paid",
     "return_draft": "Return to Draft",
+    "md_return": "MD return",
+}
+
+_MD_RETURN_STATUSES = frozenset({"Checked", "Prepared", "Draft"})
+_MD_RETURN_LABELS = {
+    "Checked": "Send back to Checker",
+    "Prepared": "Send back to Maker",
+    "Draft": "Send back to Draft",
 }
 
 
-def _session_user_role() -> tuple[str, str]:
+def _session_user_role() -> tuple[str, str, str]:
     return (
         st.session_state.get("user_name", "User"),
         st.session_state.get("user_role", "Admin"),
+        st.session_state.get("username", st.session_state.get("user_name", "User")),
     )
 
 
@@ -71,7 +81,7 @@ def render_workflow_action_panel(
     if not entity_id:
         return False
 
-    user, role = _session_user_role()
+    user, role, username = _session_user_role()
     canon = normalize_status(current_status, entity_type)
     st.markdown("#### Workflow")
     st.caption(f"Current status: **{canon}**")
@@ -91,38 +101,88 @@ def render_workflow_action_panel(
             help="Cheque / UPI / bank reference when releasing or marking paid.",
         )
 
-    allowed = [
-        s
-        for s in next_options
-        if can_transition(canon, s) and _role_may_transition(role, entity_type, s)
-    ]
-    if not allowed:
-        st.info("No workflow actions available for your role at this status.")
-        if show_audit:
-            _render_audit_block(entity_type, entity_id)
-        return False
+    allowed: list[str] = []
+    for target in next_options:
+        if not can_transition(canon, target, role=role):
+            continue
+        if canon == "Approved" and target in _MD_RETURN_STATUSES:
+            continue
+        if _role_may_transition(role, entity_type, target):
+            allowed.append(target)
 
-    cols = st.columns(min(len(allowed), 4))
     changed = False
-    for idx, target in enumerate(allowed):
-        action = TRANSITION_ACTION.get(target, "status_change")
-        label = _ACTION_LABELS.get(action, target)
-        with cols[idx % len(cols)]:
-            if st.button(label, key=f"{key_prefix}_{entity_id}_{target}", width="stretch"):
-                ok, msg = transition(
-                    entity_type,
-                    entity_id,
-                    target,
-                    user,
-                    role,
-                    comment=comment,
-                    payment_ref=payment_ref,
-                )
-                if ok:
-                    st.success(msg)
-                    changed = True
-                else:
-                    st.error(msg)
+
+    if allowed:
+        try:
+            from modules.workflow_assignments_db import assignment_summary_for_step
+
+            for step in allowed:
+                summary = assignment_summary_for_step(entity_type, step)
+                if "**" in summary:
+                    st.caption(summary)
+        except Exception:
+            pass
+
+        cols = st.columns(min(len(allowed), 4))
+        for idx, target in enumerate(allowed):
+            action = TRANSITION_ACTION.get(target, "status_change")
+            label = _ACTION_LABELS.get(action, target)
+            with cols[idx % len(cols)]:
+                if st.button(label, key=f"{key_prefix}_{entity_id}_{target}", width="stretch"):
+                    ok, msg = transition(
+                        entity_type,
+                        entity_id,
+                        target,
+                        user,
+                        role,
+                        comment=comment,
+                        payment_ref=payment_ref,
+                        actor_username=username,
+                    )
+                    if ok:
+                        st.success(msg)
+                        changed = True
+                    else:
+                        st.error(msg)
+    elif not (canon == "Approved" and is_super_admin(role)):
+        st.info("No workflow actions available for your role at this status.")
+
+    if canon == "Approved" and is_super_admin(role):
+        st.markdown("**MD — send back for follow-up**")
+        from modules.user_workflow_permissions import list_handlers_for_module
+        from modules.workflow_assignments_db import list_active_usernames
+
+        handlers = list_handlers_for_module(entity_type) or list_active_usernames()
+        if not handlers:
+            st.caption("Assign **Handler** users in Maker–Checker Setup first.")
+        else:
+            return_to = st.selectbox(
+                "Assign follow-up to",
+                handlers,
+                key=f"{key_prefix}_{entity_id}_return_to",
+            )
+            md_cols = st.columns(3)
+            for idx, target in enumerate(("Checked", "Prepared", "Draft")):
+                if target not in next_options:
+                    continue
+                label = _MD_RETURN_LABELS.get(target, target)
+                with md_cols[idx]:
+                    if st.button(label, key=f"{key_prefix}_{entity_id}_md_{target}", width="stretch"):
+                        ok, msg = transition(
+                            entity_type,
+                            entity_id,
+                            target,
+                            user,
+                            role,
+                            comment=comment,
+                            actor_username=username,
+                            return_to_username=return_to,
+                        )
+                        if ok:
+                            st.success(msg)
+                            changed = True
+                        else:
+                            st.error(msg)
 
     if show_audit:
         _render_audit_block(entity_type, entity_id)

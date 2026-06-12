@@ -7288,6 +7288,6 @@ def reporting_manager_from_label(label: str) -> str:
 
 
 def load_workflow_role_options() -> list[str]:
-    from modules.roles import ERP_USER_ROLES
+    from modules.workflow_access import load_workflow_role_options as _opts
 
-    return [""] + [r for r in ERP_USER_ROLES if r != "Client"]
+    return _opts()

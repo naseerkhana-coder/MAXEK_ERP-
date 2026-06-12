@@ -1797,3 +1797,20 @@ div[data-testid="stForm"] h3 {
 section[data-testid="stSidebar"] [data-testid="stExpander"] {
   display: none !important;
 }
+
+/* Employee Master — Designation Mapping floating labels */
+.maxek-emp-master-form [data-testid="stSelectbox"] label,
+.maxek-emp-master-form [data-testid="stTextInput"] label,
+.maxek-emp-master-form [data-testid="stNumberInput"] label,
+.maxek-emp-master-form [data-testid="stDateInput"] label {
+  margin-bottom: 0.15rem !important;
+}
+
+.maxek-emp-master-form [data-testid="stSelectbox"] [data-baseweb="select"] span[data-baseweb="select"] {
+  min-height: 2.5rem;
+}
+
+.maxek-emp-master-form [data-testid="stSelectbox"]:has(input:focus) label p,
+.maxek-emp-master-form [data-testid="stSelectbox"]:has([aria-expanded="true"]) label p {
+  color: #dc2626 !important;
+}
