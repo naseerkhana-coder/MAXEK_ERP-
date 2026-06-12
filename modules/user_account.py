@@ -24,6 +24,7 @@ USER_ACCOUNT_COLUMNS = (
     ("last_login_at", "TEXT"),
     ("is_disabled", "INTEGER DEFAULT 0"),
     ("account_locked", "INTEGER DEFAULT 0"),
+    ("workflow_role", "TEXT"),
 )
 
 

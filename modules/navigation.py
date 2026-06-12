@@ -281,6 +281,7 @@ MENU_SECTIONS: list[MenuSection] = [
                 None,
                 [
                     ("settings_users", "Users"),
+                    ("settings_workflow_assign", "Maker–Checker Setup"),
                     ("settings_roles", "Roles & Permissions"),
                     ("master_branch", "Company Settings"),
                     ("settings_email", "Email Settings"),

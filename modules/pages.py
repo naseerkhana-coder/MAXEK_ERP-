@@ -5324,7 +5324,18 @@ def page_masters_users():
 def _settings_users():
     st.markdown("### User Creation")
     st.caption(
-        "Create login users for Super Admin, System Admin, HR, Accounts, Project Manager, and Site Engineer."
+        "Create login users and assign **Maker / Checker / Approver / Handler** module "
+        "permissions on the same form below. You can edit permissions later under "
+        "**User account actions → Module permissions**."
+    )
+
+    from modules.workflow_assignments_ui import render_create_user_module_permissions
+    from modules.user_workflow_permissions import (
+        CAPABILITY_APPROVER,
+        CAPABILITY_CHECKER,
+        CAPABILITY_HANDLER,
+        CAPABILITY_MAKER,
+        save_user_permissions,
     )
 
     with st.form("users_form", clear_on_submit=True):
@@ -5333,12 +5344,23 @@ def _settings_users():
         username = c2.text_input("Username")
         password = c3.text_input("Password", type="password")
         role = c1.selectbox(
-            "Role",
+            "Login role (ERP permissions)",
             ERP_USER_ROLES,
+        )
+        from modules.workflow_access import load_workflow_role_options, format_workflow_access
+
+        wf_opts = load_workflow_role_options()
+        workflow_role = c1.selectbox(
+            "Workflow role (Maker / Checker / Approver)",
+            wf_opts,
+            format_func=format_workflow_access,
+            help="Optional. Restricts which approval button this user can click.",
         )
         mobile = c2.text_input("Mobile")
         email = c3.text_input("Email (for password reset / notifications)")
         confirm_password = c1.text_input("Confirm Password", type="password")
+
+        module_perms = render_create_user_module_permissions("create_user")
 
         if st.form_submit_button("CREATE USER", type="primary", width="stretch"):
             if not full_name.strip() or not username.strip() or not password.strip():
@@ -5376,9 +5398,9 @@ def _settings_users():
                             """
                             INSERT INTO users(
                                 user_id, full_name, username, password, role, mobile, email,
-                                must_change_password
+                                must_change_password, workflow_role
                             )
-                            VALUES(?,?,?,?,?,?,?,1)
+                            VALUES(?,?,?,?,?,?,?,1,?)
                             """,
                             (
                                 user_id,
@@ -5388,17 +5410,42 @@ def _settings_users():
                                 role,
                                 mobile.strip(),
                                 email.strip(),
+                                workflow_role or "",
                             ),
                         )
                         conn.commit()
                         conn.close()
-                        st.success(f"User created successfully. ID: {user_id}")
+
+                        actor = st.session_state.get("user_name", "Admin")
+                        has_modules = any(module_perms.values())
+                        if has_modules:
+                            ok, perm_msg = save_user_permissions(
+                                user_id,
+                                username.strip(),
+                                maker_modules=module_perms[CAPABILITY_MAKER],
+                                checker_modules=module_perms[CAPABILITY_CHECKER],
+                                approver_modules=module_perms[CAPABILITY_APPROVER],
+                                handler_modules=module_perms[CAPABILITY_HANDLER],
+                                actor=actor,
+                            )
+                            if ok:
+                                st.success(
+                                    f"User created successfully. ID: {user_id}. {perm_msg}"
+                                )
+                            else:
+                                st.warning(
+                                    f"User created (ID: {user_id}) but module permissions "
+                                    f"failed: {perm_msg}"
+                                )
+                        else:
+                            st.success(f"User created successfully. ID: {user_id}")
                         st.rerun()
 
     user_search = st.text_input("Search Users", placeholder="Search by name, username, or role")
     conn = get_conn()
     query = """
-        SELECT user_id, full_name, username, role, mobile,
+        SELECT user_id, full_name, username, role,
+               COALESCE(workflow_role, '') AS workflow_role, mobile,
                COALESCE(is_disabled, 0) AS disabled,
                COALESCE(account_locked, 0) AS locked,
                COALESCE(must_change_password, 0) AS must_change_pw
@@ -5416,6 +5463,12 @@ def _settings_users():
     if not users_df.empty and "role" in users_df.columns:
         users_df = users_df.copy()
         users_df["role"] = users_df["role"].map(lambda r: display_role_name(str(r)))
+        if "workflow_role" in users_df.columns:
+            from modules.workflow_access import format_workflow_access
+
+            users_df["workflow_role"] = users_df["workflow_role"].map(
+                lambda v: format_workflow_access(str(v)) if str(v).strip() else format_workflow_access("")
+            )
         if "disabled" in users_df.columns:
             users_df["disabled"] = users_df["disabled"].map(lambda v: "Yes" if v else "No")
         if "locked" in users_df.columns:
@@ -5449,8 +5502,17 @@ def _settings_users():
         }
         pick = st.selectbox("User", list(labels.keys()), key="admin_user_pick")
         target_id = labels[pick]
+        target_row = next(r for r in rows if r[0] == target_id)
+        target_user = {
+            "user_id": target_row[0],
+            "full_name": target_row[1],
+            "username": target_row[2],
+            "role": "",
+        }
 
-        tab_reset, tab_status = st.tabs(["Reset password", "Account status"])
+        tab_reset, tab_modules, tab_status = st.tabs(
+            ["Reset password", "Module permissions", "Account status"]
+        )
 
         with tab_reset:
             st.caption(
@@ -5479,6 +5541,15 @@ def _settings_users():
                             st.rerun()
                         else:
                             st.error(msg)
+
+        with tab_modules:
+            from modules.workflow_assignments_ui import render_user_module_permissions_editor
+
+            st.markdown(f"**{target_user['full_name']}** (`{target_user['username']}`)")
+            render_user_module_permissions_editor(
+                target_user,
+                actor=st.session_state.get("user_name", "Admin"),
+            )
 
         with tab_status:
             from modules.user_account import (
