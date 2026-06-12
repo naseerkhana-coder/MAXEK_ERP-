@@ -1,0 +1,24 @@
+# WinSCP — DO NOT UPLOAD these paths/folders
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.py[cod]
+.git/
+.cursor/
+*.bak
+*.old
+*.tmp
+Thumbs.db
+desktop.ini
+.env
+deploy/dist/
+deploy/package/
+*.log
+
+# Optional: exclude local database if VPS has its own data
+# database/maxek.db
+
+# Optional: exclude generated reports (recreated on server)
+# reports/

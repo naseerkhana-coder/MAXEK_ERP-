@@ -1,0 +1,138 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Workflow Assignment Matrix' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('settings') ~ '">Settings</a> &gt; Workflow Assignment Matrix' %}
+{% block content %}
+<div class="erp-validation" style="margin-bottom: 1rem;">
+  <strong>MAXEK Standard:</strong> Maker [Save] → Checker [Verify] → Approver [Approve] — applied to all ERP modules without exception.
+</div>
+
+<div class="module-layout">
+  <div class="erp-form-card" id="configure-form">
+    <h3 class="erp-form-title">Configure Assignment</h3>
+    <form method="post" class="erp-form-grid">
+      <input type="hidden" name="action" value="save">
+      <div class="erp-field span-2">
+        <select name="module_id" id="module_id" required>
+          <option value="">Select module</option>
+          {% for wf in workflows %}
+          <option value="{{ wf.module_id }}"
+            data-maker="{{ wf.maker_designation_id or '' }}"
+            data-checker="{{ wf.checker_designation_id or '' }}"
+            data-approver="{{ wf.approver_designation_id or '' }}">
+            {{ wf.module_name }}
+          </option>
+          {% endfor %}
+        </select>
+        <label>Module</label>
+      </div>
+      <div class="erp-field span-2">
+        <select name="maker_designation_id" id="maker_designation_id" required>
+          <option value="">Select designation</option>
+          {% for d in designations %}
+          <option value="{{ d.id }}">{{ d.designation_name }}</option>
+          {% endfor %}
+        </select>
+        <label>Maker Designation</label>
+      </div>
+      <div class="erp-field span-2">
+        <select name="checker_designation_id" id="checker_designation_id" required>
+          <option value="">Select designation</option>
+          {% for d in designations %}
+          <option value="{{ d.id }}">{{ d.designation_name }}</option>
+          {% endfor %}
+        </select>
+        <label>Checker Designation</label>
+      </div>
+      <div class="erp-field span-2">
+        <select name="approver_designation_id" id="approver_designation_id" required>
+          <option value="">Select designation</option>
+          {% for d in designations %}
+          <option value="{{ d.id }}">{{ d.designation_name }}</option>
+          {% endfor %}
+        </select>
+        <label>Approver Designation</label>
+      </div>
+      <div class="erp-form-actions">
+        <button class="erp-btn erp-btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Save Assignment</button>
+      </div>
+    </form>
+
+    <hr style="margin: 1.5rem 0;">
+    <h3 class="erp-form-title">Add Designation</h3>
+    <form method="post" class="erp-form-grid">
+      <input type="hidden" name="action" value="add_designation">
+      <div class="erp-field span-2">
+        <input name="designation_name" placeholder=" " required>
+        <label>Designation Name</label>
+      </div>
+      <div class="erp-form-actions">
+        <button class="erp-btn erp-btn-ghost" type="submit"><i class="fa-solid fa-plus"></i> Add Designation</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="erp-table-panel" data-erp-table>
+    <div class="erp-table-toolbar">
+      <h3 class="erp-table-title">Workflow Assignment Matrix</h3>
+    </div>
+    <div class="erp-table-scroll">
+      <table class="erp-table erp-table-module workflow-matrix-table">
+        <thead>
+          <tr>
+            <th>Module</th>
+            <th>Maker Designation</th>
+            <th>Checker Designation</th>
+            <th>Approver Designation</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for wf in workflows %}
+          <tr>
+            <td><strong>{{ wf.module_name }}</strong></td>
+            <td>{{ wf.maker_designation or '—' }}</td>
+            <td>{{ wf.checker_designation or '—' }}</td>
+            <td>{{ wf.approver_designation or '—' }}</td>
+            <td><span class="approval-badge approval-active">{{ wf.status or 'Active' }}</span></td>
+            <td>
+              <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm js-edit-matrix"
+                data-module="{{ wf.module_id }}"
+                data-maker="{{ wf.maker_designation_id or '' }}"
+                data-checker="{{ wf.checker_designation_id or '' }}"
+                data-approver="{{ wf.approver_designation_id or '' }}">Edit</button>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6">No workflow assignments found.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function loadModule(opt) {
+  if (!opt || !opt.value) return;
+  document.getElementById('maker_designation_id').value = opt.dataset.maker || '';
+  document.getElementById('checker_designation_id').value = opt.dataset.checker || '';
+  document.getElementById('approver_designation_id').value = opt.dataset.approver || '';
+}
+document.getElementById('module_id').addEventListener('change', function() {
+  loadModule(this.options[this.selectedIndex]);
+});
+document.querySelectorAll('.js-edit-matrix').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    var sel = document.getElementById('module_id');
+    sel.value = btn.dataset.module;
+    document.getElementById('maker_designation_id').value = btn.dataset.maker || '';
+    document.getElementById('checker_designation_id').value = btn.dataset.checker || '';
+    document.getElementById('approver_designation_id').value = btn.dataset.approver || '';
+    document.getElementById('configure-form').scrollIntoView({ behavior: 'smooth' });
+  });
+});
+</script>
+{% endblock %}

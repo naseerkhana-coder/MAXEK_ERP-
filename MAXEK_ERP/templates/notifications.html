@@ -1,0 +1,29 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Notifications' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; Notifications' %}
+{% block content %}
+<div class="erp-table-panel">
+  <div class="erp-table-toolbar">
+    <h3 class="erp-table-title">Notifications</h3>
+    <form method="post" action="{{ url_for('notifications_read') }}">
+      <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Mark all read</button>
+    </form>
+  </div>
+  <div class="erp-table-scroll">
+    <table class="erp-table erp-table-module">
+      <thead><tr><th>Date</th><th>Message</th><th>Type</th></tr></thead>
+      <tbody>
+        {% for n in items %}
+        <tr class="{% if not n.is_read %}notification-unread{% endif %}">
+          <td>{{ n.created_at }}</td>
+          <td>{{ n.message }}</td>
+          <td>{{ n.notification_type }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="3">No notifications.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

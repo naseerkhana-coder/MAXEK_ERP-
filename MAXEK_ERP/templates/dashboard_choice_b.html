@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MAXEK ERP - Choice B Dashboard</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/maxek-dashboard.css') }}">
+</head>
+<body class="maxek-layout">
+  <nav class="tool-rail">
+    <div class="logo-container">
+      <div class="logo-text-main">MAX<span>EK</span></div>
+      <div class="logo-subtext">Private Limited</div>
+    </div>
+
+    <h3 class="action-heading">Quick Launch Tools</h3>
+    <a class="rail-btn" href="{{ url_for('projects') }}"><i class="fa-solid fa-layer-group"></i> Create New Site</a>
+    <a class="rail-btn" href="{{ url_for('staff') }}"><i class="fa-solid fa-user-plus"></i> Add Personnel</a>
+    <a class="rail-btn" href="{{ url_for('workers') }}"><i class="fa-solid fa-filter"></i> Dynamic Filter</a>
+    <a class="rail-btn" href="{{ url_for('reports') }}"><i class="fa-solid fa-file-excel"></i> Export Ledger</a>
+    <a class="rail-btn" href="{{ url_for('reports') }}"><i class="fa-solid fa-print"></i> Clean Print (2cm)</a>
+  </nav>
+
+  <main class="main-window">
+    <header class="top-utility-strip">
+      <div class="search-wrapper">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <input type="text" placeholder="Search menu items, projects, or workforce...">
+      </div>
+
+      <div class="user-status-cluster">
+        <div class="timestamp">{{ timestamp }}</div>
+        <div class="alert-badge">
+          <i class="fa-regular fa-bell"></i>
+          <div class="alert-count">{{ alert_count }}</div>
+        </div>
+        <div class="admin-profile">
+          <div class="admin-avatar">{{ admin_initial }}</div>
+          <span>{{ session.get('username') or 'Administrator' }}</span>
+          <a class="logout-link" href="{{ url_for('logout') }}">Logout</a>
+        </div>
+      </div>
+    </header>
+
+    <div class="dashboard-body">
+      <h2 class="section-header"><span>#</span> Site Performance &amp; Cashflow Overview</h2>
+
+      <div class="analytics-grid">
+        <div class="panel-card">
+          <div class="panel-title">Project Allocation</div>
+          <div class="chart-box"><i class="fa-solid fa-chart-pie"></i> [Donut Diagram Chart]</div>
+        </div>
+        <div class="panel-card">
+          <div class="panel-title">Monthly Cash Balance Graph</div>
+          <div class="chart-box"><i class="fa-solid fa-chart-line"></i> [Analytical Progress Line Graph]</div>
+        </div>
+        <div class="panel-card">
+          <div class="panel-title">KPI Operational Metrics</div>
+          <div class="kpi-tile-row">
+            <div class="compact-tile">
+              <div class="tile-meta"><p>Active Workers</p><h3>{{ counts.workers }}</h3></div>
+              <i class="fa-solid fa-helmet-safety" style="color: var(--maxek-red);"></i>
+            </div>
+            <div class="compact-tile">
+              <div class="tile-meta"><p>Office Staff</p><h3>{{ counts.staff }}</h3></div>
+              <i class="fa-solid fa-user-tie" style="color: var(--maxek-red);"></i>
+            </div>
+            <div class="compact-tile">
+              <div class="tile-meta"><p>Total Sites</p><h3>{{ counts.projects }}</h3></div>
+              <i class="fa-solid fa-building" style="color: var(--maxek-red);"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="data-grid-container">
+        <div class="grid-toolbar">
+          <h3 style="font-size: 16px; font-weight: 600;">Active Workflow Queue</h3>
+        </div>
+        <table class="erp-table">
+          <thead>
+            <tr>
+              <th>Workflow Item</th>
+              <th>Date Created</th>
+              <th>Origin Site Location</th>
+              <th>Authorized Personnel</th>
+              <th>Current Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in system_rows %}
+            <tr>
+              <td><strong>{{ row.ref }}</strong> {{ row.label }}</td>
+              <td>{{ row.date_created }}</td>
+              <td>{{ row.location }}</td>
+              <td>{{ row.personnel }}</td>
+              <td><span class="status-pill {{ row.status }}">{{ row.status_label }}</span></td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="5">No workflow records yet.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

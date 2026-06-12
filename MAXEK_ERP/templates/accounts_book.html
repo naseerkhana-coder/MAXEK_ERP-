@@ -1,0 +1,60 @@
+{% extends 'base_maxek.html' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; Accounts &gt; ' ~ page_title %}
+{% block content %}
+<div class="erp-summary-grid" style="margin-bottom: 1rem;">
+  <div class="erp-stat-card">
+    <span>Total Receipts</span>
+    <strong>{{ '%.2f'|format(receipts) }}</strong>
+  </div>
+  <div class="erp-stat-card">
+    <span>Total Payments</span>
+    <strong>{{ '%.2f'|format(payments) }}</strong>
+  </div>
+  <div class="erp-stat-card">
+    <span>Balance</span>
+    <strong>{{ '%.2f'|format(balance) }}</strong>
+  </div>
+</div>
+
+<div class="erp-table-panel" data-erp-table>
+  <div class="erp-table-toolbar">
+    <h3 class="erp-table-title">{{ page_title }}</h3>
+    <div class="erp-table-search">
+      <i class="fa-solid fa-magnifying-glass"></i>
+      <input type="search" data-table-search placeholder="Search accounts...">
+    </div>
+  </div>
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Type</th>
+          <th>Project</th>
+          <th>Party</th>
+          <th>Head</th>
+          <th>Mode</th>
+          <th>Reference</th>
+          <th>Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>{{ row.transaction_date or '—' }}</td>
+          <td>{{ row.transaction_type or '—' }}</td>
+          <td>{{ row.project_name or '—' }}</td>
+          <td>{{ row.party_name or '—' }}</td>
+          <td>{{ row.account_head or '—' }}</td>
+          <td>{{ row.payment_mode or '—' }}</td>
+          <td>{{ row.reference_no or '—' }}</td>
+          <td>{{ row.amount or 0 }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8">No approved account transactions yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

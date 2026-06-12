@@ -1,0 +1,207 @@
+MAXEK ERP — Files changed since maxek-erp-deploy-c10fac5.zip
+================================================================
+Generated: 2026-06-07
+
+NOTE: c10fac5 is NOT a git commit in this repository (git only has ab313c6, 03167ca).
+The c10fac5 ZIP appears to be an older deployment snapshot that predates the
+June 6–7 UI/workflow finalization work. Production matching that ZIP explains
+why the old UI is still visible.
+
+ROOT CAUSE (most likely)
+------------------------
+The c10fac5 package was built BEFORE these files existed or were updated.
+Critical NEW files missing from old packages:
+  - static/css/maxek-login.css          (login redesign — without this, login looks OLD)
+  - templates/forgot_password.html      (new route/page)
+  - templates/users.html                (User Settings redesign)
+  - app.py routes: user_settings, forgot_password, dashboard data feeds
+
+Even if templates/login.html was partially updated, without maxek-login.css
+the page renders with old styling.
+
+================================================================
+1. FILES CONTAINING NEW UI / FEATURES
+================================================================
+
+CORE APPLICATION
+----------------
+app.py
+  - APP_VERSION = "1.0.0"
+  - /settings/users (User Settings)
+  - /forgot-password
+  - Dashboard: approval_summary, recent_activities, welcome_name
+  - MAXEK_SKIP_DEMO_SEED guard for production migration
+
+workflow_service.py
+  - get_approval_summary()
+  - get_recent_activities()
+  - seed_demo_users(), user_workflow_capabilities()
+  - Designation sync, audit trail, reopen workflow
+
+wsgi.py
+  - Production Gunicorn entry (NEW)
+
+requirements.txt
+  - gunicorn added
+
+LOGIN PAGE (visible UI change)
+------------------------------
+templates/login.html          — maxek-login-v2, construction theme, remember me
+templates/forgot_password.html — NEW
+static/css/maxek-login.css    — NEW (required for login redesign)
+
+DASHBOARD (visible UI change)
+-----------------------------
+templates/dashboard.html      — Approval Summary, activities, notifications, approval center
+static/css/maxek-dashboard.css — dash-hero, approval widgets, activity feed styles
+
+USER SETTINGS (visible UI change)
+---------------------------------
+templates/users.html          — full user management UI
+templates/settings.html       — links to User Settings, workflow matrix
+
+WORKFLOW UI (modules + history)
+-------------------------------
+templates/macros/erp_ui.html  — transaction_view_tabs, approval_history_timeline
+templates/petty_cash.html
+templates/module_request.html
+templates/attendance.html
+templates/salary.html
+templates/timesheet.html
+templates/approvals.html
+templates/notifications.html
+templates/workflow_settings.html
+templates/workflow_audit_report.html
+templates/staff.html
+templates/reports.html
+static/js/workflow.js
+static/js/maxek-ui.js
+templates/base_maxek.html
+
+DEPLOY / MIGRATION (not UI, but required for update)
+----------------------------------------------------
+deploy/vps_backup.sh
+deploy/vps_update.sh
+deploy/post_deploy_test.sh
+deploy/verify_ui_on_vps.sh
+deploy/migrate_production.py
+deploy/migrate_db.py
+deploy/UPDATE_FILES.txt
+deploy/VPS_UPDATE_RUNBOOK.md
+deploy/build_deploy_package.ps1
+
+TESTS
+-----
+tests/test_workflow_phase.py
+
+================================================================
+2. INCLUDED IN maxek-erp-deploy-c10fac5.zip?
+================================================================
+Cannot inspect c10fac5.zip locally (not found in workspace).
+
+If production UI is unchanged AND VPS files match c10fac5.zip, then c10fac5
+does NOT contain the June 6–7 updates above. Verify on VPS:
+
+  bash deploy/verify_ui_on_vps.sh /var/www/maxek_erp
+
+Expected FAIL on old package:
+  - static/css/maxek-login.css (missing or empty)
+  - templates/forgot_password.html (missing)
+  - templates/login.html (no "maxek-login-v2")
+  - templates/dashboard.html (no "Approval Summary")
+
+================================================================
+3. FRESH DEPLOYMENT PACKAGE
+================================================================
+Run on Windows:
+  deploy\clean_project.bat
+  powershell -ExecutionPolicy Bypass -File deploy\build_deploy_package.ps1
+
+Output:
+  deploy/dist/maxek-erp-deploy-<hash>.zip
+  deploy/dist/MANIFEST_<hash>.txt
+
+Upload to VPS: /var/www/maxek_erp/
+Then:
+  bash deploy/vps_backup.sh /var/www/maxek_erp
+  # extract/upload new zip contents
+  bash deploy/vps_update.sh /var/www/maxek_erp
+  bash deploy/verify_ui_on_vps.sh /var/www/maxek_erp
+
+================================================================
+4. FILE-BY-FILE LIST — MODIFIED SINCE c10fac5 (42 files)
+================================================================
+
+CORE
+----
+app.py
+workflow_service.py
+wsgi.py                                    [NEW]
+requirements.txt
+
+TEMPLATES
+---------
+templates/base_maxek.html
+templates/login.html
+templates/forgot_password.html             [NEW]
+templates/dashboard.html
+templates/dashboard_choice_b.html
+templates/settings.html
+templates/users.html
+templates/approvals.html
+templates/notifications.html
+templates/petty_cash.html
+templates/module_request.html
+templates/attendance.html
+templates/salary.html
+templates/timesheet.html
+templates/reports.html
+templates/staff.html
+templates/workflow_settings.html
+templates/workflow_audit_report.html
+templates/macros/erp_ui.html
+templates/advances.html
+templates/clients.html
+templates/subcontractors.html
+templates/workers.html
+templates/projects.html
+templates/module_placeholder.html
+templates/base.html
+
+STATIC
+------
+static/css/maxek-dashboard.css
+static/css/maxek-login.css                 [NEW]
+static/js/workflow.js
+static/js/maxek-ui.js
+
+DEPLOY
+------
+deploy/.env.example                        [NEW]
+deploy/maxek-erp.service                   [NEW]
+deploy/migrate_db.py                       [NEW]
+deploy/migrate_production.py               [NEW]
+deploy/vps_setup.sh                        [NEW]
+deploy/vps_backup.sh                       [NEW]
+deploy/vps_update.sh                       [NEW]
+deploy/post_deploy_test.sh                 [NEW]
+deploy/verify_ui_on_vps.sh                 [NEW]
+deploy/clean_project.bat                   [NEW]
+deploy/clean_project.sh                    [NEW]
+deploy/build_deploy_package.ps1            [NEW]
+deploy/WINSCP_EXCLUDE.txt                  [NEW]
+deploy/WINSCP_UPLOAD_MANIFEST.txt          [NEW]
+deploy/UPDATE_FILES.txt                    [NEW]
+deploy/DEPLOYMENT.md                       [NEW]
+deploy/VPS_UPDATE_RUNBOOK.md               [NEW]
+
+TESTS
+-----
+tests/test_workflow_phase.py               [NEW]
+
+================================================================
+BROWSER CACHE NOTE
+================================================================
+After correct files are on VPS, hard-refresh (Ctrl+Shift+R) or test in
+private window. Nginx may cache /static — reload nginx if needed:
+  sudo systemctl reload nginx

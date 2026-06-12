@@ -1,0 +1,95 @@
+{% extends 'base_maxek.html' %}
+{% from 'macros/erp_ui.html' import role_status_badge, maker_row_actions, rejection_notice, workflow_modals, transaction_view_tabs, erp_pagination %}
+{% set page_title = 'Attendance' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; HR &gt; Attendance' %}
+{% block page_actions %}
+<a href="{{ url_for('timesheet') }}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-clock"></i> Timesheet</a>
+<a href="#add-attendance" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> Mark Attendance</a>
+{% endblock %}
+{% block content %}
+<div class="erp-validation" style="margin-bottom: 1rem;">
+  <strong>Flow:</strong> Maker [Save] → Checker [Verify] → Approver [Approve]
+</div>
+
+{% if view_record %}
+<div class="erp-form-card" style="margin-bottom: 1rem;">
+  {% call transaction_view_tabs(view_record, history, can_reopen, approval_id) %}
+  <h3 class="erp-form-title">Attendance #{{ view_record.id }}</h3>
+  <p><strong>Date:</strong> {{ view_record.attendance_date }} | <strong>Worker:</strong> {{ view_record.worker_name or '—' }}</p>
+  <p><strong>Project:</strong> {{ view_record.project_name or '—' }} | <strong>Hours:</strong> {{ '%.2f'|format(view_record.total_hours or 0) }} (OT {{ '%.2f'|format(view_record.ot_hours or 0) }})</p>
+  <p><strong>Status:</strong> {{ role_status_badge(view_record.approval_status, 'maker') }}</p>
+  {{ rejection_notice(history, view_record.approval_status) }}
+  {% endcall %}
+</div>
+{% endif %}
+
+<div class="module-layout">
+  {% if not view_record %}
+  <div class="erp-form-card" id="add-attendance">
+    <h3 class="erp-form-title">{% if edit_record %}Edit Attendance #{{ edit_record.id }}{% if edit_role %} ({{ edit_role|title }}){% endif %}{% else %}Add Attendance{% endif %}</h3>
+    <form method="post" class="erp-form-grid">
+      {% if edit_record %}<input type="hidden" name="record_id" value="{{ edit_record.id }}">{% endif %}
+      <div class="erp-field span-2"><select name="worker_id" required>
+        <option value="">Select worker</option>
+        {% for item in workers %}
+        <option value="{{ item.id }}" {% if edit_record and edit_record.worker_id|string == item.id|string %}selected{% endif %}>{{ item.worker_name }}</option>
+        {% endfor %}
+      </select><label>Worker</label></div>
+      <div class="erp-field span-2"><select name="project_id">
+        <option value="">Select project</option>
+        {% for item in projects %}
+        <option value="{{ item.id }}" {% if edit_record and edit_record.project_id|string == item.id|string %}selected{% endif %}>{{ item.project_name }}</option>
+        {% endfor %}
+      </select><label>Project</label></div>
+      <div class="erp-field"><input name="attendance_date" type="date" placeholder=" " required value="{{ edit_record.attendance_date if edit_record else '' }}"><label>Date</label></div>
+      <div class="erp-field"><select name="status">
+        <option {% if not edit_record or edit_record.status == 'Present' %}selected{% endif %}>Present</option>
+        <option {% if edit_record and edit_record.status == 'Absent' %}selected{% endif %}>Absent</option>
+        <option {% if edit_record and edit_record.status == 'Half Day' %}selected{% endif %}>Half Day</option>
+      </select><label>Status</label></div>
+      <div class="erp-field"><input name="in_time" type="time" placeholder=" " required value="{{ edit_record.in_time if edit_record else '' }}"><label>In Time</label></div>
+      <div class="erp-field"><input name="out_time" type="time" placeholder=" " required value="{{ edit_record.out_time if edit_record else '' }}"><label>Out Time</label></div>
+      <div class="erp-field"><input name="break_hours" type="number" step="0.1" value="{{ edit_record.break_hours if edit_record else '0' }}" placeholder=" "><label>Break Hours</label></div>
+      <div class="erp-form-actions"><button class="erp-btn erp-btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Save Attendance</button>
+      {% if edit_record %}<a href="{{ url_for('attendance') }}" class="erp-btn erp-btn-ghost">Cancel</a>{% endif %}
+      </div>
+    </form>
+  </div>
+  {% endif %}
+
+  <div class="erp-table-panel" data-erp-table>
+    <div class="erp-table-toolbar">
+      <h3 class="erp-table-title">Attendance Records</h3>
+      <div class="erp-table-controls">
+        <div class="erp-table-search"><i class="fa-solid fa-magnifying-glass"></i><input type="search" data-table-search placeholder="Search attendance..."></div>
+        <button type="button" class="erp-btn erp-btn-ghost" data-table-filter><i class="fa-solid fa-filter"></i> Filter</button>
+        <button type="button" class="erp-btn erp-btn-ghost" data-table-export="attendance"><i class="fa-solid fa-file-export"></i> Export</button>
+      </div>
+    </div>
+    <div class="erp-table-scroll">
+      <table class="erp-table erp-table-module">
+        <thead><tr><th>#</th><th>Date</th><th>Worker</th><th>Project</th><th>Total Hrs</th><th>OT Hrs</th><th>Workflow</th><th>Actions</th></tr></thead>
+        <tbody>
+          {% for row in rows %}
+          <tr>
+            <td>{{ row.id }}</td>
+            <td>{{ row.attendance_date }}</td>
+            <td>{{ row.worker_name or '—' }}</td>
+            <td>{{ row.project_name or '—' }}</td>
+            <td>{{ '%.2f'|format(row.total_hours or 0) }}</td>
+            <td>{{ '%.2f'|format(row.ot_hours or 0) }}</td>
+            <td>{{ role_status_badge(row.approval_status, 'maker') }}</td>
+            <td>{{ maker_row_actions('attendance', 'attendance', row.id, row.approval_status) }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="8">No attendance records yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {{ erp_pagination(rows|length) }}
+  </div>
+</div>
+{{ workflow_modals() }}
+<script src="{{ url_for('static', filename='js/workflow.js') }}"></script>
+{% endblock %}

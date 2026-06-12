@@ -1,0 +1,100 @@
+{% extends 'base_maxek.html' %}
+{% from 'macros/erp_ui.html' import erp_pagination, workflow_badge %}
+{% set page_title = 'Employee Master' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; HR &gt; Employee Master' %}
+{% block page_actions %}
+<a href="#add-staff" class="erp-btn erp-btn-primary"><i class="fa-solid fa-user-plus"></i> Add Employee</a>
+{% endblock %}
+{% block content %}
+<div class="module-layout">
+  <div class="erp-form-card" id="add-staff">
+    <h3 class="erp-form-title">Employee Data Entry</h3>
+    <form method="post" enctype="multipart/form-data" class="erp-form-grid">
+      <div class="erp-field"><input value="{{ next_employee_code }}" readonly placeholder=" "><label>Employee Code (Auto)</label></div>
+      <div class="erp-field"><input name="staff_name" placeholder=" " required><label>Employee Name</label></div>
+      <div class="erp-field"><input name="mobile" placeholder=" "><label>Mobile</label></div>
+      <div class="erp-field"><input type="email" name="email" placeholder=" "><label>Email</label></div>
+      <div class="erp-field"><input name="department" placeholder=" "><label>Department</label></div>
+      <div class="erp-field"><input name="aadhaar_number" placeholder=" "><label>Aadhaar Number</label></div>
+      <div class="erp-field"><input name="pan_number" placeholder=" "><label>PAN Number</label></div>
+      <div class="erp-field span-2">
+        <select name="designation_id" class="has-value">
+          <option value="">Select designation</option>
+          {% for d in designations %}
+          <option value="{{ d.id }}">{{ d.designation_name }}</option>
+          {% endfor %}
+        </select>
+        <label>Designation</label>
+      </div>
+      <div class="erp-field span-2">
+        <select name="reporting_manager" class="has-value">
+          <option value="">Select reporting manager</option>
+          {% for s in staff_list %}
+          <option value="{{ s.staff_name }}">{{ s.staff_name }}</option>
+          {% endfor %}
+        </select>
+        <label>Reporting Manager</label>
+      </div>
+      <div class="erp-field span-2">
+        <select name="workflow_role" class="has-value">
+          <option value="">Auto (from designation matrix)</option>
+          <option value="Maker">Maker</option>
+          <option value="Checker">Checker</option>
+          <option value="Approver">Approver</option>
+        </select>
+        <label>Workflow Role</label>
+      </div>
+      <div class="erp-field"><select name="salary_type" class="has-value"><option>Monthly</option><option>Daily</option></select><label>Salary Type</label></div>
+      <div class="erp-field"><input name="salary_amount" type="number" step="0.01" placeholder=" "><label>Salary Amount</label></div>
+      <div class="erp-field"><select name="ot_applicable" class="has-value"><option>Yes</option><option selected>No</option></select><label>OT Applicable</label></div>
+      <div class="erp-field"><input name="working_hours" type="number" step="0.1" placeholder=" "><label>Working Hours</label></div>
+      <div class="erp-field"><input name="joining_date" type="date" placeholder=" "><label>Joining Date</label></div>
+      <div class="erp-field"><input name="bank_account" placeholder=" "><label>Bank Account Number</label></div>
+      <div class="erp-field"><input name="bank_name" placeholder=" "><label>Bank Name</label></div>
+      <div class="erp-field"><input name="ifsc_code" placeholder=" "><label>IFSC Code</label></div>
+      <div class="erp-field"><input name="branch_name" placeholder=" "><label>Branch Name</label></div>
+      <div class="erp-field span-2"><input name="photo" type="file"><label>Photo</label></div>
+      <div class="erp-field span-2"><input name="id_proof" type="file"><label>ID Proof</label></div>
+      <div class="erp-field span-2"><input name="aadhaar_document" type="file"><label>Aadhaar Document</label></div>
+      <div class="erp-field span-2"><input name="pan_document" type="file"><label>PAN Document</label></div>
+      <div class="erp-field"><select name="status" class="has-value"><option selected>Active</option><option>Inactive</option></select><label>Status</label></div>
+      <div class="erp-form-actions"><button class="erp-btn erp-btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Save Employee</button></div>
+    </form>
+  </div>
+
+  <div class="erp-table-panel" data-erp-table>
+    <div class="erp-table-toolbar">
+      <h3 class="erp-table-title">Employee Records</h3>
+    </div>
+    <div class="erp-table-scroll">
+      <table class="erp-table erp-table-module">
+        <thead>
+          <tr>
+            <th>Employee</th>
+            <th>Employee Code</th>
+            <th>Designation</th>
+            <th>Department</th>
+            <th>Reporting Manager</th>
+            <th>Workflow Access</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          <tr>
+            <td>{{ row.staff_name }}</td>
+            <td>{{ row.employee_code or '—' }}</td>
+            <td>{{ row.display_designation }}</td>
+            <td>{{ row.department or '—' }}</td>
+            <td>{{ row.reporting_manager or '—' }}</td>
+            <td><small>{{ row.workflow_access }}</small></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6">No employee records yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {{ erp_pagination(rows|length) }}
+  </div>
+</div>
+{% endblock %}

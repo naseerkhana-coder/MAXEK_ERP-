@@ -1,0 +1,57 @@
+{% extends 'base_maxek.html' %}
+{% from 'macros/erp_ui.html' import erp_pagination %}
+{% set page_title = 'Reports' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; Reports' %}
+{% block page_actions %}
+<button type="submit" form="report-form" class="erp-btn erp-btn-primary"><i class="fa-solid fa-file-export"></i> Export Report</button>
+{% endblock %}
+{% block content %}
+<div class="module-stack">
+  <div class="erp-form-card">
+    <h3 class="erp-form-title">Workflow Reports</h3>
+    <p class="workflow-hint">Approval audit trail across all modules.</p>
+    <a href="{{ url_for('workflow_audit_report') }}" class="erp-btn erp-btn-primary">
+      <i class="fa-solid fa-clipboard-list"></i> Workflow Audit Report
+    </a>
+  </div>
+
+  <div class="erp-form-card">
+    <h3 class="erp-form-title">Generate Report</h3>
+    <form method="post" id="report-form" class="erp-form-grid">
+      <div class="erp-field"><select name="report_type"><option value="attendance" selected>Attendance</option><option value="salary">Salary</option></select><label>Report Type</label></div>
+      <div class="erp-field"><select name="worker_id"><option value="">Select worker</option>{% for item in workers %}<option value="{{ item.id }}">{{ item.worker_name }}</option>{% endfor %}</select><label>Worker</label></div>
+      <div class="erp-field"><input name="from_date" type="date" placeholder=" "><label>From Date</label></div>
+      <div class="erp-field"><input name="to_date" type="date" placeholder=" "><label>To Date / Month</label></div>
+    </form>
+  </div>
+
+  {% if file_url %}
+  <div class="panel-card">
+    <p>Report ready: <a href="{{ file_url }}" class="erp-btn erp-btn-ghost erp-btn-sm"><i class="fa-solid fa-download"></i> Download</a></p>
+  </div>
+  {% endif %}
+
+  {% if report_rows %}
+  <div class="erp-table-panel" data-erp-table>
+    <div class="erp-table-toolbar">
+      <h3 class="erp-table-title">Report Preview</h3>
+      <div class="erp-table-controls">
+        <div class="erp-table-search"><i class="fa-solid fa-magnifying-glass"></i><input type="search" data-table-search placeholder="Search report..."></div>
+        <button type="button" class="erp-btn erp-btn-ghost" data-table-export="report-preview"><i class="fa-solid fa-file-export"></i> Export</button>
+      </div>
+    </div>
+    <div class="erp-table-scroll">
+      <table class="erp-table erp-table-module">
+        <thead><tr>{% for key in report_rows[0].keys() %}<th>{{ key.replace('_', ' ')|title }}</th>{% endfor %}</tr></thead>
+        <tbody>
+          {% for row in report_rows %}
+          <tr>{% for value in row.values() %}<td>{{ value }}</td>{% endfor %}</tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {{ erp_pagination(report_rows|length) }}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
