@@ -1,0 +1,12 @@
+{% extends 'base_maxek.html' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; ' ~ breadcrumb_section ~ ' &gt; ' ~ page_title %}
+{% block page_actions %}
+<button type="button" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> New {{ page_title }}</button>
+{% endblock %}
+{% block content %}
+<div class="panel-card">
+  <div class="panel-title">{{ page_title }} Module</div>
+  <p style="color:var(--text-muted);line-height:1.6;">{{ module_description }}</p>
+  <p style="margin-top:16px;"><span class="approval-badge approval-pending-approval">Pending Approval</span> Module shell is active with MAXEK Enterprise UI.</p>
+</div>
+{% endblock %}

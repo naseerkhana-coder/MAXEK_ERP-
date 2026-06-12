@@ -1,0 +1,101 @@
+{% extends 'base_maxek.html' %}
+{% from 'macros/erp_ui.html' import role_status_badge, maker_row_actions, rejection_notice, workflow_modals, transaction_view_tabs %}
+{% set page_title = module_title %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; ' ~ module_title %}
+{% block content %}
+<div class="erp-validation" style="margin-bottom: 1rem;">
+  <strong>Flow:</strong> Maker [Save] → Checker [Verify] → Approver [Approve]
+</div>
+
+{% if view_record %}
+<div class="erp-form-card" style="margin-bottom: 1rem;">
+  {% call transaction_view_tabs(view_record, history, can_reopen, approval_id) %}
+  <h3 class="erp-form-title">Record #{{ view_record.id }}</h3>
+  {% for col, key in zip(table_columns, row_keys) %}
+  <p><strong>{{ col }}:</strong> {{ view_record[key] or '—' }}</p>
+  {% endfor %}
+  <p><strong>Status:</strong> {{ role_status_badge(view_record.approval_status, 'maker') }}</p>
+  {{ rejection_notice(history, view_record.approval_status) }}
+  {% endcall %}
+</div>
+{% endif %}
+
+<div class="module-layout">
+  {% if not view_record %}
+  <div class="erp-form-card">
+    <h3 class="erp-form-title">
+      {% if edit_record %}Edit Record #{{ edit_record.id }}{% if edit_role %} ({{ edit_role|title }}){% endif %}{% else %}New Request{% endif %}
+    </h3>
+    <form method="post" class="erp-form-grid">
+      {% if edit_record %}
+      <input type="hidden" name="record_id" value="{{ edit_record.id }}">
+      {% endif %}
+      {% for field in form_fields %}
+      <div class="erp-field{% if field.type == 'textarea' or field.type == 'select' %} span-2{% endif %}">
+        {% if field.type == 'select' %}
+        <select name="{{ field.name }}" {% if field.required %}required{% endif %}>
+          <option value="">Select</option>
+          {% for opt in field.options %}
+          <option value="{{ opt.value }}" {% if edit_record and edit_record[field.name]|string == opt.value|string %}selected{% endif %}>{{ opt.label }}</option>
+          {% endfor %}
+        </select>
+        {% elif field.type == 'textarea' %}
+        <textarea name="{{ field.name }}" placeholder=" " {% if field.required %}required{% endif %}>{{ edit_record[field.name] if edit_record else '' }}</textarea>
+        {% elif field.type == 'number' %}
+        <input name="{{ field.name }}" type="number" step="0.01" placeholder=" " {% if field.required %}required{% endif %}
+          value="{{ edit_record[field.name] if edit_record else '' }}">
+        {% elif field.type == 'date' %}
+        <input name="{{ field.name }}" type="date" placeholder=" " {% if field.required %}required{% endif %}
+          value="{{ edit_record[field.name] if edit_record else '' }}">
+        {% else %}
+        <input name="{{ field.name }}" placeholder=" " {% if field.required %}required{% endif %}
+          value="{{ edit_record[field.name] if edit_record else '' }}">
+        {% endif %}
+        <label>{{ field.label }}</label>
+      </div>
+      {% endfor %}
+      <div class="erp-form-actions">
+        <button class="erp-btn erp-btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Save</button>
+        {% if edit_record %}
+        <a href="{{ url_for(module_endpoint) }}" class="erp-btn erp-btn-ghost">Cancel</a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+  {% endif %}
+
+  <div class="erp-table-panel" data-erp-table>
+    <div class="erp-table-toolbar"><h3 class="erp-table-title">Records</h3></div>
+    <div class="erp-table-scroll">
+      <table class="erp-table erp-table-module">
+        <thead>
+          <tr>
+            <th>#</th>
+            {% for col in table_columns %}
+            <th>{{ col }}</th>
+            {% endfor %}
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          <tr>
+            <td>{{ row.id }}</td>
+            {% for key in row_keys %}
+            <td>{{ row[key] or '—' }}</td>
+            {% endfor %}
+            <td>{{ role_status_badge(row.approval_status, 'maker') }}</td>
+            <td>{{ maker_row_actions(module_endpoint, delete_table, row.id, row.approval_status) }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="{{ table_columns|length + 3 }}">No records yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{{ workflow_modals() }}
+<script src="{{ url_for('static', filename='js/workflow.js') }}"></script>
+{% endblock %}

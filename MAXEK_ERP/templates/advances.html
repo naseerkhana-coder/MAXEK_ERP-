@@ -1,0 +1,47 @@
+{% extends 'base_maxek.html' %}
+{% from 'macros/erp_ui.html' import approval_badge, erp_pagination %}
+{% set page_title = 'Subcontractor Advances' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; Finance &gt; Advances' %}
+{% block page_actions %}
+<a href="#add-advance" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> New Advance</a>
+{% endblock %}
+{% block content %}
+<div class="module-stack">
+  <div class="erp-form-card" id="add-advance">
+    <h3 class="erp-form-title">Record Advance</h3>
+    <form method="post" class="erp-form-grid">
+      <div class="erp-field span-2"><select name="subcontractor_name" required><option value="">Select Subcontractor</option>{% for name in subcontractor_names %}<option value="{{ name }}">{{ name }}</option>{% endfor %}</select><label>Subcontractor</label></div>
+      <div class="erp-field"><input name="amount" placeholder=" " required><label>Amount</label></div>
+      <div class="erp-field"><input name="remarks" placeholder=" "><label>Remarks</label></div>
+      <div class="erp-form-actions"><button class="erp-btn erp-btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Save Advance</button></div>
+    </form>
+  </div>
+
+  <div class="erp-table-panel" data-erp-table>
+    <div class="erp-table-toolbar">
+      <h3 class="erp-table-title">Advance Ledger</h3>
+      <div class="erp-table-controls">
+        <div class="erp-table-search"><i class="fa-solid fa-magnifying-glass"></i><input type="search" data-table-search placeholder="Search advances..."></div>
+        <button type="button" class="erp-btn erp-btn-ghost" data-table-export="advances"><i class="fa-solid fa-file-export"></i> Export</button>
+      </div>
+    </div>
+    <div class="erp-table-scroll">
+      <table class="erp-table erp-table-module">
+        <thead><tr><th>Advance ID</th><th>Subcontractor</th><th>Amount</th><th>Remarks</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for row in rows %}
+          <tr>
+            <td>{{ row.advance_id }}</td>
+            <td>{{ row.subcontractor_name }}</td>
+            <td>{{ row.amount }}</td>
+            <td>{{ row.remarks }}</td>
+            <td>{{ approval_badge('Pending Approval') }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {{ erp_pagination(rows|length) }}
+  </div>
+</div>
+{% endblock %}

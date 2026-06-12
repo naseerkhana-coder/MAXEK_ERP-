@@ -1,0 +1,76 @@
+{% extends 'base_maxek.html' %}
+{% from 'macros/erp_ui.html' import erp_pagination, role_status_badge %}
+{% set page_title = 'Workflow Audit Report' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('reports') ~ '">Reports</a> &gt; Workflow Audit' %}
+{% block page_actions %}
+<a href="{{ url_for('workflow_audit_report', module_id=selected_module, status=selected_status, export='xlsx') }}" class="erp-btn erp-btn-primary"><i class="fa-solid fa-file-export"></i> Export Excel</a>
+{% endblock %}
+{% block content %}
+<div class="erp-form-card" style="margin-bottom: 1rem;">
+  <h3 class="erp-form-title">Filter Audit Report</h3>
+  <form method="get" class="erp-form-grid">
+    <div class="erp-field span-2">
+      <select name="module_id">
+        <option value="">All Modules</option>
+        {% for m in modules %}
+        <option value="{{ m.module_id }}" {% if selected_module == m.module_id %}selected{% endif %}>{{ m.module_name }}</option>
+        {% endfor %}
+      </select>
+      <label>Module</label>
+    </div>
+    <div class="erp-field span-2">
+      <select name="status">
+        <option value="">All Statuses</option>
+        <option value="pending_checker" {% if selected_status == 'pending_checker' %}selected{% endif %}>Pending Checker</option>
+        <option value="pending_approval" {% if selected_status == 'pending_approval' %}selected{% endif %}>Pending Approval</option>
+        <option value="approved" {% if selected_status == 'approved' %}selected{% endif %}>Approved</option>
+        <option value="rejected_by_checker" {% if selected_status == 'rejected_by_checker' %}selected{% endif %}>Rejected by Checker</option>
+        <option value="rejected_by_approver" {% if selected_status == 'rejected_by_approver' %}selected{% endif %}>Rejected by Approver</option>
+      </select>
+      <label>Status</label>
+    </div>
+    <div class="erp-form-actions">
+      <button type="submit" class="erp-btn erp-btn-primary">Apply Filter</button>
+    </div>
+  </form>
+</div>
+
+<div class="erp-table-panel" data-erp-table>
+  <div class="erp-table-toolbar"><h3 class="erp-table-title">Workflow Audit Report</h3></div>
+  <div class="erp-table-scroll">
+    <table class="erp-table erp-table-module">
+      <thead>
+        <tr>
+          <th>Module</th>
+          <th>Document Number</th>
+          <th>Maker</th>
+          <th>Checker</th>
+          <th>Approver</th>
+          <th>Created Date</th>
+          <th>Verified Date</th>
+          <th>Approved Date</th>
+          <th>Current Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>{{ row.module }}</td>
+          <td><strong>{{ row.document_number }}</strong></td>
+          <td>{{ row.maker }}</td>
+          <td>{{ row.checker }}</td>
+          <td>{{ row.approver }}</td>
+          <td>{{ row.created_date }}</td>
+          <td>{{ row.verified_date }}</td>
+          <td>{{ row.approved_date }}</td>
+          <td>{{ role_status_badge(row.current_status, 'maker') }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9">No audit records found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {{ erp_pagination(rows|length) }}
+</div>
+{% endblock %}

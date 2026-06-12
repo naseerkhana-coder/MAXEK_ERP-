@@ -1,0 +1,190 @@
+{% extends 'base_maxek.html' %}
+{% block body_class %} dashboard-mode{% endblock %}
+{% block title %}MAXEK ERP - Dashboard{% endblock %}
+{% block content %}
+
+<div class="dash-hero">
+  <div class="dash-hero-text">
+    <h2>Welcome back, {{ welcome_name or 'Administrator' }}</h2>
+    <p>Construction operations overview — approvals, site activity, and workflow status.</p>
+  </div>
+  <div class="dash-hero-actions">
+    <a href="{{ url_for('approvals') }}" class="erp-btn erp-btn-primary">
+      <i class="fa-solid fa-clipboard-check"></i> Approval Center
+      {% if alert_count %}<span class="dash-badge-count">{{ alert_count }}</span>{% endif %}
+    </a>
+    <a href="{{ url_for('notifications') }}" class="erp-btn erp-btn-ghost">
+      <i class="fa-solid fa-bell"></i> Notifications
+    </a>
+  </div>
+</div>
+
+<section class="dash-section">
+  <h2 class="section-header"><span>#</span> Approval Summary</h2>
+  <div class="approval-widgets counter-grid dash-summary-grid">
+    <a class="approval-widget dash-summary-card" href="{{ url_for('approvals', role='checker') }}">
+      <i class="fa-solid fa-hourglass-half"></i>
+      <h4>Pending Verification</h4>
+      <div class="count">{{ approval_summary.pending_checker }}</div>
+    </a>
+    <a class="approval-widget dash-summary-card" href="{{ url_for('approvals', role='approver') }}">
+      <i class="fa-solid fa-stamp"></i>
+      <h4>Pending Approval</h4>
+      <div class="count">{{ approval_summary.pending_approval }}</div>
+    </a>
+    <a class="approval-widget dash-summary-card" href="{{ url_for('approvals', role='approver') }}">
+      <i class="fa-solid fa-circle-check"></i>
+      <h4>Approved Today</h4>
+      <div class="count">{{ approval_summary.approved_today }}</div>
+    </a>
+    <a class="approval-widget dash-summary-card" href="{{ url_for('approvals', role='checker') }}">
+      <i class="fa-solid fa-circle-xmark"></i>
+      <h4>Rejected Today</h4>
+      <div class="count">{{ approval_summary.rejected_today }}</div>
+    </a>
+    <a class="approval-widget dash-summary-card" href="{{ url_for('workflow_audit_report') }}">
+      <i class="fa-solid fa-rotate-left"></i>
+      <h4>Reopened Today</h4>
+      <div class="count">{{ approval_summary.reopened_today }}</div>
+    </a>
+  </div>
+</section>
+
+<div class="dash-two-col">
+  <section class="dash-panel">
+    <div class="dash-panel-head">
+      <h3><i class="fa-solid fa-clock-rotate-left"></i> Recent Activities</h3>
+      <a href="{{ url_for('workflow_audit_report') }}">View audit report</a>
+    </div>
+    <ul class="dash-activity-feed">
+      {% for act in recent_activities %}
+      <li class="dash-activity-item dash-activity-{{ act.action_key }}">
+        <div class="dash-activity-icon"><i class="fa-solid fa-file-lines"></i></div>
+        <div class="dash-activity-body">
+          <strong>{{ act.action }}</strong> — {{ act.module }} ({{ act.document }})
+          <span class="dash-activity-meta">{{ act.user }} · {{ act.date }}{% if act.time != '—' %} {{ act.time }}{% endif %}</span>
+          {% if act.remarks %}<span class="dash-activity-remarks">{{ act.remarks }}</span>{% endif %}
+        </div>
+      </li>
+      {% else %}
+      <li class="dash-activity-empty">No workflow activity yet. Create and submit a request to begin.</li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <div class="dash-side-stack">
+    <section class="dash-panel">
+      <div class="dash-panel-head">
+        <h3><i class="fa-solid fa-bell"></i> Notifications</h3>
+        <a href="{{ url_for('notifications') }}">View all</a>
+      </div>
+      <ul class="dash-notif-list">
+        {% for n in user_notifications %}
+        <li class="dash-notif-item {% if not n.is_read %}unread{% endif %}">
+          <strong>{{ n.notification_type|replace('_', ' ')|title }}</strong>
+          <span>{{ n.message or '—' }}</span>
+          <small>{{ n.created_at or '—' }}</small>
+        </li>
+        {% else %}
+        <li class="dash-notif-empty">No notifications.</li>
+        {% endfor %}
+      </ul>
+    </section>
+
+    <section class="dash-panel dash-approval-center">
+      <div class="dash-panel-head">
+        <h3><i class="fa-solid fa-clipboard-check"></i> Approval Center</h3>
+      </div>
+      <div class="dash-approval-links">
+        <a href="{{ url_for('approvals', role='maker') }}">
+          <span>My Submissions</span>
+          <strong>{{ approval_widgets.maker }}</strong>
+        </a>
+        <a href="{{ url_for('approvals', role='checker') }}">
+          <span>Pending Verification</span>
+          <strong>{{ approval_widgets.checker }}</strong>
+        </a>
+        <a href="{{ url_for('approvals', role='approver') }}">
+          <span>Pending Approval</span>
+          <strong>{{ approval_widgets.approver }}</strong>
+        </a>
+      </div>
+    </section>
+  </div>
+</div>
+
+<section class="dash-section">
+  <h2 class="section-header"><span>#</span> Workflow Counters</h2>
+  <div class="dash-counter-tabs">
+    <div class="dashboard-counter-section">
+      <h3 class="counter-section-title">Maker</h3>
+      <div class="approval-widgets counter-grid dash-counter-grid">
+        <a class="approval-widget" href="{{ url_for('approvals', role='maker') }}"><h4>Pending Verification</h4><div class="count">{{ dashboard_counters.maker.pending_verification }}</div></a>
+        <a class="approval-widget" href="{{ url_for('approvals', role='maker') }}"><h4>Pending Approval</h4><div class="count">{{ dashboard_counters.maker.pending_approval }}</div></a>
+        <a class="approval-widget" href="{{ url_for('approvals', role='maker') }}"><h4>Approved</h4><div class="count">{{ dashboard_counters.maker.approved }}</div></a>
+        <a class="approval-widget" href="{{ url_for('approvals', role='maker') }}"><h4>Rejected</h4><div class="count">{{ dashboard_counters.maker.rejected }}</div></a>
+      </div>
+    </div>
+    <div class="dashboard-counter-section">
+      <h3 class="counter-section-title">Checker</h3>
+      <div class="approval-widgets counter-grid dash-counter-grid">
+        <a class="approval-widget" href="{{ url_for('approvals', role='checker') }}"><h4>Pending Verification</h4><div class="count">{{ dashboard_counters.checker.pending_verification }}</div></a>
+        <a class="approval-widget" href="{{ url_for('approvals', role='checker') }}"><h4>Verified Today</h4><div class="count">{{ dashboard_counters.checker.verified_today }}</div></a>
+        <a class="approval-widget" href="{{ url_for('approvals', role='checker') }}"><h4>Rejected Today</h4><div class="count">{{ dashboard_counters.checker.rejected_today }}</div></a>
+      </div>
+    </div>
+    <div class="dashboard-counter-section">
+      <h3 class="counter-section-title">Approver</h3>
+      <div class="approval-widgets counter-grid dash-counter-grid">
+        <a class="approval-widget" href="{{ url_for('approvals', role='approver') }}"><h4>Pending Approval</h4><div class="count">{{ dashboard_counters.approver.pending_approval }}</div></a>
+        <a class="approval-widget" href="{{ url_for('approvals', role='approver') }}"><h4>Approved Today</h4><div class="count">{{ dashboard_counters.approver.approved_today }}</div></a>
+        <a class="approval-widget" href="{{ url_for('approvals', role='approver') }}"><h4>Rejected Today</h4><div class="count">{{ dashboard_counters.approver.rejected_today }}</div></a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="dash-section">
+  <div class="dash-kpi-row dash-kpi-compact">
+    <div class="dash-kpi-card"><div class="tile-meta"><p>Projects</p><h3>{{ stats.total_projects }}</h3></div><i class="fa-solid fa-folder-open dash-kpi-icon"></i></div>
+    <div class="dash-kpi-card"><div class="tile-meta"><p>Workforce</p><h3>{{ stats.active_workers }}</h3></div><i class="fa-solid fa-helmet-safety dash-kpi-icon"></i></div>
+    <div class="dash-kpi-card"><div class="tile-meta"><p>Staff</p><h3>{{ stats.active_staff }}</h3></div><i class="fa-solid fa-building dash-kpi-icon"></i></div>
+    <div class="dash-kpi-card dash-kpi-card-accent"><div class="tile-meta"><p>Open Workflows</p><h3>{{ stats.workflow_tasks }}</h3></div><i class="fa-solid fa-clipboard-list dash-kpi-icon"></i></div>
+  </div>
+</section>
+
+<div class="data-grid-container dash-table-panel" data-erp-table>
+  <div class="erp-table-toolbar">
+    <h3 class="erp-table-title">Workflow Queue</h3>
+    <a href="{{ url_for('approvals') }}" class="erp-btn erp-btn-ghost erp-btn-sm">Open Approval Center</a>
+  </div>
+  <div class="erp-table-scroll">
+    <table class="erp-table dash-workflow-table">
+      <thead>
+        <tr>
+          <th>Reference</th>
+          <th>Module</th>
+          <th>Date</th>
+          <th>Submitted By</th>
+          <th>Status</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in system_rows %}
+        <tr>
+          <td><strong>{{ row.ref }}</strong></td>
+          <td>{{ row.label }}</td>
+          <td>{{ row.date_created }}</td>
+          <td>{{ row.submitted_by }}</td>
+          <td><span class="status-pill {{ row.status }}">{{ row.status_label }}</span></td>
+          <td><a class="dash-action-link" href="{{ row.action_url }}">{{ row.action_label }}</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6">No workflow records in queue.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

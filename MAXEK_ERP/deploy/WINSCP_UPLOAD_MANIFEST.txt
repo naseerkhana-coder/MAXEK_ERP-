@@ -1,0 +1,54 @@
+MAXEK ERP — WinSCP Upload Manifest
+==================================
+Upload ALL items below to: /var/www/maxek_erp/
+
+ROOT FILES
+----------
+app.py
+workflow_service.py
+wsgi.py
+requirements.txt
+
+FOLDERS (recursive)
+-------------------
+templates/
+static/
+deploy/
+tests/
+database/          (folder; maxek.db optional — created by migrate_db.py)
+reports/           (empty folder OK)
+
+DEPLOY SUBFOLDER
+----------------
+deploy/.env.example
+deploy/maxek-erp.service
+deploy/migrate_db.py
+deploy/vps_setup.sh
+deploy/clean_project.sh
+deploy/clean_project.bat
+deploy/WINSCP_EXCLUDE.txt
+deploy/WINSCP_UPLOAD_MANIFEST.txt
+deploy/DEPLOYMENT.md
+
+EXCLUDE (do not upload)
+-----------------------
+.venv/
+venv/
+__pycache__/
+*.pyc
+.git/
+.cursor/
+.env
+deploy/dist/
+deploy/package/
+
+POST-UPLOAD COMMANDS (SSH)
+---------------------------
+sudo chown -R www-data:www-data /var/www/maxek_erp
+cd /var/www/maxek_erp
+bash deploy/vps_setup.sh /var/www/maxek_erp
+
+OR if already set up:
+sudo systemctl restart maxek-erp
+sudo systemctl status maxek-erp
+journalctl -u maxek-erp -n 50

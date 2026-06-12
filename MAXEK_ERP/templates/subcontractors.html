@@ -1,0 +1,58 @@
+{% extends 'base_maxek.html' %}
+{% from 'macros/erp_ui.html' import approval_badge, erp_pagination %}
+{% set page_title = 'Subcontract' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; Operations &gt; Subcontract' %}
+{% block page_actions %}
+<a href="#add-subcontractor" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> Add Subcontractor</a>
+{% endblock %}
+{% block content %}
+<div class="module-layout">
+  <div class="erp-form-card" id="add-subcontractor">
+    <h3 class="erp-form-title">Add Sub Contractor</h3>
+    <form method="post" enctype="multipart/form-data" class="erp-form-grid">
+      <div class="erp-field span-2"><input name="subcontractor_name" placeholder=" " required><label>Sub Contractor Name</label></div>
+      <div class="erp-field"><input name="company_name" placeholder=" "><label>Company Name</label></div>
+      <div class="erp-field"><input name="mobile" placeholder=" "><label>Mobile</label></div>
+      <div class="erp-field"><input type="email" name="email" placeholder=" "><label>Email</label></div>
+      <div class="erp-field span-2"><textarea name="address" placeholder=" "></textarea><label>Address</label></div>
+      <div class="erp-field"><input name="work_type" placeholder=" "><label>Work Type</label></div>
+      <div class="erp-field"><select name="payment_mode"><option>Cash</option><option>Bank Transfer</option><option>Cheque</option><option>UPI</option></select><label>Payment Mode</label></div>
+      <div class="erp-field"><input name="working_hours" type="number" step="0.1" placeholder=" "><label>Working Hours</label></div>
+      <div class="erp-field"><input name="gst_number" placeholder=" "><label>GST Number</label></div>
+      <div class="erp-field span-2"><input name="id_proof" type="file"><label>ID Proof</label></div>
+      <div class="erp-field"><select name="status"><option selected>Active</option><option>Inactive</option></select><label>Status</label></div>
+      <div class="erp-form-actions"><button class="erp-btn erp-btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Save Sub Contractor</button></div>
+    </form>
+  </div>
+
+  <div class="erp-table-panel" data-erp-table>
+    <div class="erp-table-toolbar">
+      <h3 class="erp-table-title">Sub Contractor List</h3>
+      <div class="erp-table-controls">
+        <div class="erp-table-search"><i class="fa-solid fa-magnifying-glass"></i><input type="search" data-table-search placeholder="Search subcontractors..."></div>
+        <button type="button" class="erp-btn erp-btn-ghost" data-table-filter><i class="fa-solid fa-filter"></i> Filter</button>
+        <button type="button" class="erp-btn erp-btn-ghost" data-table-export="subcontractors"><i class="fa-solid fa-file-export"></i> Export</button>
+      </div>
+    </div>
+    <div class="erp-table-scroll">
+      <table class="erp-table erp-table-module">
+        <thead><tr><th>#</th><th>Name</th><th>Company</th><th>Mobile</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for row in rows %}
+          <tr>
+            <td>{{ row.id }}</td>
+            <td>{{ row.subcontractor_name }}</td>
+            <td>{{ row.company_name }}</td>
+            <td>{{ row.mobile }}</td>
+            <td>{{ approval_badge(row.status) }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5">No subcontractor records yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {{ erp_pagination(rows|length) }}
+  </div>
+</div>
+{% endblock %}

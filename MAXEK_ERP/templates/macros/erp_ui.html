@@ -1,0 +1,215 @@
+{% macro approval_badge(status) %}
+{% set raw = (status or 'Pending Checker')|string %}
+{% set normalized = raw|lower|replace(' ', '-')|replace('_', '-') %}
+<span class="approval-badge approval-{{ normalized }}">{{ raw }}</span>
+{% endmacro %}
+
+{% macro workflow_badge(role) %}
+<span class="workflow-role-badge role-{{ role|lower }}">{{ role }}</span>
+{% endmacro %}
+
+{% macro role_status_badge(status, role='maker') %}
+{% if role == 'maker' %}
+  {{ approval_badge(status or 'Pending Checker') }}
+{% elif role == 'checker' %}
+  {% if status == 'Rejected by Checker' %}
+    {{ approval_badge('Rejected') }}
+  {% elif status in ['Pending Approval', 'Approved'] %}
+    {{ approval_badge('Verified') }}
+  {% else %}
+    {{ approval_badge(status or 'Pending Checker') }}
+  {% endif %}
+{% elif role == 'approver' %}
+  {% if status == 'Rejected by Approver' %}
+    {{ approval_badge('Rejected') }}
+  {% else %}
+    {{ approval_badge(status or 'Pending Approval') }}
+  {% endif %}
+{% else %}
+  {{ approval_badge(status or 'Pending Checker') }}
+{% endif %}
+{% endmacro %}
+
+{% macro maker_row_actions(module_endpoint, delete_table, record_id, approval_status) %}
+{% set s = approval_status or 'Pending Checker' %}
+{% set editable = s in ['Rejected by Checker', 'Rejected by Approver'] %}
+<div class="workflow-row-actions">
+  <a href="{{ url_for(module_endpoint, view=record_id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">View</a>
+  {% if editable %}
+  <a href="{{ url_for(module_endpoint, edit=record_id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Edit</a>
+  {% elif s == 'Pending Checker' %}
+  <span class="workflow-hint">Waiting for Verification</span>
+  {% elif s == 'Pending Approval' %}
+  <span class="workflow-hint">Waiting for Approval</span>
+  {% elif s == 'Approved' %}
+  <span class="workflow-hint">Approved</span>
+  {% endif %}
+</div>
+{% endmacro %}
+
+{% macro checker_row_actions(approval_id, module_endpoint, record_id, record_status, role='checker') %}
+{% set s = record_status or 'Pending Checker' %}
+<div class="workflow-row-actions">
+  <a href="{{ url_for(module_endpoint, view=record_id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">View</a>
+  {% if s == 'Pending Checker' %}
+  <a href="{{ url_for(module_endpoint, edit=record_id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Edit</a>
+  <button type="button" class="erp-btn erp-btn-primary erp-btn-sm js-action-btn"
+    data-approval-id="{{ approval_id }}" data-role="checker" data-action="verify">Verify</button>
+  <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm js-action-btn"
+    data-approval-id="{{ approval_id }}" data-role="checker" data-action="reject">Reject</button>
+  {% else %}
+  {% if s == 'Rejected by Checker' %}
+  <span class="workflow-hint">Rejected</span>
+  {% else %}
+  <span class="workflow-hint">Verified</span>
+  {% endif %}
+  {% endif %}
+</div>
+{% endmacro %}
+
+{% macro approver_row_actions(approval_id, module_endpoint, record_id, record_status) %}
+{% set s = record_status or 'Pending Approval' %}
+<div class="workflow-row-actions">
+  <a href="{{ url_for(module_endpoint, view=record_id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">View</a>
+  {% if s == 'Pending Approval' %}
+  <a href="{{ url_for(module_endpoint, edit=record_id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Edit</a>
+  <button type="button" class="erp-btn erp-btn-primary erp-btn-sm js-action-btn"
+    data-approval-id="{{ approval_id }}" data-role="approver" data-action="approve">Approve</button>
+  <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm js-action-btn"
+    data-approval-id="{{ approval_id }}" data-role="approver" data-action="reject">Reject</button>
+  {% elif s == 'Approved' %}
+  <span class="workflow-hint">Approved</span>
+  {% endif %}
+</div>
+{% endmacro %}
+
+{% macro transaction_view_tabs(view_record, history, can_reopen=False, approval_id=None) %}
+{% if view_record %}
+<div class="transaction-tabs" data-transaction-tabs>
+  <div class="transaction-tab-bar">
+    <button type="button" class="transaction-tab active" data-tab="details">Details</button>
+    <button type="button" class="transaction-tab" data-tab="history">Approval History</button>
+  </div>
+  <div class="transaction-tab-panel active" data-panel="details">
+    {{ caller() }}
+    {% if can_reopen and approval_id %}
+    <div class="erp-form-actions" style="margin-top: 1rem;">
+      <button type="button" class="erp-btn erp-btn-ghost js-reopen-btn" data-approval-id="{{ approval_id }}">
+        <i class="fa-solid fa-rotate-left"></i> Reopen
+      </button>
+    </div>
+    {% endif %}
+  </div>
+  <div class="transaction-tab-panel" data-panel="history">
+    {{ approval_history_timeline(history) }}
+  </div>
+</div>
+{% endif %}
+{% endmacro %}
+
+{% macro approval_history_timeline(history) %}
+{% if history and history.timeline %}
+<div class="approval-history-panel">
+  <h4 class="approval-history-title">Approval History Timeline</h4>
+  <div class="approval-timeline">
+    {% for step in history.timeline %}
+    <div class="approval-timeline-item approval-timeline-{{ step.event|lower }}">
+      <div class="approval-timeline-marker"></div>
+      <div class="approval-timeline-body">
+        <strong>{{ step.event }}</strong>
+        <div class="approval-timeline-meta">
+          <span>{{ step.user }}</span>
+          <span>{{ step.date }}{% if step.time != '—' %} · {{ step.time }}{% endif %}</span>
+        </div>
+        {% if step.remarks and step.remarks != '—' %}
+        <p class="approval-timeline-remarks">Remarks: {{ step.remarks }}</p>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+{% endmacro %}
+
+{% macro approval_history_panel(history) %}
+{{ approval_history_timeline(history) }}
+{% endmacro %}
+
+{% macro rejection_notice(history, approval_status) %}
+{% if approval_status in ['Rejected by Checker', 'Rejected by Approver'] and history and history.remarks and history.remarks != '—' %}
+<div class="erp-validation rejection-notice">
+  <strong>{{ approval_status }}</strong>
+  <p>Reason: {{ history.remarks }}</p>
+</div>
+{% endif %}
+{% endmacro %}
+
+{% macro erp_table_toolbar(title, export_name='export') %}
+<div class="erp-table-toolbar">
+  <h3 class="erp-table-title">{{ title }}</h3>
+  <div class="erp-table-controls">
+    <div class="erp-table-search">
+      <i class="fa-solid fa-magnifying-glass"></i>
+      <input type="search" placeholder="Search records..." data-table-search>
+    </div>
+    <button type="button" class="erp-btn erp-btn-ghost" data-table-filter><i class="fa-solid fa-filter"></i> Filter</button>
+    <button type="button" class="erp-btn erp-btn-ghost" data-table-export="{{ export_name }}"><i class="fa-solid fa-file-export"></i> Export</button>
+  </div>
+</div>
+{% endmacro %}
+
+{% macro erp_pagination(total=0) %}
+<div class="erp-pagination" data-table-pagination>
+  <span class="erp-page-info" data-page-info>Showing {{ total }} record{{ 's' if total != 1 else '' }}</span>
+  <div class="erp-page-buttons">
+    <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-page-prev disabled>Previous</button>
+    <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-page-next disabled>Next</button>
+  </div>
+</div>
+{% endmacro %}
+
+{% macro workflow_modals() %}
+<div id="action-modal" class="reject-modal" hidden>
+  <div class="reject-modal-backdrop"></div>
+  <div class="reject-modal-card">
+    <h3 id="action-modal-title">Workflow Action</h3>
+    <form method="post" action="{{ url_for('approval_action') }}" id="action-form">
+      <input type="hidden" name="approval_id" id="action-approval-id">
+      <input type="hidden" name="action" id="action-type">
+      <input type="hidden" name="role" id="action-role">
+      <div class="erp-field span-2">
+        <textarea name="comments" id="action-comment" placeholder=" "></textarea>
+        <label id="action-comment-label">Comment</label>
+      </div>
+      <div class="erp-form-actions">
+        <button type="button" class="erp-btn erp-btn-ghost" id="action-cancel">Cancel</button>
+        <button type="submit" class="erp-btn erp-btn-primary" id="action-submit">Confirm</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="reopen-modal" class="reject-modal" hidden>
+  <div class="reject-modal-backdrop"></div>
+  <div class="reject-modal-card">
+    <h3>Reopen Transaction — Reason Required</h3>
+    <p class="workflow-hint">Administrator only. Record returns to Pending Checker.</p>
+    <form method="post" action="{{ url_for('workflow_reopen') }}" id="reopen-form">
+      <input type="hidden" name="approval_id" id="reopen-approval-id">
+      <div class="erp-field span-2">
+        <textarea name="reason" id="reopen-reason" placeholder=" " required></textarea>
+        <label>Reopen Reason</label>
+      </div>
+      <div class="erp-form-actions">
+        <button type="button" class="erp-btn erp-btn-ghost" id="reopen-cancel">Cancel</button>
+        <button type="submit" class="erp-btn erp-btn-primary">Reopen</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endmacro %}
+
+{% macro reject_modal() %}
+{{ workflow_modals() }}
+{% endmacro %}

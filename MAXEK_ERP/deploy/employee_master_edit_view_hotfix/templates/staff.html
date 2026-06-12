@@ -1,0 +1,176 @@
+{% extends 'base_maxek.html' %}
+{% from 'macros/erp_ui.html' import approval_badge, erp_pagination %}
+{% set page_title = 'Employee Master' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; HR &gt; Employee Master' %}
+{% set form_employee = editing_staff %}
+{% block page_actions %}
+<a href="{{ url_for('staff') }}#add-staff" class="erp-btn erp-btn-primary"><i class="fa-solid fa-user-plus"></i> Add Employee</a>
+{% endblock %}
+{% block content %}
+<div class="module-layout">
+  <div class="erp-form-card" id="add-staff">
+    <h3 class="erp-form-title">{{ 'Edit Employee' if form_employee else 'Employee Data Entry' }}</h3>
+    <form method="post" enctype="multipart/form-data" class="erp-form-grid">
+      {% if form_employee %}<input type="hidden" name="staff_id" value="{{ form_employee.id }}">{% endif %}
+      <div class="erp-field"><input value="{{ form_employee.employee_code if form_employee else next_employee_code }}" readonly placeholder=" "><label>Employee Code (Auto)</label></div>
+      <div class="erp-field"><input name="staff_name" value="{{ form_employee.staff_name if form_employee else '' }}" placeholder=" " required><label>Employee Name</label></div>
+      <div class="erp-field"><input name="mobile" value="{{ form_employee.mobile if form_employee else '' }}" placeholder=" "><label>Mobile</label></div>
+      <div class="erp-field"><input type="email" name="email" value="{{ form_employee.email if form_employee else '' }}" placeholder=" "><label>Email</label></div>
+      <div class="erp-field">
+        <select name="department" class="has-value">
+          <option value="">Select department</option>
+          {% for dept in departments %}
+          <option value="{{ dept }}"{% if form_employee and form_employee.department == dept %} selected{% endif %}>{{ dept }}</option>
+          {% endfor %}
+        </select>
+        <label>Department</label>
+      </div>
+      <div class="erp-field"><input name="aadhaar_number" value="{{ form_employee.aadhaar_number if form_employee else '' }}" placeholder=" "><label>Aadhaar Number</label></div>
+      <div class="erp-field"><input name="pan_number" value="{{ form_employee.pan_number if form_employee else '' }}" placeholder=" "><label>PAN Number</label></div>
+      <div class="erp-field span-2">
+        <select name="designation_id" class="has-value">
+          <option value="">Select designation</option>
+          {% for d in designations %}
+          <option value="{{ d.id }}"{% if form_employee and form_employee.designation_id == d.id %} selected{% endif %}>{{ d.designation_name }}</option>
+          {% endfor %}
+        </select>
+        <label>Designation</label>
+      </div>
+      <div class="erp-field span-2">
+        <select name="reporting_manager" class="has-value">
+          <option value="">Select reporting manager</option>
+          {% for s in staff_list %}
+          <option value="{{ s.staff_name }}"{% if form_employee and form_employee.reporting_manager == s.staff_name %} selected{% endif %}>{{ s.staff_name }}</option>
+          {% endfor %}
+        </select>
+        <label>Reporting Manager</label>
+      </div>
+      <div class="erp-field span-2">
+        <select name="workflow_role" class="has-value">
+          <option value=""{% if not form_employee or not form_employee.workflow_role %} selected{% endif %}>Auto (from designation matrix)</option>
+          <option value="Maker"{% if form_employee and form_employee.workflow_role == 'Maker' %} selected{% endif %}>Maker</option>
+          <option value="Checker"{% if form_employee and form_employee.workflow_role == 'Checker' %} selected{% endif %}>Checker</option>
+          <option value="Approver"{% if form_employee and form_employee.workflow_role == 'Approver' %} selected{% endif %}>Approver</option>
+        </select>
+        <label>Workflow Role</label>
+      </div>
+      <div class="erp-field"><select name="salary_type" class="has-value"><option{% if not form_employee or form_employee.salary_type == 'Monthly' %} selected{% endif %}>Monthly</option><option{% if form_employee and form_employee.salary_type == 'Daily' %} selected{% endif %}>Daily</option></select><label>Salary Type</label></div>
+      <div class="erp-field"><input name="salary_amount" type="number" step="0.01" value="{{ form_employee.salary_amount if form_employee else '' }}" placeholder=" "><label>Salary Amount</label></div>
+      <div class="erp-field"><select name="ot_applicable" class="has-value"><option{% if form_employee and form_employee.ot_applicable == 'Yes' %} selected{% endif %}>Yes</option><option{% if not form_employee or form_employee.ot_applicable != 'Yes' %} selected{% endif %}>No</option></select><label>OT Applicable</label></div>
+      <div class="erp-field"><input name="working_hours" type="number" step="0.1" value="{{ form_employee.working_hours if form_employee else '' }}" placeholder=" "><label>Working Hours</label></div>
+      <div class="erp-field"><input name="joining_date" type="date" value="{{ form_employee.joining_date if form_employee else '' }}" placeholder=" "><label>Joining Date</label></div>
+      <div class="erp-field"><input name="bank_account" value="{{ form_employee.bank_account if form_employee else '' }}" placeholder=" "><label>Bank Account Number</label></div>
+      <div class="erp-field"><input name="bank_name" value="{{ form_employee.bank_name if form_employee else '' }}" placeholder=" "><label>Bank Name</label></div>
+      <div class="erp-field"><input name="ifsc_code" value="{{ form_employee.ifsc_code if form_employee else '' }}" placeholder=" "><label>IFSC Code</label></div>
+      <div class="erp-field"><input name="branch_name" value="{{ form_employee.branch_name if form_employee else '' }}" placeholder=" "><label>Branch Name</label></div>
+      <div class="erp-field span-2"><input name="photo" type="file"><label>{{ 'Replace Photo' if form_employee and form_employee.photo else 'Photo' }}</label></div>
+      <div class="erp-field span-2"><input name="id_proof" type="file"><label>{{ 'Replace ID Proof' if form_employee and form_employee.id_proof else 'ID Proof' }}</label></div>
+      <div class="erp-field span-2"><input name="aadhaar_document" type="file"><label>{{ 'Replace Aadhaar Document' if form_employee and form_employee.aadhaar_document else 'Aadhaar Document' }}</label></div>
+      <div class="erp-field span-2"><input name="pan_document" type="file"><label>{{ 'Replace PAN Document' if form_employee and form_employee.pan_document else 'PAN Document' }}</label></div>
+      <div class="erp-field"><select name="status" class="has-value"><option{% if not form_employee or form_employee.status == 'Active' %} selected{% endif %}>Active</option><option{% if form_employee and form_employee.status == 'Inactive' %} selected{% endif %}>Inactive</option></select><label>Status</label></div>
+      <div class="erp-form-actions">
+        <button class="erp-btn erp-btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> {{ 'Update Employee' if form_employee else 'Save Employee' }}</button>
+        {% if form_employee %}<a class="erp-btn erp-btn-ghost" href="{{ url_for('staff') }}">Cancel Edit</a>{% endif %}
+      </div>
+    </form>
+  </div>
+
+  <div class="erp-table-panel" data-erp-table>
+    <div class="erp-table-toolbar">
+      <h3 class="erp-table-title">Employee Records</h3>
+      <div class="erp-table-controls">
+        <div class="erp-table-search"><i class="fa-solid fa-magnifying-glass"></i><input type="search" data-table-search placeholder="Search employees..."></div>
+        <button type="button" class="erp-btn erp-btn-ghost" data-table-export="employees"><i class="fa-solid fa-file-export"></i> Export</button>
+      </div>
+    </div>
+    <div class="erp-table-scroll">
+      <table class="erp-table erp-table-module">
+        <thead>
+          <tr>
+            <th>Employee</th>
+            <th>Employee Code</th>
+            <th>Designation</th>
+            <th>Department</th>
+            <th>Status</th>
+            <th>Reporting Manager</th>
+            <th>Workflow Access</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          <tr>
+            <td>{{ row.staff_name }}</td>
+            <td>{{ row.employee_code or '—' }}</td>
+            <td>{{ row.display_designation }}</td>
+            <td>{{ row.department or '—' }}</td>
+            <td>{{ approval_badge(row.status or 'Active') }}</td>
+            <td>{{ row.reporting_manager or '—' }}</td>
+            <td><small>{{ row.workflow_access }}</small></td>
+            <td>
+              <div class="workflow-row-actions">
+                <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-modal-open="staff-detail-{{ row.id }}"><i class="fa-regular fa-eye"></i> View</button>
+                <a href="{{ url_for('staff', edit=row.id) }}#add-staff" class="erp-btn erp-btn-ghost erp-btn-sm"><i class="fa-solid fa-pen-to-square"></i> Edit</a>
+              </div>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="8">No employee records yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {{ erp_pagination(rows|length) }}
+  </div>
+</div>
+
+{% for row in rows %}
+<div id="staff-detail-{{ row.id }}" class="erp-modal" hidden>
+  <div class="erp-modal-backdrop" data-modal-close></div>
+  <div class="erp-modal-card employee-detail-modal">
+    <div class="erp-modal-header">
+      <div>
+        <h3>{{ row.staff_name }}</h3>
+        <p>{{ row.employee_code or 'No code' }} · {{ row.display_designation }}</p>
+      </div>
+      <button type="button" class="erp-modal-close" data-modal-close aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="employee-detail-layout">
+      {% if row.photo %}
+      <img class="employee-detail-photo" src="{{ url_for('static', filename='photos/' ~ row.photo) }}" alt="{{ row.staff_name }}">
+      {% else %}
+      <div class="employee-detail-photo employee-detail-photo-empty"><i class="fa-regular fa-user"></i></div>
+      {% endif %}
+      <div class="employee-detail-grid">
+        <div><span>Mobile</span><strong>{{ row.mobile or '—' }}</strong></div>
+        <div><span>Email</span><strong>{{ row.email or '—' }}</strong></div>
+        <div><span>Department</span><strong>{{ row.department or '—' }}</strong></div>
+        <div><span>Status</span><strong>{{ row.status or '—' }}</strong></div>
+        <div><span>Reporting Manager</span><strong>{{ row.reporting_manager or '—' }}</strong></div>
+        <div><span>Workflow Role</span><strong>{{ row.workflow_access or '—' }}</strong></div>
+        <div><span>Salary Type</span><strong>{{ row.salary_type or '—' }}</strong></div>
+        <div><span>Salary Amount</span><strong>{{ row.salary_amount if row.salary_amount is not none else '—' }}</strong></div>
+        <div><span>OT Applicable</span><strong>{{ row.ot_applicable or '—' }}</strong></div>
+        <div><span>Working Hours</span><strong>{{ row.working_hours if row.working_hours is not none else '—' }}</strong></div>
+        <div><span>Joining Date</span><strong>{{ row.joining_date or '—' }}</strong></div>
+        <div><span>Aadhaar Number</span><strong>{{ row.aadhaar_number or '—' }}</strong></div>
+        <div><span>PAN Number</span><strong>{{ row.pan_number or '—' }}</strong></div>
+        <div><span>Bank Account</span><strong>{{ row.bank_account or '—' }}</strong></div>
+        <div><span>Bank Name</span><strong>{{ row.bank_name or '—' }}</strong></div>
+        <div><span>IFSC Code</span><strong>{{ row.ifsc_code or '—' }}</strong></div>
+        <div><span>Branch</span><strong>{{ row.branch_name or '—' }}</strong></div>
+      </div>
+    </div>
+    <div class="employee-document-links">
+      {% if row.id_proof %}<a href="{{ url_for('static', filename='uploads/staff/' ~ row.id_proof) }}" target="_blank" rel="noopener"><i class="fa-solid fa-id-card"></i> ID Proof</a>{% endif %}
+      {% if row.aadhaar_document %}<a href="{{ url_for('static', filename='uploads/staff/' ~ row.aadhaar_document) }}" target="_blank" rel="noopener"><i class="fa-solid fa-file-lines"></i> Aadhaar</a>{% endif %}
+      {% if row.pan_document %}<a href="{{ url_for('static', filename='uploads/staff/' ~ row.pan_document) }}" target="_blank" rel="noopener"><i class="fa-solid fa-file-invoice"></i> PAN</a>{% endif %}
+      {% if not row.id_proof and not row.aadhaar_document and not row.pan_document %}<span>No documents uploaded.</span>{% endif %}
+    </div>
+    <div class="employee-detail-actions">
+      <a href="{{ url_for('staff', edit=row.id) }}#add-staff" class="erp-btn erp-btn-primary"><i class="fa-solid fa-pen-to-square"></i> Edit Employee</a>
+    </div>
+  </div>
+</div>
+{% endfor %}
+{% endblock %}

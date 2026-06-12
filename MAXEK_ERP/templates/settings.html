@@ -1,0 +1,70 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Settings' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; Settings' %}
+{% block content %}
+<div class="module-layout settings-module-layout">
+  <div class="erp-form-card">
+    <h3 class="erp-form-title">Workflow Administration</h3>
+    <p>Configure module assignments, employee designations, and audit reporting for the MAXEK 3-step approval standard.</p>
+    <div class="erp-form-actions">
+      <a class="erp-btn erp-btn-primary" href="{{ url_for('user_settings') }}"><i class="fa-solid fa-user-gear"></i> User Settings</a>
+      <a class="erp-btn erp-btn-primary" href="{{ url_for('workflow_settings') }}"><i class="fa-solid fa-table"></i> Workflow Assignment Matrix</a>
+      <a class="erp-btn erp-btn-ghost" href="{{ url_for('staff') }}"><i class="fa-solid fa-users"></i> Employee Designation Mapping</a>
+      <a class="erp-btn erp-btn-ghost" href="{{ url_for('workflow_audit_report') }}"><i class="fa-solid fa-clipboard-list"></i> Workflow Audit Report</a>
+      <a class="erp-btn erp-btn-ghost" href="{{ url_for('approvals') }}"><i class="fa-solid fa-clipboard-check"></i> Approvals Queue</a>
+    </div>
+  </div>
+
+  <div class="erp-form-card" id="department-master">
+    <h3 class="erp-form-title">Department Creation</h3>
+    <form method="post" class="erp-form-grid">
+      <div class="erp-field span-2"><input name="department_name" placeholder=" " required><label>Department Name</label></div>
+      <div class="erp-field span-2"><input name="description" placeholder=" "><label>Description</label></div>
+      <div class="erp-field"><select name="status" class="has-value"><option selected>Active</option><option>Inactive</option></select><label>Status</label></div>
+      <div class="erp-form-actions"><button class="erp-btn erp-btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Save Department</button></div>
+    </form>
+  </div>
+
+  <div class="erp-table-panel" data-erp-table>
+    <div class="erp-table-toolbar">
+      <h3 class="erp-table-title">Department List</h3>
+      <div class="erp-table-controls">
+        <div class="erp-table-search"><i class="fa-solid fa-magnifying-glass"></i><input type="search" data-table-search placeholder="Search departments..."></div>
+      </div>
+    </div>
+    <div class="erp-table-scroll">
+      <table class="erp-table erp-table-module">
+        <thead><tr><th>#</th><th>Department</th><th>Description</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for dept in departments %}
+          <tr>
+            <td>{{ dept.id }}</td>
+            <td>{{ dept.department_name }}</td>
+            <td>{{ dept.description or '—' }}</td>
+            <td>{{ dept.status }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4">No departments configured.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="erp-table-panel">
+    <div class="erp-table-toolbar"><h3 class="erp-table-title">Role Security Policy</h3></div>
+    <div class="erp-table-scroll" style="padding: 1rem;">
+      <table class="erp-table erp-table-module">
+        <thead><tr><th>Role</th><th>Permissions</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Maker</strong></td><td>Create · Edit rejected records · View own records</td></tr>
+          <tr><td><strong>Checker</strong></td><td>View assigned records · Verify · Reject</td></tr>
+          <tr><td><strong>Approver</strong></td><td>Approve · Reject · View all approved records</td></tr>
+          <tr><td><strong>Administrator</strong></td><td>Reopen approved transactions (mandatory reason + audit)</td></tr>
+        </tbody>
+      </table>
+      <p class="workflow-hint" style="margin-top: 1rem;">Flow: Save → Pending Checker → Verify → Pending Approval → Approve → Approved. Reject returns to Maker. Reopen (Admin) → Pending Checker.</p>
+    </div>
+  </div>
+</div>
+{% endblock %}
