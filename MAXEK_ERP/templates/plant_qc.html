@@ -1,0 +1,75 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Plant QC' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('plant_dashboard') ~ '">Plant</a> &gt; QC' %}
+{% block page_actions %}
+<a href="{{ url_for('plant_qc', new=1) }}#record-form" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> New QC Record</a>
+{% endblock %}
+{% block content %}
+{% if view_record %}
+<div class="erp-form-card" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">Sample {{ view_record.sample_id }}</h3>
+  <p><strong>Date:</strong> {{ view_record.qc_date }} | <strong>Plant:</strong> {{ view_record.plant_name }}</p>
+  <p><strong>Source:</strong> {{ view_record.source_module }} | <strong>Test:</strong> {{ view_record.test_type }}</p>
+  <p><strong>Result:</strong> {{ view_record.result_value or '—' }} {{ view_record.result_unit or '' }} | <strong>Status:</strong>
+    <span class="erp-badge {% if view_record.pass_fail == 'Pass' %}erp-badge-success{% elif view_record.pass_fail == 'Fail' %}erp-badge-danger{% endif %}">{{ view_record.pass_fail }}</span>
+  </p>
+  <p><strong>Tested by:</strong> {{ view_record.tested_by or '—' }}</p>
+  {% if view_record.remarks %}<p><strong>Remarks:</strong> {{ view_record.remarks }}</p>{% endif %}
+  <a href="{{ url_for('plant_qc', edit=view_record.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Edit</a>
+</div>
+{% endif %}
+
+{% if show_form %}
+<div class="erp-form-card" id="record-form" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">{% if edit_record %}Edit{% else %}New{% endif %} QC Record</h3>
+  <form method="post">
+    {% if edit_record %}<input type="hidden" name="record_id" value="{{ edit_record.id }}">{% endif %}
+    <div class="erp-form-grid">
+      <div class="erp-field"><input type="date" name="qc_date" required value="{{ edit_record.qc_date if edit_record else default_date }}"><label>QC Date *</label></div>
+      <div class="erp-field"><select name="plant_id" required><option value="">Select Plant</option>{% for pl in plants %}<option value="{{ pl.id }}" {% if edit_record and edit_record.plant_id == pl.id %}selected{% endif %}>{{ pl.plant_name }} ({{ pl.plant_type }})</option>{% endfor %}</select><label>Plant *</label></div>
+      <div class="erp-field"><input name="sample_id" placeholder=" " value="{{ edit_record.sample_id if edit_record else '' }}"><label>Sample ID (auto if blank)</label></div>
+      <div class="erp-field"><select name="source_module">{% for m in source_modules %}<option value="{{ m }}" {% if edit_record and edit_record.source_module == m %}selected{% endif %}>{{ m }}</option>{% endfor %}</select><label>Production Source</label></div>
+      <div class="erp-field"><select name="test_type">{% for t in test_types %}<option value="{{ t }}" {% if edit_record and edit_record.test_type == t %}selected{% endif %}>{{ t }}</option>{% endfor %}</select><label>Test Type</label></div>
+      <div class="erp-field"><input type="number" step="0.0001" name="result_value" placeholder=" " value="{{ edit_record.result_value if edit_record and edit_record.result_value is not none else '' }}"><label>Result Value</label></div>
+      <div class="erp-field"><input name="result_unit" placeholder=" " value="{{ edit_record.result_unit if edit_record else '' }}"><label>Result Unit</label></div>
+      <div class="erp-field"><select name="pass_fail">{% for p in pass_fail_options %}<option value="{{ p }}" {% if edit_record and edit_record.pass_fail == p %}selected{% elif not edit_record and p == 'Pending' %}selected{% endif %}>{{ p }}</option>{% endfor %}</select><label>Pass / Fail</label></div>
+      <div class="erp-field"><input name="tested_by" placeholder=" " value="{{ edit_record.tested_by if edit_record else '' }}"><label>Tested By</label></div>
+      <div class="erp-field span-2"><textarea name="remarks" placeholder=" ">{{ edit_record.remarks if edit_record else '' }}</textarea><label>Remarks</label></div>
+    </div>
+    <button type="submit" class="erp-btn erp-btn-primary">Save QC Record</button>
+    {% if edit_record %}
+    <button type="submit" name="form_action" value="delete" class="erp-btn erp-btn-ghost" onclick="return confirm('Delete this QC record?');">Delete</button>
+    {% endif %}
+  </form>
+</div>
+{% endif %}
+
+<form method="get" style="margin-bottom:0.75rem;display:flex;gap:0.5rem;flex-wrap:wrap;">
+  <input name="q" value="{{ search }}" placeholder="Search sample / test…" style="max-width:200px;">
+  <select name="plant_id" onchange="this.form.submit()"><option value="">All plants</option>{% for pl in plants %}<option value="{{ pl.id }}" {% if plant_filter == pl.id %}selected{% endif %}>{{ pl.plant_name }}</option>{% endfor %}</select>
+  <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Filter</button>
+</form>
+<div class="erp-table-panel" data-erp-table>
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead><tr><th>Date</th><th>Sample</th><th>Plant</th><th>Source</th><th>Test</th><th>Result</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>{{ row.qc_date or '—' }}</td>
+          <td>{{ row.sample_id or '—' }}</td>
+          <td>{{ row.plant_name }}</td>
+          <td>{{ row.source_module or '—' }}</td>
+          <td>{{ row.test_type or '—' }}</td>
+          <td>{% if row.result_value is not none %}{{ row.result_value }} {{ row.result_unit or '' }}{% else %}—{% endif %}</td>
+          <td>{{ row.pass_fail or '—' }}</td>
+          <td><a href="{{ url_for('plant_qc', view=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">View</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8">No QC records yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

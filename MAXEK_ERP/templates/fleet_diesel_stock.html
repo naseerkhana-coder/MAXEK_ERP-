@@ -1,0 +1,36 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Diesel Stock' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('fleet_dashboard') ~ '">Fleet</a> &gt; Diesel Stock' %}
+{% block page_actions %}
+<a href="{{ url_for('fleet_diesel_purchase', new=1) }}" class="erp-btn erp-btn-primary">Purchase</a>
+<a href="{{ url_for('fleet_diesel_issue', new=1) }}" class="erp-btn erp-btn-ghost">Issue</a>
+{% endblock %}
+{% block content %}
+<div class="erp-summary-grid" style="margin-bottom:1.5rem;">
+  <div class="erp-stat-card"><span>Current Balance</span><strong>{{ '%.2f'|format(stock_balance) }} L</strong></div>
+  <div class="erp-stat-card"><span>Recent Purchases</span><strong>{{ purchases|length }}</strong></div>
+  <div class="erp-stat-card"><span>Recent Issues</span><strong>{{ issues|length }}</strong></div>
+</div>
+
+<div class="erp-table-panel" data-erp-table style="margin-bottom:1.5rem;">
+  <div class="erp-table-toolbar"><h3 class="erp-table-title">Stock Ledger</h3></div>
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead><tr><th>Date</th><th>Type</th><th>Qty (L)</th><th>Reference</th><th>Remarks</th></tr></thead>
+      <tbody>
+        {% for row in ledger %}
+        <tr>
+          <td>{{ row.movement_date or '—' }}</td>
+          <td>{% if row.movement_type == 'PURCHASE_IN' %}<span style="color:#059669;">IN</span>{% else %}<span style="color:#dc2626;">OUT</span>{% endif %}</td>
+          <td>{{ '%.2f'|format(row.quantity_liters or 0) }}</td>
+          <td>{{ row.reference_table or '—' }} #{{ row.reference_id or '—' }}</td>
+          <td>{{ row.remarks or '—' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5">No ledger entries yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

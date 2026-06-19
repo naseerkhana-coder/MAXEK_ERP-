@@ -1,0 +1,51 @@
+{% extends 'base_maxek.html' %}
+{% from 'macros/erp_ui.html' import erp_sub_toolbar %}
+{% set page_title = 'Help Desk' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; Help &amp; Support &gt; Help Desk' %}
+{% block content %}
+{{ erp_sub_toolbar(sub_toolbar, 'Help and support') }}
+
+<form method="get" class="erp-table-toolbar erp-table-toolbar--compact" style="margin-top:0.75rem;">
+  <input name="q" value="{{ search }}" placeholder="Search help topics…">
+  <select name="category">
+    <option value="">All categories</option>
+    {% for cat in categories %}
+    <option value="{{ cat }}" {% if category_filter == cat %}selected{% endif %}>{{ cat }}</option>
+    {% endfor %}
+  </select>
+  <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Filter</button>
+</form>
+
+<div class="help-topic-grid" style="margin-top:0.75rem;">
+  {% for topic in topics %}
+  <article class="erp-form-card erp-form-card--compact help-topic-card">
+    <div class="help-topic-head">
+      <span class="help-topic-category">{{ topic.category }}</span>
+      <h3 class="erp-form-title">{{ topic.title }}</h3>
+    </div>
+    {% if topic.description %}
+    <p class="help-topic-desc">{{ topic.description }}</p>
+    {% endif %}
+    <div class="help-topic-actions">
+      {% if topic.video_url %}
+      <a href="{{ topic.video_url }}" class="erp-btn erp-btn-primary erp-btn-sm" target="_blank" rel="noopener noreferrer">
+        <i class="fa-brands fa-youtube"></i> Watch Tutorial
+      </a>
+      {% endif %}
+      {% if topic.manual_url %}
+      <a href="{{ topic.manual_url }}" class="erp-btn erp-btn-ghost erp-btn-sm" target="_blank" rel="noopener noreferrer">
+        <i class="fa-solid fa-book"></i> User Manual
+      </a>
+      {% endif %}
+      {% if not topic.video_url and not topic.manual_url %}
+      <span class="erp-hint">Manual and video links will be added by your administrator.</span>
+      {% endif %}
+    </div>
+  </article>
+  {% else %}
+  <div class="erp-form-card erp-form-card--compact">
+    <p>No help topics match your search. Try another keyword or contact support.</p>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

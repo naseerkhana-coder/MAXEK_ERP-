@@ -1,0 +1,271 @@
+{% extends 'base_maxek.html' %}
+{% from 'macros/erp_ui.html' import role_status_badge, maker_row_actions, rejection_notice, workflow_modals, transaction_view_tabs %}
+{% set page_title = 'Expense / Purchase Entry' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('accounts_hub') ~ '">Accounts</a> &gt; Expenses' %}
+{% block page_actions %}
+<a href="{{ url_for('accounts_expenses', new=1) }}#expense-form" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> New Entry</a>
+{% endblock %}
+{% block content %}
+<div class="erp-validation" style="margin-bottom: 1rem;">
+  <strong>Flow:</strong> Select Head of Account first → line items with GST → Maker [Save] → Checker → Approver
+</div>
+
+{% if view_record %}
+<div class="erp-form-card" style="margin-bottom: 1rem;">
+  {% call transaction_view_tabs(view_record, history, can_reopen, approval_id) %}
+  <h3 class="erp-form-title">Expense #{{ view_record.id }}</h3>
+  <p><strong>Date:</strong> {{ view_record.entry_date or '—' }} |
+    <strong>Head:</strong> {{ view_record.account_code }} — {{ view_record.account_name }}</p>
+  <p><strong>Type:</strong> {{ view_record.expense_type }} |
+    <strong>Payment:</strong> {{ view_record.payment_source }} ({{ view_record.payment_status }})</p>
+  <p><strong>Project:</strong> {{ view_record.project_name or '—' }} |
+    <strong>Vendor:</strong> {{ view_record.vendor_name or '—' }}</p>
+  <p><strong>Invoice:</strong> {{ view_record.invoice_number or '—' }} ({{ view_record.invoice_date or '—' }})</p>
+  <table class="erp-table" style="margin-top:0.75rem;">
+    <thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>GST%</th><th>CGST</th><th>SGST</th><th>IGST</th><th>Total</th></tr></thead>
+    <tbody>
+      {% for line in view_record.lines %}
+      <tr>
+        <td>{{ line.item_name }}</td>
+        <td>{{ line.quantity }} {{ line.unit or '' }}</td>
+        <td>{{ '%.2f'|format(line.rate or 0) }}</td>
+        <td>{{ line.gst_percent or 0 }}%</td>
+        <td>{{ '%.2f'|format(line.cgst or 0) }}</td>
+        <td>{{ '%.2f'|format(line.sgst or 0) }}</td>
+        <td>{{ '%.2f'|format(line.igst or 0) }}</td>
+        <td>{{ '%.2f'|format(line.line_total or 0) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p style="margin-top:0.75rem;"><strong>Subtotal:</strong> ₹{{ '%.2f'|format(view_record.subtotal or 0) }} |
+    <strong>CGST:</strong> ₹{{ '%.2f'|format(view_record.total_cgst or 0) }} |
+    <strong>SGST:</strong> ₹{{ '%.2f'|format(view_record.total_sgst or 0) }} |
+    <strong>IGST:</strong> ₹{{ '%.2f'|format(view_record.total_igst or 0) }} |
+    <strong>Grand Total:</strong> ₹{{ '%.2f'|format(view_record.grand_total or 0) }}</p>
+  {% if view_record.attachment_filename %}
+  <p><a href="{{ url_for('accounts_attachment_download', entity_type='expense', entity_id=view_record.id, filename=view_record.attachment_filename) }}">Download attachment</a></p>
+  {% endif %}
+  <p><strong>Status:</strong> {{ role_status_badge(view_record.approval_status, 'maker') }}</p>
+  {{ rejection_notice(history, view_record.approval_status) }}
+  {% endcall %}
+</div>
+{% endif %}
+
+{% if show_form %}
+<div class="erp-form-card" id="expense-form" style="margin-bottom: 1rem;">
+  <h3 class="erp-form-title">{% if edit_record %}Edit Expense #{{ edit_record.id }}{% else %}New Expense / Purchase{% endif %}</h3>
+  <form method="post" data-accounts-expense-form enctype="multipart/form-data">
+    {% if edit_record %}<input type="hidden" name="record_id" value="{{ edit_record.id }}">{% endif %}
+    <div class="erp-form-grid">
+      <div class="erp-field">
+        <select name="chart_account_id" id="exp_chart_account_id" required data-head-select>
+          <option value="">Select Head of Account</option>
+          {% for h in chart_heads %}
+          <option value="{{ h.id }}"
+            data-req-project="{{ h.requires_project or 0 }}"
+            data-req-vendor="{{ h.requires_vendor or 0 }}"
+            data-gst="{{ h.default_gst_applicable or 0 }}"
+            {% if edit_record and edit_record.chart_account_id == h.id %}selected{% endif %}
+            {% if prefill_head == h.id %}selected{% endif %}>{{ h.code }} — {{ h.name }}</option>
+          {% endfor %}
+        </select>
+        <label>Head of Account *</label>
+        {% if not chart_heads %}
+        <p class="erp-validation" style="margin-top:0.35rem;font-size:0.85rem;">
+          No chart heads found.
+          <a href="{{ url_for('accounts_chart_of_accounts') }}">Set up Chart of Accounts</a>
+          — default heads are created automatically when you open any Accounts page.
+        </p>
+        {% endif %}
+        {% if not chart_heads %}
+        <p class="erp-hint" style="margin-top:0.35rem;color:var(--erp-warning,#b45309);">
+          No active heads found. Open <a href="{{ url_for('accounts_chart_of_accounts') }}">Chart of Accounts</a> to add or activate heads.
+        </p>
+        {% endif %}
+      </div>
+      <div class="erp-field">
+        <input type="date" name="entry_date" required value="{{ edit_record.entry_date if edit_record else default_date }}">
+        <label>Entry Date *</label>
+      </div>
+      <div class="erp-field" data-field-project>
+        <select name="project_id">
+          <option value="">Select Project</option>
+          {% for p in projects %}
+          <option value="{{ p.id }}" {% if edit_record and edit_record.project_id == p.id %}selected{% endif %}>{{ p.project_name }}</option>
+          {% endfor %}
+        </select>
+        <label>Project</label>
+      </div>
+      <div class="erp-field">
+        <select name="expense_type">
+          <option value="Expense" {% if edit_record and edit_record.expense_type == 'Expense' %}selected{% endif %}>Expense</option>
+          <option value="Purchase" {% if edit_record and edit_record.expense_type == 'Purchase' %}selected{% endif %}>Purchase</option>
+        </select>
+        <label>Entry Type</label>
+      </div>
+      <div class="erp-field" data-field-vendor>
+        <input name="vendor_name" placeholder=" " value="{{ edit_record.vendor_name if edit_record else '' }}">
+        <label>Vendor Name</label>
+      </div>
+      <div class="erp-field">
+        <input name="invoice_number" placeholder=" " value="{{ edit_record.invoice_number if edit_record else '' }}">
+        <label>Invoice Number</label>
+      </div>
+      <div class="erp-field">
+        <input type="date" name="invoice_date" value="{{ edit_record.invoice_date if edit_record else '' }}">
+        <label>Invoice Date</label>
+      </div>
+      <div class="erp-field">
+        <select name="payment_source" id="exp_payment_source" data-payment-source>
+          {% for ps in payment_sources %}
+          <option value="{{ ps }}" {% if edit_record and edit_record.payment_source == ps %}selected{% endif %}>{{ ps }}</option>
+          {% endfor %}
+        </select>
+        <label>Payment Source</label>
+      </div>
+      <div class="erp-field" data-petty-cash-wrap hidden>
+        <select name="petty_cash_request_id" id="exp_petty_cash_id">
+          <option value="">Select Petty Cash Request</option>
+          {% for pc in petty_cash_options %}
+          <option value="{{ pc.id }}" {% if edit_record and edit_record.petty_cash_request_id == pc.id %}selected{% endif %}>{{ pc.request_number }} — {{ pc.staff_name or '—' }} (₹{{ '%.2f'|format(pc.transferred_amount or 0) }})</option>
+          {% endfor %}
+        </select>
+        <label>Petty Cash Request</label>
+      </div>
+      <div class="erp-field">
+        <select name="payment_status">
+          {% for st in payment_statuses %}
+          <option value="{{ st }}" {% if edit_record and edit_record.payment_status == st %}selected{% endif %}>{{ st }}</option>
+          {% endfor %}
+        </select>
+        <label>Payment Status</label>
+      </div>
+      <div class="erp-field">
+        <label style="position:static;display:flex;align-items:center;gap:0.5rem;">
+          <input type="checkbox" name="tds_applicable" value="1" {% if edit_record and edit_record.tds_applicable %}checked{% endif %}>
+          TDS Applicable
+        </label>
+      </div>
+      <div class="erp-field">
+        <select name="tds_section">
+          <option value="">Section</option>
+          {% for sec in tds_sections %}
+          <option value="{{ sec }}" {% if edit_record and edit_record.tds_section == sec %}selected{% endif %}>{{ sec }}</option>
+          {% endfor %}
+        </select>
+        <label>TDS Section</label>
+      </div>
+      <div class="erp-field">
+        <input name="tds_rate" type="number" step="0.01" placeholder=" " value="{{ edit_record.tds_rate if edit_record else '' }}">
+        <label>TDS Rate %</label>
+      </div>
+      <div class="erp-field">
+        <input name="amount_paid" type="number" step="0.01" placeholder=" " value="{{ edit_record.amount_paid if edit_record else '' }}">
+        <label>Amount Paid (partial)</label>
+      </div>
+      <div class="erp-field span-2">
+        <textarea name="remarks" placeholder=" ">{{ edit_record.remarks if edit_record else '' }}</textarea>
+        <label>Remarks</label>
+      </div>
+      <div class="erp-field span-2">
+        <input type="file" name="attachment" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx">
+        <label>Attachment (PDF/JPG/PNG/DOC)</label>
+      </div>
+    </div>
+
+    <h4 style="margin:1rem 0 0.5rem;">Line Items</h4>
+    <div class="erp-table-scroll">
+      <table class="erp-table" data-expense-lines-table>
+        <thead>
+          <tr>
+            <th>Item</th><th>Qty</th><th>Unit</th><th>Rate</th><th>GST %</th><th>Tax</th>
+            <th>Taxable</th><th>CGST</th><th>SGST</th><th>IGST</th><th>Total</th><th></th>
+          </tr>
+        </thead>
+        <tbody data-expense-lines-body>
+          {% if edit_record and edit_record.lines %}
+          {% for line in edit_record.lines %}
+          <tr data-expense-line>
+            <td><input name="item_name[]" value="{{ line.item_name }}" required></td>
+            <td><input name="quantity[]" type="number" step="0.01" value="{{ line.quantity }}" data-qty></td>
+            <td><input name="unit[]" value="{{ line.unit or '' }}"></td>
+            <td><input name="rate[]" type="number" step="0.01" value="{{ line.rate }}" data-rate></td>
+            <td><select name="gst_percent[]" data-gst>{% for g in gst_rates %}<option value="{{ g }}" {% if line.gst_percent|int == g %}selected{% endif %}>{{ g }}%</option>{% endfor %}<option value="{{ line.gst_percent }}" {% if line.gst_percent not in gst_rates %}selected{% endif %}>Custom</option></select></td>
+            <td><select name="tax_type[]" data-tax-type><option value="CGST_SGST" {% if line.tax_type != 'IGST' %}selected{% endif %}>CGST+SGST</option><option value="IGST" {% if line.tax_type == 'IGST' %}selected{% endif %}>IGST</option></select></td>
+            <td data-taxable>{{ '%.2f'|format(line.taxable_value or 0) }}</td>
+            <td data-cgst>{{ '%.2f'|format(line.cgst or 0) }}</td>
+            <td data-sgst>{{ '%.2f'|format(line.sgst or 0) }}</td>
+            <td data-igst>{{ '%.2f'|format(line.igst or 0) }}</td>
+            <td data-line-total>{{ '%.2f'|format(line.line_total or 0) }}</td>
+            <td><button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-remove-line>&times;</button></td>
+          </tr>
+          {% endfor %}
+          {% else %}
+          <tr data-expense-line>
+            <td><input name="item_name[]" required placeholder="Item"></td>
+            <td><input name="quantity[]" type="number" step="0.01" value="1" data-qty></td>
+            <td><input name="unit[]" placeholder="Nos"></td>
+            <td><input name="rate[]" type="number" step="0.01" value="0" data-rate></td>
+            <td><select name="gst_percent[]" data-gst>{% for g in gst_rates %}<option value="{{ g }}">{{ g }}%</option>{% endfor %}</select></td>
+            <td><select name="tax_type[]" data-tax-type><option value="CGST_SGST">CGST+SGST</option><option value="IGST">IGST</option></select></td>
+            <td data-taxable>0.00</td><td data-cgst>0.00</td><td data-sgst>0.00</td><td data-igst>0.00</td><td data-line-total>0.00</td>
+            <td><button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-remove-line>&times;</button></td>
+          </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+    <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" style="margin-top:0.5rem;" data-add-line><i class="fa-solid fa-plus"></i> Add Item</button>
+
+    <div class="erp-summary-grid" style="margin-top:1rem;grid-template-columns:repeat(5,1fr);">
+      <div class="erp-stat-card"><span>Subtotal</span><strong data-total-subtotal>0.00</strong></div>
+      <div class="erp-stat-card"><span>CGST</span><strong data-total-cgst>0.00</strong></div>
+      <div class="erp-stat-card"><span>SGST</span><strong data-total-sgst>0.00</strong></div>
+      <div class="erp-stat-card"><span>IGST</span><strong data-total-igst>0.00</strong></div>
+      <div class="erp-stat-card"><span>Grand Total</span><strong data-total-grand>0.00</strong></div>
+    </div>
+
+    <div class="erp-form-actions" style="margin-top:1rem;">
+      <button type="submit" class="erp-btn erp-btn-primary"><i class="fa-solid fa-floppy-disk"></i> Save & Submit</button>
+      <a href="{{ url_for('accounts_expenses') }}" class="erp-btn erp-btn-ghost">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endif %}
+
+<div class="erp-table-panel" data-erp-table>
+  <div class="erp-table-toolbar"><h3 class="erp-table-title">Expense Register</h3></div>
+  <div class="erp-table-scroll">
+    <table class="erp-table erp-table-module">
+      <thead>
+        <tr><th>#</th><th>Date</th><th>Head</th><th>Project</th><th>Vendor</th><th>Type</th><th>Total</th><th>Status</th><th>Actions</th></tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>{{ row.id }}</td>
+          <td>{{ row.entry_date or '—' }}</td>
+          <td>{{ row.account_code }} — {{ row.account_name }}</td>
+          <td>{{ row.project_name or '—' }}</td>
+          <td>{{ row.vendor_name or '—' }}</td>
+          <td>{{ row.expense_type }}</td>
+          <td>₹{{ '%.2f'|format(row.grand_total or 0) }}</td>
+          <td>{{ role_status_badge(row.approval_status, 'maker') }}</td>
+          <td>{{ maker_row_actions('accounts_expenses', 'account_expenses', row.id, row.approval_status, 'account_expense') }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9">No expense entries yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{ workflow_modals() }}
+{% endblock %}
+{% block scripts %}
+<script type="application/json" id="chart-heads-json">{{ chart_heads_json|safe }}</script>
+<script src="{{ url_for('static', filename='js/accounts-chart-heads.js') }}"></script>
+<script src="{{ url_for('static', filename='js/accounts-expenses.js') }}"></script>
+<script src="{{ url_for('static', filename='js/workflow.js') }}"></script>
+{% endblock %}

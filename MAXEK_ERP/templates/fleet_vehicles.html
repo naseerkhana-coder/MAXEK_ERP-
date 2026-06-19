@@ -1,0 +1,69 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Vehicle Master' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('fleet_dashboard') ~ '">Fleet</a> &gt; Vehicles' %}
+{% block page_actions %}
+<a href="{{ url_for('fleet_vehicles', new=1) }}#record-form" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> New Vehicle</a>
+{% endblock %}
+{% block content %}
+{% if view_record %}
+<div class="erp-form-card" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">{{ view_record.registration_number }}</h3>
+  <p><strong>{{ view_record.make or '' }} {{ view_record.model or '' }}</strong> ({{ view_record.vehicle_type or '—' }}) — {{ view_record.current_status }}</p>
+  <p><strong>Fuel:</strong> {{ view_record.fuel_type or '—' }} | <strong>Odometer:</strong> {{ '%.0f'|format(view_record.odometer_km or 0) }} km</p>
+  <p><strong>Driver:</strong> {{ view_record.assigned_driver or '—' }} | <strong>Project:</strong> {{ view_record.project_name or '—' }}</p>
+  <a href="{{ url_for('fleet_vehicle_print', vehicle_id=view_record.id) }}" target="_blank" class="erp-btn erp-btn-ghost erp-btn-sm"><i class="fa-solid fa-print"></i> Print</a>
+  <a href="{{ url_for('fleet_vehicle_documents', vehicle_id=view_record.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Documents</a>
+  <a href="{{ url_for('fleet_vehicles', edit=view_record.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Edit</a>
+</div>
+{% endif %}
+
+{% if show_form %}
+<div class="erp-form-card" id="record-form" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">{% if edit_record %}Edit {{ edit_record.registration_number }}{% else %}New Vehicle{% endif %}</h3>
+  <form method="post">
+    {% if edit_record %}<input type="hidden" name="record_id" value="{{ edit_record.id }}">{% endif %}
+    <div class="erp-form-grid">
+      <div class="erp-field"><input name="registration_number" required placeholder=" " value="{{ edit_record.registration_number if edit_record else '' }}" style="text-transform:uppercase;"><label>Registration No *</label></div>
+      <div class="erp-field"><select name="vehicle_type">{% for t in vehicle_types %}<option value="{{ t }}" {% if edit_record and edit_record.vehicle_type == t %}selected{% endif %}>{{ t }}</option>{% endfor %}</select><label>Vehicle Type</label></div>
+      <div class="erp-field"><input name="make" placeholder=" " value="{{ edit_record.make if edit_record else '' }}"><label>Make</label></div>
+      <div class="erp-field"><input name="model" placeholder=" " value="{{ edit_record.model if edit_record else '' }}"><label>Model</label></div>
+      <div class="erp-field"><input type="number" name="year" placeholder=" " value="{{ edit_record.year if edit_record else '' }}"><label>Year</label></div>
+      <div class="erp-field"><select name="fuel_type">{% for f in fuel_types %}<option value="{{ f }}" {% if edit_record and edit_record.fuel_type == f %}selected{% endif %}>{{ f }}</option>{% endfor %}</select><label>Fuel Type</label></div>
+      <div class="erp-field"><input name="capacity" placeholder=" " value="{{ edit_record.capacity if edit_record else '' }}"><label>Capacity</label></div>
+      <div class="erp-field"><input type="date" name="purchase_date" value="{{ edit_record.purchase_date if edit_record else '' }}"><label>Purchase Date</label></div>
+      <div class="erp-field"><input type="number" step="0.01" name="purchase_cost" value="{{ edit_record.purchase_cost if edit_record else 0 }}"><label>Purchase Cost</label></div>
+      <div class="erp-field"><select name="current_status">{% for s in vehicle_statuses %}<option value="{{ s }}" {% if edit_record and edit_record.current_status == s %}selected{% elif not edit_record and s == 'Active' %}selected{% endif %}>{{ s }}</option>{% endfor %}</select><label>Status</label></div>
+      <div class="erp-field"><input name="assigned_driver" placeholder=" " value="{{ edit_record.assigned_driver if edit_record else '' }}"><label>Assigned Driver</label></div>
+      <div class="erp-field"><input name="department" placeholder=" " value="{{ edit_record.department if edit_record else '' }}"><label>Department</label></div>
+      <div class="erp-field"><select name="project_id"><option value="">—</option>{% for p in projects %}<option value="{{ p.id }}" {% if edit_record and edit_record.project_id == p.id %}selected{% endif %}>{{ p.project_name }}</option>{% endfor %}</select><label>Project</label></div>
+      <div class="erp-field"><input type="number" step="0.01" name="odometer_km" value="{{ edit_record.odometer_km if edit_record else 0 }}"><label>Odometer (km)</label></div>
+      <div class="erp-field span-2"><textarea name="remarks" placeholder=" ">{{ edit_record.remarks if edit_record else '' }}</textarea><label>Remarks</label></div>
+    </div>
+    <button type="submit" class="erp-btn erp-btn-primary">Save</button>
+  </form>
+</div>
+{% endif %}
+
+<form method="get" style="margin-bottom:0.75rem;"><input name="q" value="{{ search }}" placeholder="Search vehicles…" style="max-width:280px;"> <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Search</button></form>
+<div class="erp-table-panel" data-erp-table>
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead><tr><th>Reg No</th><th>Type</th><th>Make / Model</th><th>Status</th><th>Odometer</th><th></th></tr></thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>{{ row.registration_number }}</td>
+          <td>{{ row.vehicle_type or '—' }}</td>
+          <td>{{ row.make or '' }} {{ row.model or '' }}</td>
+          <td>{{ row.current_status or '—' }}</td>
+          <td>{{ '%.0f'|format(row.odometer_km or 0) }}</td>
+          <td><a href="{{ url_for('fleet_vehicles', view=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">View</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6">No vehicles yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

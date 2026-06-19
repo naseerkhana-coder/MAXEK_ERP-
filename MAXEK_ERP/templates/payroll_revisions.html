@@ -1,0 +1,73 @@
+{% extends 'base_maxek.html' %}
+{% from 'macros/erp_ui.html' import erp_pagination %}
+{% set page_title = 'Salary Revisions' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; HR &gt; Salary Revisions' %}
+{% block page_actions %}
+<a href="{{ url_for('payroll') }}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-calculator"></i> Payroll</a>
+{% endblock %}
+{% block content %}
+<div class="module-layout">
+  <div class="erp-form-card" id="add-revision">
+    <h3 class="erp-form-title">Record Salary Revision</h3>
+    <form method="post" class="erp-form-grid" data-payroll-revision-form>
+      <div class="erp-field">
+        <select name="employee_type" data-revision-type class="has-value">
+          <option value="staff">Monthly Staff</option>
+          <option value="company_worker">Company Worker</option>
+          <option value="subcontractor">Subcontractor Worker</option>
+        </select>
+        <label>Employee Category</label>
+      </div>
+      <div class="erp-field span-2" data-revision-staff>
+        <select name="staff_id" class="has-value">
+          <option value="">Select staff</option>
+          {% for s in staff_list %}
+          <option value="{{ s.id }}">{{ s.staff_name }} ({{ s.employee_code }})</option>
+          {% endfor %}
+        </select>
+        <label>Staff</label>
+      </div>
+      <div class="erp-field span-2" data-revision-worker hidden>
+        <select name="worker_id" class="has-value">
+          <option value="">Select worker</option>
+          {% for w in worker_list %}
+          <option value="{{ w.id }}">{{ w.worker_name }} ({{ w.worker_code }})</option>
+          {% endfor %}
+        </select>
+        <label>Worker</label>
+      </div>
+      <div class="erp-field"><input name="effective_date" type="date" placeholder=" "><label>Effective Date</label></div>
+      <div class="erp-field"><input name="revised_amount" type="number" step="0.01" required placeholder="0"><label>Revised Salary (₹)</label></div>
+      <div class="erp-field span-2"><input name="reason" placeholder=" "><label>Reason</label></div>
+      <div class="erp-field"><input name="approved_by" placeholder=" "><label>Approved By</label></div>
+      <div class="erp-form-actions span-2"><button type="submit" class="erp-btn erp-btn-primary">Save Revision</button></div>
+    </form>
+  </div>
+
+  <div class="erp-table-panel" data-erp-table>
+    <div class="erp-table-toolbar"><h3 class="erp-table-title">Revision History</h3></div>
+    <div class="erp-table-scroll">
+      <table class="erp-table erp-table-module">
+        <thead><tr><th>Employee</th><th>Type</th><th>Effective</th><th>Previous</th><th>Revised</th><th>Increment</th><th>Reason</th></tr></thead>
+        <tbody>
+          {% for rev in revisions %}
+          <tr>
+            <td>{{ rev.employee_name or '—' }} ({{ rev.employee_code or '—' }})</td>
+            <td>{{ rev.employee_type }}</td>
+            <td>{{ rev.effective_date or '—' }}</td>
+            <td>₹ {{ '%.2f'|format(rev.previous_amount or 0) }}</td>
+            <td>₹ {{ '%.2f'|format(rev.revised_amount or 0) }}</td>
+            <td>₹ {{ '%.2f'|format(rev.increment_amount or 0) }}</td>
+            <td>{{ rev.reason or '—' }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="7">No revisions yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {{ erp_pagination(revisions|length) }}
+  </div>
+</div>
+<script src="{{ url_for('static', filename='js/payroll-forms.js') }}"></script>
+{% endblock %}

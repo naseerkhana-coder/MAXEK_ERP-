@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Sub Payment Abstract — {{ bill.subcontractor_name }}</title>
+  <style>
+    body { font-family: Arial, Helvetica, sans-serif; margin: 1.5rem; font-size: 0.9rem; color: #111; }
+    .header { text-align: center; margin-bottom: 1rem; }
+    .header h1 { margin: 0; font-size: 1.15rem; }
+    .header h2 { margin: 0.25rem 0; font-size: 0.95rem; font-weight: normal; }
+    .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 0.35rem 1rem; margin-bottom: 1rem; font-size: 0.85rem; }
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+    th, td { border: 1px solid #333; padding: 0.4rem 0.55rem; }
+    th { background: #1f4e79; color: #fff; }
+    .num { text-align: right; }
+    .summary { max-width: 420px; margin-left: auto; margin-top: 1rem; }
+    .summary td { border: none; padding: 0.3rem 0; }
+    .summary tr.total td { font-weight: bold; border-top: 2px solid #333; }
+    .net-box { background: #fff2cc; border: 2px solid #c00; padding: 0.5rem; text-align: right; }
+    .net-box .amount { color: #c00; font-size: 1.2rem; font-weight: bold; }
+    .declaration { margin: 1.5rem 0; font-size: 0.85rem; line-height: 1.45; border: 1px solid #ccc; padding: 0.75rem; }
+    .signatures { display: grid; grid-template-columns: 1fr 1fr 1fr; margin-top: 2rem; text-align: center; font-size: 0.85rem; }
+    .signatures .line { border-top: 1px solid #333; margin-top: 2.5rem; padding-top: 0.35rem; }
+    .no-print { margin-bottom: 1rem; }
+    @media print { .no-print { display: none; } body { margin: 0.5rem; } }
+  </style>
+  {% if autoprint %}<script>window.addEventListener('load', function () { window.print(); });</script>{% endif %}
+</head>
+<body>
+  <div class="no-print">
+    <button onclick="window.print()">Print</button>
+    <a href="{{ url_for('sub_billing_form', view=bill.id) }}">Back</a>
+    <a href="{{ url_for('sub_billing_print', bill_id=bill.id) }}">Detail Bill</a>
+  </div>
+
+  <div class="header">
+    <div style="text-align:left;font-weight:bold;color:#c00;">MAXEK</div>
+    <h1>MAXEK PRIVATE LIMITED</h1>
+    <h2>SUB-CONTRACTOR PAYMENT ABSTRACT &amp; BILLING REPORT</h2>
+  </div>
+
+  <div class="meta">
+    <div><strong>Sub-Contractor:</strong> {{ bill.subcontractor_name }}</div>
+    <div><strong>Invoice No.:</strong> {{ bill.invoice_no or bill.bill_number }}</div>
+    <div><strong>Billing Period:</strong> {{ bill.period_from }} to {{ bill.period_to }}</div>
+    <div><strong>Date:</strong> {{ bill.bill_date or '—' }}</div>
+    <div><strong>Report Status:</strong> {{ bill.report_status or 'Final Report' }}</div>
+    <div><strong>Payment Cycle:</strong> {{ bill.payment_cycle or '15 Days Cycle' }}</div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Sl No.</th>
+        <th>Designation</th>
+        <th class="num">Total Mandays (Nos)</th>
+        <th class="num">OT HR</th>
+        <th class="num">Calculated Rate</th>
+        <th class="num">Total Amount (INR)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in bill.designation_summary %}
+      <tr>
+        <td>{{ loop.index }}</td>
+        <td>{{ row.designation }}</td>
+        <td class="num">{{ row.mandays }}</td>
+        <td class="num">{{ row.ot_hours }}</td>
+        <td class="num">{{ '%.2f'|format(row.calculated_rate or 0) }}</td>
+        <td class="num">{{ '%.2f'|format(row.total_amount or 0) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="summary">
+    <table>
+      <tr><td>Gross Total Amount</td><td class="num">{{ '%.2f'|format(bill.gross_amount or 0) }}</td></tr>
+      <tr><td>Less: TDS Deduction @ {{ bill.tds_percent or 1 }}%</td><td class="num">{{ '%.2f'|format(bill.tds_amount or 0) }}</td></tr>
+      <tr><td>Less: Advance Paid (If any)</td><td class="num">{{ '%.2f'|format(bill.advance_deduction or 0) }}</td></tr>
+    </table>
+    <div class="net-box">
+      <div>Net Payable Amount (INR)</div>
+      <div class="amount">₹ {{ '%.2f'|format(bill.net_payment or 0) }}</div>
+    </div>
+  </div>
+
+  <div class="declaration">
+    <strong>Legal Declaration &amp; Acceptance</strong><br>
+    {{ bill.declaration_text or default_declaration }}
+  </div>
+
+  <div class="signatures">
+    <div><div class="line">Prepared By<br><strong>{{ bill.prepared_by or 'Maxek ENG' }}</strong></div></div>
+    <div><div class="line">Approved By<br><strong>{{ bill.approved_by or 'Maxek GM' }}</strong></div></div>
+    <div><div class="line">Sub-Contractor Signature<br><strong>{{ bill.subcontractor_name }}</strong></div></div>
+  </div>
+</body>
+</html>

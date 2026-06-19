@@ -1,0 +1,24 @@
+{% extends 'base_maxek.html' %}
+{% from 'macros/erp_ui.html' import erp_sub_toolbar %}
+{% set page_title = 'Contact Support' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; Help &amp; Support &gt; Contact' %}
+{% block content %}
+{{ erp_sub_toolbar(sub_toolbar, 'Help and support') }}
+
+<div class="erp-form-card erp-form-card--compact" style="margin-top:0.75rem;max-width:640px;">
+  <h3 class="erp-form-title"><i class="fa-solid fa-headset"></i> Customer Support</h3>
+  <p class="erp-hint">For ERP access, workflow, or module-specific assistance, reach the MAXEK support team during business hours.</p>
+  <dl class="help-contact-list">
+    <div><dt>Email</dt><dd><a href="mailto:support@maxek.in">support@maxek.in</a></dd></div>
+    <div><dt>Phone</dt><dd>+91 98765 43210</dd></div>
+    <div><dt>Hours</dt><dd>Mon – Sat, 9:00 AM – 6:00 PM IST</dd></div>
+    <div><dt>Escalation</dt><dd>Include project code, module name, and screenshot when reporting issues.</dd></div>
+  </dl>
+  <div class="erp-form-actions" style="margin-top:0.75rem;">
+    <a href="{{ url_for('help_desk') }}" class="erp-btn erp-btn-primary"><i class="fa-solid fa-book-open"></i> Browse Help Topics</a>
+    {% if session.get('role') in ['admin', 'Administrator'] or session.get('workflow_role') == 'administrator' %}
+    <a href="{{ url_for('help_desk_admin') }}" class="erp-btn erp-btn-ghost">Manage Topics</a>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

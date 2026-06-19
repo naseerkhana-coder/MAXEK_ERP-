@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Employee Timesheet — {{ sheet.employee_name }} — {{ sheet.month_label }}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: Arial, Helvetica, sans-serif; margin: 1rem; color: #111; font-size: 0.82rem; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem; }
+    .title { text-align: center; flex: 1; }
+    .title h1 { margin: 0; font-size: 1.1rem; }
+    .title h2 { margin: 0.15rem 0; font-size: 0.95rem; font-weight: normal; }
+    .logo { width: 90px; text-align: right; font-weight: bold; color: #c00; }
+    .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin: 0.5rem 0; }
+    .meta div { border: 1px solid #999; padding: 0.35rem 0.5rem; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border: 1px solid #333; padding: 0.2rem 0.3rem; text-align: center; }
+    th { background: #f0f0f0; font-size: 0.75rem; }
+    td.project { text-align: left; min-width: 8rem; }
+    .summary { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 0.75rem; }
+    .summary table td { text-align: left; }
+    .summary table th { width: 45%; }
+    .remarks-box { border: 1px solid #333; min-height: 4rem; padding: 0.5rem; margin-top: 0.5rem; }
+    .no-print { margin-bottom: 0.75rem; }
+    @media print {
+      .no-print { display: none; }
+      body { margin: 0.4rem; }
+      @page { size: A4 landscape; margin: 8mm; }
+    }
+  </style>
+  {% if autoprint %}<script>window.addEventListener('load', function () { window.print(); });</script>{% endif %}
+</head>
+<body>
+  <div class="no-print">
+    <button type="button" onclick="window.print()">Print</button>
+    <a href="{{ url_for('employee_timesheets_form', view=sheet.id) }}">Back</a>
+  </div>
+
+  <div class="header">
+    <div style="width:90px;"></div>
+    <div class="title">
+      <h1>MAXEK PRIVATE LIMITED</h1>
+      <h2>(Employee Time sheet)</h2>
+    </div>
+    <div class="logo">MAXEK<br><small style="font-weight:normal;color:#111;">PRIVATE LIMITED</small></div>
+  </div>
+
+  <div class="meta">
+    <div><strong>Sub Name and ID:</strong> {{ sheet.sub_display_name or '—' }}{% if sheet.sub_display_code %}, {{ sheet.sub_display_code }}{% endif %}</div>
+    <div><strong>Month:</strong> {{ sheet.month_label }}</div>
+    <div><strong>Workers Name and ID:</strong> {{ sheet.employee_name }}{% if sheet.employee_code %}, {{ sheet.employee_code }}{% endif %}</div>
+    <div><strong>Designation:</strong> {{ sheet.designation or '—' }}</div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Start time</th>
+        <th>am/pm</th>
+        <th>End Time</th>
+        <th>am/pm</th>
+        <th>Break</th>
+        <th>Over time</th>
+        <th>Project</th>
+        <th>Salary Advance</th>
+        <th>Name and Sign of Supervisor</th>
+        <th>Remarks</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for day in sheet.days %}
+      <tr>
+        <td>{{ day.day_num }}</td>
+        <td>{{ day.start_time or '' }}</td>
+        <td>{{ day.start_ampm or '' }}</td>
+        <td>{{ day.end_time or '' }}</td>
+        <td>{{ day.end_ampm or '' }}</td>
+        <td>{{ day.break_hours or '' }}</td>
+        <td>{{ day.overtime_hours or '' }}</td>
+        <td class="project">{{ day.project_name or '' }}</td>
+        <td>{{ '%.2f'|format(day.salary_advance or 0) if day.salary_advance else '' }}</td>
+        <td>{{ day.supervisor_sign or '' }}</td>
+        <td>{{ day.remarks or '' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="summary">
+    <table>
+      <tr><th>Working days</th><td>{{ sheet.working_days or 0 }}</td></tr>
+      <tr><th>Leaves</th><td>{{ sheet.leave_days or 0 }}</td></tr>
+      <tr><th>Holiday</th><td>{{ sheet.holiday_days or 0 }}</td></tr>
+      <tr><th>Overtime</th><td>{{ sheet.overtime_hours or 0 }}</td></tr>
+      <tr><th>Total Days</th><td>{{ sheet.total_days or 0 }}</td></tr>
+    </table>
+    <div>
+      <table>
+        <tr><th>Total Salary paid</th><td><strong>₹ {{ '%.2f'|format(sheet.total_salary_paid or 0) }}</strong></td></tr>
+      </table>
+      <div class="remarks-box"><strong>Remarks:</strong><br>{{ sheet.remarks or '' }}</div>
+      {% if sheet.supervisor_signature %}
+      <p style="margin-top:0.5rem;"><strong>Supervisor:</strong> {{ sheet.supervisor_signature }}</p>
+      {% endif %}
+    </div>
+  </div>
+  <p style="font-size:0.75rem;color:#666;margin-top:0.75rem;">Ref: {{ sheet.timesheet_ref }} · Status: {{ sheet.timesheet_status }} · Generated {{ generated_at }}</p>
+</body>
+</html>

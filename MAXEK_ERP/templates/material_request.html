@@ -1,0 +1,411 @@
+{% extends 'base_maxek.html' %}
+{% from 'macros/erp_ui.html' import role_status_badge, maker_row_actions, rejection_notice, workflow_modals, transaction_view_tabs %}
+{% set page_title = module_title %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; ' ~ module_title %}
+{% block content %}
+<div class="erp-validation" style="margin-bottom: 1rem;">
+  <strong>Flow:</strong> Maker [Save] → Checker [Verify] → Approver [Approve]
+</div>
+
+{% if view_record %}
+<div class="erp-form-card" style="margin-bottom: 1rem;">
+  {% call transaction_view_tabs(view_record, history, can_reopen, approval_id) %}
+  <h3 class="erp-form-title">Record #{{ view_record.id }}</h3>
+  {% for col, key in zip(table_columns, row_keys) %}
+  <p><strong>{{ col }}:</strong>
+    {% if key == 'item_name' and view_record.material_code %}
+    {{ view_record.material_code }} — {{ view_record[key] or '—' }}
+    {% else %}
+    {{ view_record[key] or '—' }}
+    {% endif %}
+  </p>
+  {% endfor %}
+  {% if view_record.unit %}
+  <p><strong>Unit:</strong> {{ view_record.unit }}</p>
+  {% endif %}
+  {% if view_record.remarks %}
+  <p><strong>Remarks:</strong> {{ view_record.remarks }}</p>
+  {% endif %}
+  <p><strong>Status:</strong> {{ role_status_badge(view_record.approval_status, 'maker') }}</p>
+  {{ rejection_notice(history, view_record.approval_status) }}
+  {% endcall %}
+</div>
+{% endif %}
+
+<div class="module-layout">
+  {% if not view_record %}
+  <div class="erp-form-card" id="material-request-form">
+    <h3 class="erp-form-title">
+      {% if edit_record %}Edit Record #{{ edit_record.id }}{% if edit_role %} ({{ edit_role|title }}){% endif %}{% else %}New Request{% endif %}
+    </h3>
+    <form method="post" class="erp-form-grid">
+      {% if edit_record %}
+      <input type="hidden" name="record_id" value="{{ edit_record.id }}">
+      {% endif %}
+      <div class="erp-field span-2">
+        <select name="project_id" id="mr_project_id" required>
+          <option value="">Select</option>
+          {% for p in projects %}
+          <option value="{{ p.id }}" {% if edit_record and edit_record.project_id|string == p.id|string %}selected{% endif %}>{{ p.project_name }}</option>
+          {% endfor %}
+        </select>
+        <label>Project</label>
+      </div>
+      <div class="erp-field">
+        <input name="request_date" type="date" placeholder=" " required
+          value="{{ edit_record.request_date if edit_record else '' }}">
+        <label>Request Date</label>
+      </div>
+      <div class="erp-field span-2 erp-field-with-action">
+        <select name="material_id" id="mr_material_id" required
+          class="{% if edit_record and edit_record.material_id %}has-value{% elif select_material %}has-value{% endif %}"
+          data-initial-material="{% if edit_record and edit_record.material_id %}{{ edit_record.material_id }}{% elif select_material %}{{ select_material }}{% endif %}">
+          <option value="">Select material</option>
+        </select>
+        <label>Material</label>
+        <button type="button" class="erp-inline-action" id="open-new-material-modal">
+          <i class="fa-solid fa-plus"></i> New Material
+        </button>
+        <p id="mr-material-hint" class="erp-hint" style="margin:0.35rem 0 0;display:none;">
+          Select a project to load planned materials from the cost plan.
+        </p>
+      </div>
+      <div class="erp-field">
+        <input name="quantity" type="number" step="0.01" placeholder=" " required
+          value="{{ edit_record.quantity if edit_record else '' }}">
+        <label>Quantity</label>
+      </div>
+      <div class="erp-field">
+        <input name="unit" id="mr_unit" type="text" placeholder=" "
+          value="{{ edit_record.unit if edit_record else '' }}">
+        <label>Unit</label>
+      </div>
+      <div class="erp-field span-2">
+        <textarea name="remarks" placeholder=" ">{{ edit_record.remarks if edit_record else '' }}</textarea>
+        <label>Remarks</label>
+      </div>
+      <div class="erp-field span-2" id="mr-qty-panel" hidden>
+        <p class="erp-hint" style="margin:0 0 0.5rem;">Project material quantity (select project + material)</p>
+        <div class="erp-summary-grid" style="grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0.75rem; margin: 0;">
+          <div class="erp-stat-card"><span>Site Required</span><strong id="mr-site-required">—</strong></div>
+          <div class="erp-stat-card"><span>Allotted (Issued)</span><strong id="mr-allotted">—</strong></div>
+          <div class="erp-stat-card"><span>Purchased (PO)</span><strong id="mr-purchased">—</strong></div>
+          <div class="erp-stat-card"><span>Requested</span><strong id="mr-requested">—</strong></div>
+          <div class="erp-stat-card"><span>Balance Required</span><strong id="mr-balance">—</strong></div>
+        </div>
+        <p id="mr-qty-warning" class="erp-hint" style="margin:0.5rem 0 0;color:var(--erp-warning,#b45309);display:none;">
+          Requested + allotted exceeds site requirement for this project.
+        </p>
+        <p id="mr-qty-note" class="erp-hint" style="margin:0.35rem 0 0;display:none;">
+          No site requirement in cost plan for this material — balance is not enforced.
+        </p>
+      </div>
+      <div class="erp-form-actions">
+        <button class="erp-btn erp-btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Save</button>
+        {% if edit_record %}
+        <a href="{{ url_for(module_endpoint) }}" class="erp-btn erp-btn-ghost">Cancel</a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+  {% endif %}
+
+  <div class="erp-table-panel" data-erp-table>
+    <div class="erp-table-toolbar"><h3 class="erp-table-title">Records</h3></div>
+    <div class="erp-table-scroll">
+      <table class="erp-table erp-table-module">
+        <thead>
+          <tr>
+            <th>#</th>
+            {% for col in table_columns %}
+            <th>{{ col }}</th>
+            {% endfor %}
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          <tr>
+            <td>{{ row.id }}</td>
+            {% for key in row_keys %}
+            <td>
+              {% if key == 'item_name' and row.material_code %}
+              {{ row.material_code }} — {{ row[key] or '—' }}
+              {% else %}
+              {{ row[key] or '—' }}
+              {% endif %}
+            </td>
+            {% endfor %}
+            <td>{{ role_status_badge(row.approval_status, 'maker') }}</td>
+            <td>{{ maker_row_actions(module_endpoint, delete_table, row.id, row.approval_status) }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="{{ table_columns|length + 3 }}">No records yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="erp-modal" id="new-material-modal" hidden aria-hidden="true">
+  <div class="erp-modal-backdrop" data-modal-close></div>
+  <div class="erp-modal-card" role="dialog" aria-modal="true" aria-labelledby="new-material-title">
+    <div class="erp-modal-header">
+      <div>
+        <h3 id="new-material-title">New Material</h3>
+        <p>Add a material to the master list, then continue the request.</p>
+      </div>
+      <button type="button" class="erp-modal-close" data-modal-close aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <form method="post" class="erp-form-grid" action="{{ url_for('material_request') }}#material-request-form">
+      <input type="hidden" name="form_action" value="add_material">
+      <div class="erp-field"><input name="code" placeholder=" " required><label>Code *</label></div>
+      <div class="erp-field"><input name="name" placeholder=" " required><label>Name *</label></div>
+      <div class="erp-field">
+        <select name="category">
+          <option value="">—</option>
+          {% for c in categories %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+        </select>
+        <label>Category</label>
+      </div>
+      <div class="erp-field">
+        <select name="unit">
+          {% for u in units %}<option value="{{ u }}">{{ u }}</option>{% endfor %}
+        </select>
+        <label>Unit</label>
+      </div>
+      <div class="erp-form-actions">
+        <button type="button" class="erp-btn erp-btn-ghost" data-modal-close>Cancel</button>
+        <button class="erp-btn erp-btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Save Material</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{{ workflow_modals() }}
+<script src="{{ url_for('static', filename='js/workflow.js') }}"></script>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  var matSel = document.getElementById('mr_material_id');
+  var projSel = document.getElementById('mr_project_id');
+  var unitInput = document.getElementById('mr_unit');
+  var modal = document.getElementById('new-material-modal');
+  var openBtn = document.getElementById('open-new-material-modal');
+  var qtyPanel = document.getElementById('mr-qty-panel');
+  var qtyWarning = document.getElementById('mr-qty-warning');
+  var qtyNote = document.getElementById('mr-qty-note');
+  var materialHint = document.getElementById('mr-material-hint');
+  var recordInput = document.querySelector('input[name="record_id"]');
+  var allMaterialsById = {
+    {% for m in materials %}
+    {{ m.id }}: { id: {{ m.id }}, code: {{ m.code|tojson }}, name: {{ m.name|tojson }}, unit: {{ (m.unit or 'Nos')|tojson }} }{% if not loop.last %},{% endif %}
+    {% endfor %}
+  };
+  var initialMaterialId = matSel ? (matSel.getAttribute('data-initial-material') || '') : '';
+
+  function fmtQty(val, unit) {
+    if (val == null || isNaN(val)) return '—';
+    var text = Number(val).toFixed(2);
+    return unit ? text + ' ' + unit : text;
+  }
+
+  function setQtyText(id, val, unit) {
+    var el = document.getElementById(id);
+    if (el) el.textContent = fmtQty(val, unit);
+  }
+
+  function showMaterialHint(text) {
+    if (!materialHint) return;
+    materialHint.textContent = text;
+    materialHint.style.display = text ? 'block' : 'none';
+  }
+
+  function rebuildMaterialOptions(items, preserveId) {
+    if (!matSel) return;
+    var current = preserveId || matSel.value || initialMaterialId;
+    matSel.innerHTML = '<option value="">Select material</option>';
+    var found = false;
+    (items || []).forEach(function (m) {
+      var opt = document.createElement('option');
+      opt.value = m.material_id;
+      opt.setAttribute('data-unit', m.unit || 'Nos');
+      var label = (m.code ? m.code + ' — ' : '') + m.name;
+      if (m.planned_qty != null && !isNaN(m.planned_qty)) {
+        label += ' (plan: ' + Number(m.planned_qty).toFixed(2) + ' ' + (m.unit || '') + ')';
+      }
+      opt.textContent = label;
+      if (String(m.material_id) === String(current)) {
+        opt.selected = true;
+        found = true;
+      }
+      matSel.appendChild(opt);
+    });
+    if (current && !found && allMaterialsById[current]) {
+      var extra = allMaterialsById[current];
+      var opt = document.createElement('option');
+      opt.value = extra.id;
+      opt.setAttribute('data-unit', extra.unit || 'Nos');
+      opt.textContent = extra.code + ' — ' + extra.name;
+      opt.selected = true;
+      matSel.appendChild(opt);
+      found = true;
+    }
+    if (found && matSel.value) matSel.classList.add('has-value');
+    else matSel.classList.remove('has-value');
+    initialMaterialId = '';
+  }
+
+  function loadProjectPlannedMaterials(clearSelection) {
+    if (!projSel || !matSel) return;
+    var pid = projSel.value;
+    var preserveId = clearSelection ? '' : (matSel.value || initialMaterialId);
+    if (!pid) {
+      rebuildMaterialOptions([], preserveId);
+      showMaterialHint('Select a project to load planned materials from the cost plan.');
+      if (qtyPanel) qtyPanel.hidden = true;
+      return;
+    }
+    showMaterialHint('Loading planned materials…');
+    fetch('{{ url_for("store_project_planned_materials_api") }}?project_id=' + encodeURIComponent(pid))
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (d.error) {
+          showMaterialHint(d.error);
+          return;
+        }
+        rebuildMaterialOptions(d.materials || [], preserveId);
+        if (d.materials && d.materials.length) {
+          var msg = d.materials.length + ' material(s) from project cost plan.';
+          if (d.unmatched_count) {
+            msg += ' ' + d.unmatched_count + ' cost-plan item(s) not in master — use New Material.';
+          }
+          showMaterialHint(msg);
+        } else {
+          showMaterialHint(d.message || 'No planned materials for this project. Use New Material if needed.');
+        }
+        applyMaterialUnit();
+        refreshProjectMaterialQty();
+      })
+      .catch(function () {
+        showMaterialHint('Unable to load planned materials.');
+      });
+  }
+
+  function refreshProjectMaterialQty() {
+    if (!qtyPanel || !matSel || !projSel) return;
+    var pid = projSel.value;
+    var mid = matSel.value;
+    if (!pid || !mid) {
+      qtyPanel.hidden = true;
+      return;
+    }
+    qtyPanel.hidden = false;
+    var url = '{{ url_for("store_project_material_qty_api") }}'
+      + '?project_id=' + encodeURIComponent(pid)
+      + '&material_id=' + encodeURIComponent(mid);
+    if (recordInput && recordInput.value) {
+      url += '&exclude_request_id=' + encodeURIComponent(recordInput.value);
+    }
+    fetch(url)
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (d.error) {
+          qtyPanel.hidden = true;
+          return;
+        }
+        var unit = d.unit || '';
+        setQtyText('mr-site-required', d.site_required_qty, unit);
+        setQtyText('mr-allotted', d.allotted_qty, unit);
+        setQtyText('mr-purchased', d.purchased_qty, unit);
+        setQtyText('mr-requested', d.requested_qty, unit);
+        setQtyText('mr-balance', d.balance_required_qty, unit);
+        if (qtyWarning) {
+          qtyWarning.style.display = d.over_requirement ? 'block' : 'none';
+        }
+        if (qtyNote) {
+          qtyNote.style.display = d.has_site_requirement ? 'none' : 'block';
+        }
+        var balanceEl = document.getElementById('mr-balance');
+        if (balanceEl) {
+          balanceEl.style.color = d.over_requirement ? 'var(--erp-warning,#b45309)' : 'inherit';
+        }
+      })
+      .catch(function () {
+        qtyPanel.hidden = true;
+      });
+  }
+
+  function applyMaterialUnit() {
+    if (!matSel || !unitInput) return;
+    var opt = matSel.options[matSel.selectedIndex];
+    if (opt && opt.value) {
+      unitInput.value = opt.getAttribute('data-unit') || '';
+      matSel.classList.add('has-value');
+    }
+  }
+
+  if (matSel) {
+    matSel.addEventListener('change', function () {
+      applyMaterialUnit();
+      refreshProjectMaterialQty();
+    });
+  }
+  if (projSel) {
+    projSel.addEventListener('change', function () {
+      if (unitInput) unitInput.value = '';
+      loadProjectPlannedMaterials(true);
+    });
+  }
+  loadProjectPlannedMaterials(false);
+
+  function showModal() {
+    if (!modal) return;
+    document.querySelectorAll('.erp-modal').forEach(function (other) {
+      if (other !== modal) {
+        other.hidden = true;
+        other.setAttribute('aria-hidden', 'true');
+      }
+    });
+    modal.hidden = false;
+    modal.setAttribute('aria-hidden', 'false');
+    var firstField = modal.querySelector('input:not([type="hidden"]), select, textarea');
+    if (firstField) firstField.focus();
+  }
+
+  function hideModal() {
+    if (!modal) return;
+    modal.hidden = true;
+    modal.setAttribute('aria-hidden', 'true');
+  }
+
+  if (openBtn) {
+    openBtn.addEventListener('click', function (event) {
+      event.preventDefault();
+      showModal();
+    });
+  }
+
+  if (modal) {
+    modal.querySelectorAll('[data-modal-close]').forEach(function (control) {
+      control.addEventListener('click', function (event) {
+        event.preventDefault();
+        hideModal();
+      });
+    });
+  }
+
+  if (window.location.hash === '#material-request-form') {
+    var anchor = document.getElementById('material-request-form');
+    if (anchor) {
+      window.requestAnimationFrame(function () {
+        anchor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    }
+  }
+})();
+</script>
+{% endblock %}

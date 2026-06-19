@@ -1,0 +1,104 @@
+{% extends 'base_maxek.html' %}
+
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('accounts_hub') ~ '">Accounts</a> &gt; ' ~ page_title %}
+
+{% block content %}
+
+<form method="post" class="erp-form-card" style="margin-bottom:1rem;display:flex;gap:1rem;align-items:end;flex-wrap:wrap;">
+
+  <input type="hidden" name="form_action" value="generate">
+
+  <div class="erp-field"><input type="number" name="period_month" min="1" max="12" placeholder="e.g. 6"><label>Month</label></div>
+
+  <div class="erp-field"><input type="number" name="period_year" placeholder="e.g. 2026"><label>Year</label></div>
+
+  <button type="submit" class="erp-btn erp-btn-primary">Generate from Staff Master</button>
+
+</form>
+
+<div class="erp-validation" style="margin-bottom:1rem;">Set PF/ESI applicable on staff master. Employer ESI rate fixed at 3.25% for MVP.</div>
+
+<div class="erp-table-panel" data-erp-table>
+
+  <div class="erp-table-toolbar"><h3 class="erp-table-title">{{ page_title }}</h3></div>
+
+  <div class="erp-table-scroll">
+
+    <table class="erp-table">
+
+      <thead>
+
+        <tr><th>Period</th><th>Staff</th><th>Employee</th><th>Employer</th><th>Total</th><th>Due</th><th>Alert</th><th>Filing</th><th>Filed</th><th>Update</th></tr>
+
+      </thead>
+
+      <tbody>
+
+        {% for row in rows %}
+
+        <tr>
+
+          <td>{{ row.period_month }}/{{ row.period_year }}</td>
+
+          <td>{{ row.staff_name or '—' }}</td>
+
+          <td>₹{{ '%.2f'|format(row.employee_contribution or 0) }}</td>
+
+          <td>₹{{ '%.2f'|format(row.employer_contribution or 0) }}</td>
+
+          <td>₹{{ '%.2f'|format(row.total_amount or 0) }}</td>
+
+          <td>{{ row.due_date or '—' }}</td>
+
+          <td>{% if row.due_alert %}<span class="erp-badge erp-badge-warning">{{ row.due_alert }}</span>{% else %}—{% endif %}</td>
+
+          <td>{{ row.filing_status or 'Pending' }}</td>
+
+          <td>{{ row.filed_date or '—' }}</td>
+
+          <td>
+
+            <form method="post" style="display:flex;gap:0.25rem;flex-wrap:wrap;">
+
+              <input type="hidden" name="form_action" value="update_filing">
+
+              <input type="hidden" name="register_id" value="{{ row.id }}">
+
+              <select name="filing_status">
+
+                {% for st in filing_statuses %}
+
+                <option value="{{ st }}" {% if row.filing_status == st %}selected{% endif %}>{{ st }}</option>
+
+                {% endfor %}
+
+              </select>
+
+              <input type="date" name="filed_date" value="{{ row.filed_date or '' }}">
+
+              <input type="text" name="remarks" placeholder="Remarks" value="{{ row.remarks or '' }}" style="min-width:6rem;">
+
+              <button type="submit" class="erp-btn erp-btn-sm erp-btn-ghost">Save</button>
+
+            </form>
+
+          </td>
+
+        </tr>
+
+        {% else %}
+
+        <tr><td colspan="10">No {{ register_type }} register entries. Generate from staff or add via payroll link later.</td></tr>
+
+        {% endfor %}
+
+      </tbody>
+
+    </table>
+
+  </div>
+
+</div>
+
+{% endblock %}
+

@@ -1,0 +1,364 @@
+{% extends 'base_maxek.html' %}
+{% from 'macros/erp_ui.html' import erp_pagination %}
+{% set page_title = 'Securities & Guarantees' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; Accounts &gt; Securities & Guarantees' %}
+{% block page_actions %}
+{% if filter_project %}
+<a href="{{ url_for('securities_guarantees', new=1, project_id=filter_project, security_type='Performance Bank Guarantee') }}#new-record" class="erp-btn erp-btn-primary"><i class="fa-solid fa-building-columns"></i> Add Bank Guarantee</a>
+<a href="{{ url_for('securities_guarantees', new=1, project_id=filter_project, security_type='EMD') }}#new-record" class="erp-btn erp-btn-primary"><i class="fa-solid fa-file-invoice-dollar"></i> Add EMD</a>
+<a href="{{ url_for('securities_guarantees', new=1, project_id=filter_project, security_type='Additional Bank Guarantee') }}#new-record" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-plus"></i> Add Additional BG</a>
+{% else %}
+<a href="{{ url_for('securities_guarantees', new=1) }}#new-record" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> New Record</a>
+{% endif %}
+<a href="{{ url_for('securities_guarantees_export') }}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-file-excel"></i> Export Excel</a>
+{% endblock %}
+{% block content %}
+{% if filter_project and not show_new and not view_record and not edit_record %}
+<div class="erp-validation" style="margin-bottom: 1rem; display:flex; flex-wrap:wrap; gap:0.5rem; align-items:center;">
+  <span>Showing securities for selected project.</span>
+  <a href="{{ url_for('securities_guarantees', new=1, project_id=filter_project, security_type='Performance Bank Guarantee') }}#new-record" class="erp-btn erp-btn-primary erp-btn-sm"><i class="fa-solid fa-building-columns"></i> Add Bank Guarantee</a>
+  <a href="{{ url_for('securities_guarantees', new=1, project_id=filter_project, security_type='EMD') }}#new-record" class="erp-btn erp-btn-primary erp-btn-sm"><i class="fa-solid fa-file-invoice-dollar"></i> Add EMD</a>
+  <a href="{{ url_for('securities_guarantees', new=1, project_id=filter_project, security_type='Additional Bank Guarantee') }}#new-record" class="erp-btn erp-btn-ghost erp-btn-sm"><i class="fa-solid fa-plus"></i> Add Additional BG</a>
+  <a href="{{ url_for('securities_guarantees') }}" class="erp-btn erp-btn-ghost erp-btn-sm">Show all</a>
+</div>
+{% endif %}
+
+<div class="erp-summary-grid" style="margin-bottom: 1rem;">
+  <div class="erp-stat-card">
+    <span>Total Records</span>
+    <strong>{{ dashboard.total_records }}</strong>
+  </div>
+  <div class="erp-stat-card">
+    <span>Outstanding Amount</span>
+    <strong>₹{{ '%.2f'|format(dashboard.total_outstanding) }}</strong>
+  </div>
+  <div class="erp-stat-card">
+    <span>Released / Refunded</span>
+    <strong>₹{{ '%.2f'|format(dashboard.total_released) }}</strong>
+  </div>
+  {% for days in expiry_alert_days %}
+  <div class="erp-stat-card">
+    <span>Expiring ≤ {{ days }} days</span>
+    <strong>{{ dashboard.expiring[days|string]|length }}</strong>
+  </div>
+  {% endfor %}
+</div>
+
+{% if dashboard.expiring_overdue or dashboard.expiring['7']|length %}
+<div class="erp-validation" style="margin-bottom: 1rem;">
+  <strong>Expiry alerts:</strong>
+  {% if dashboard.expiring_overdue|length %}
+  <span class="approval-badge" style="background:#fee2e2;color:#991b1b;">{{ dashboard.expiring_overdue|length }} overdue</span>
+  {% endif %}
+  {% for days in expiry_alert_days %}
+  {% if dashboard.expiring[days|string]|length %}
+  <span>{{ dashboard.expiring[days|string]|length }} within {{ days }} days</span>{% if not loop.last %} · {% endif %}
+  {% endif %}
+  {% endfor %}
+  <em style="display:block;margin-top:0.35rem;font-size:0.85rem;">Email notifications: stub only (logged server-side).</em>
+</div>
+{% endif %}
+
+{% if view_record %}
+<div class="erp-form-card" style="margin-bottom: 1rem;">
+  <div style="display:flex;flex-wrap:wrap;gap:0.5rem;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+    <h3 class="erp-form-title" style="margin:0;">{{ view_record.register_number }} — {{ view_record.security_type }}</h3>
+    <a href="{{ url_for('securities_guarantees') }}" class="erp-btn erp-btn-ghost erp-btn-sm"><i class="fa-solid fa-arrow-left"></i> Back to list</a>
+  </div>
+  <p><strong>Status:</strong> <span class="approval-badge">{{ view_record.status }}</span></p>
+  <p><strong>Project:</strong> {{ view_record.project_code or '—' }} — {{ view_record.project_name or '—' }}</p>
+  <p><strong>Client:</strong> {{ view_record.client_name or '—' }} |
+    <strong>Agreement:</strong> {{ view_record.agreement_number or '—' }} ({{ view_record.agreement_date or '—' }})</p>
+  <p><strong>Work Order:</strong> {{ view_record.work_order_number or '—' }} |
+    <strong>Contract Value:</strong> ₹{{ '%.2f'|format(view_record.contract_value or 0) }}</p>
+  <p><strong>Amount:</strong> ₹{{ '%.2f'|format(view_record.deposit_amount or 0) }}
+    {% if view_record.interest_rate or view_record.interest_amount %}| <strong>Interest:</strong> {{ view_record.interest_rate or 0 }}% · ₹{{ '%.2f'|format(view_record.interest_amount or 0) }}{% endif %}
+    {% if view_record.total_recoverable %}| <strong>Total Recoverable:</strong> ₹{{ '%.2f'|format(view_record.total_recoverable) }}{% endif %}
+  </p>
+  <p><strong>Bank:</strong> {{ view_record.issuing_bank or view_record.bank_name or '—' }}
+    {% if view_record.branch_name %}· {{ view_record.branch_name }}{% endif %}</p>
+  {% if view_record.security_type in ['Performance Bank Guarantee', 'Additional Bank Guarantee'] %}
+  <p><strong>BG Number:</strong> {{ view_record.bg_number or '—' }} |
+    <strong>Beneficiary:</strong> {{ view_record.beneficiary_name or '—' }}
+    {% if view_record.claim_period %}| <strong>Claim period:</strong> {{ view_record.claim_period }}{% endif %}</p>
+  {% elif view_record.security_type in ['Treasury Deposit', 'Security Deposit'] %}
+  <p><strong>Challan / Treasury:</strong> {{ view_record.challan_number or '—' }} |
+    <strong>Instrument:</strong> {{ view_record.instrument_number or '—' }}</p>
+  {% else %}
+  <p><strong>Instrument / Ref:</strong> {{ view_record.bg_number or view_record.instrument_number or view_record.challan_number or '—' }}</p>
+  {% endif %}
+  <p><strong>Dates:</strong>
+    Deposit/Issue: {{ view_record.deposit_date or view_record.issue_date or '—' }} |
+    Expiry/Maturity: {{ view_record.expiry_date or view_record.maturity_date or '—' }}
+    {% if view_record.extension_date %}| Extended: {{ view_record.extension_date }}{% endif %}
+    {% if view_record.release_date %}| Released: {{ view_record.release_date }}{% endif %}
+  </p>
+  {% if view_record.security_type == 'EMD' %}
+  <p><strong>Tender:</strong> {{ view_record.tender_number or '—' }} ({{ view_record.tender_date or '—' }}) — {{ view_record.tender_authority or '—' }}</p>
+  <p><strong>EMD Mode:</strong> {{ view_record.emd_mode or '—' }}</p>
+  {% endif %}
+  {% if view_record.security_type == 'Pending Bill Retention' %}
+  <p><strong>Bill:</strong> {{ view_record.bill_number or '—' }} ({{ view_record.bill_date or '—' }}) — ₹{{ '%.2f'|format(view_record.bill_amount or 0) }}</p>
+  <p><strong>Retention:</strong> {{ view_record.retention_percent or 0 }}% · ₹{{ '%.2f'|format(view_record.retention_amount or 0) }}</p>
+  {% endif %}
+  <p><strong>Purpose / Remarks:</strong> {{ view_record.remarks or '—' }}</p>
+  {% if view_record.release_remarks %}<p><strong>Release Remarks:</strong> {{ view_record.release_remarks }}</p>{% endif %}
+  {% if view_record.extension_remarks %}<p><strong>Extension Remarks:</strong> {{ view_record.extension_remarks }}</p>{% endif %}
+  <p><strong>Audit:</strong> Created {{ view_record.created_by or '—' }} · {{ view_record.created_at or '—' }}
+    {% if view_record.modified_by %}| Modified {{ view_record.modified_by }} · {{ view_record.modified_at }}{% endif %}
+    {% if view_record.released_by %}| Released by {{ view_record.released_by }}{% endif %}
+    {% if view_record.approved_by %}| Approved by {{ view_record.approved_by }}{% endif %}
+  </p>
+  <div class="workflow-row-actions" style="margin-top:1rem;flex-wrap:wrap;">
+    {% if view_record.project_id %}
+    <a href="{{ url_for('securities_guarantees', new=1, project_id=view_record.project_id, security_type='Performance Bank Guarantee') }}#new-record" class="erp-btn erp-btn-primary erp-btn-sm"><i class="fa-solid fa-building-columns"></i> Add Bank Guarantee</a>
+    <a href="{{ url_for('securities_guarantees', new=1, project_id=view_record.project_id, security_type='EMD') }}#new-record" class="erp-btn erp-btn-primary erp-btn-sm"><i class="fa-solid fa-file-invoice-dollar"></i> Add EMD</a>
+    {% endif %}
+    <a href="{{ url_for('securities_guarantee_print', record_id=view_record.id) }}" target="_blank" class="erp-btn erp-btn-ghost erp-btn-sm"><i class="fa-solid fa-print"></i> Print</a>
+    {% if view_record.status in ['Draft', 'Active', 'Expiring Soon', 'Maturity Pending', 'Release Requested'] %}
+    <a href="{{ url_for('securities_guarantees', edit=view_record.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm"><i class="fa-solid fa-pen-to-square"></i> Edit</a>
+    {% endif %}
+    {% if view_record.status == 'Draft' %}
+    <form method="post" style="display:inline;">
+      <input type="hidden" name="form_action" value="activate_record">
+      <input type="hidden" name="record_id" value="{{ view_record.id }}">
+      {% for field in ['security_type','project_id','project_name','project_code','client_name','agreement_number','agreement_date','work_order_number','contract_value','deposit_amount','bank_name','branch_name','instrument_number','challan_number','bg_number','beneficiary_name','issuing_bank','claim_period','deposit_date','issue_date','expiry_date','maturity_date','interest_rate','interest_amount','total_recoverable','remarks','status'] %}
+      <input type="hidden" name="{{ field }}" value="{{ view_record[field] or '' }}">
+      {% endfor %}
+      <button type="submit" class="erp-btn erp-btn-primary erp-btn-sm">Activate</button>
+    </form>
+    {% endif %}
+    {% if view_record.status in ['Active', 'Expiring Soon', 'Maturity Pending'] %}
+    <form method="post" style="display:inline;">
+      <input type="hidden" name="form_action" value="request_release">
+      <input type="hidden" name="record_id" value="{{ view_record.id }}">
+      {% for field in ['security_type','project_id','project_name','project_code','client_name','agreement_number','agreement_date','work_order_number','contract_value','deposit_amount','bank_name','branch_name','instrument_number','challan_number','bg_number','beneficiary_name','issuing_bank','claim_period','deposit_date','issue_date','expiry_date','maturity_date','interest_rate','interest_amount','total_recoverable','remarks'] %}
+      <input type="hidden" name="{{ field }}" value="{{ view_record[field] or '' }}">
+      {% endfor %}
+      <input type="hidden" name="status" value="Release Requested">
+      <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Request Release</button>
+    </form>
+    {% endif %}
+    {% if view_record.status == 'Release Requested' %}
+    <form method="post" style="display:inline;">
+      <input type="hidden" name="form_action" value="mark_released">
+      <input type="hidden" name="record_id" value="{{ view_record.id }}">
+      {% for field in ['security_type','project_id','project_name','project_code','client_name','agreement_number','agreement_date','work_order_number','contract_value','deposit_amount','bank_name','branch_name','instrument_number','challan_number','bg_number','beneficiary_name','issuing_bank','claim_period','deposit_date','issue_date','expiry_date','maturity_date','interest_rate','interest_amount','total_recoverable','remarks'] %}
+      <input type="hidden" name="{{ field }}" value="{{ view_record[field] or '' }}">
+      {% endfor %}
+      <input type="hidden" name="release_date" value="{{ view_record.release_date or '' }}">
+      <button type="submit" class="erp-btn erp-btn-primary erp-btn-sm">Mark Released</button>
+    </form>
+    {% endif %}
+  </div>
+
+  {% if attachments %}
+  <h4 style="margin-top:1.25rem;">Documents</h4>
+  <ul class="employee-document-links">
+    {% for att in attachments %}
+    <li>
+      <a href="{{ url_for('securities_guarantee_attachment', attachment_id=att.id) }}" target="_blank" rel="noopener">
+        <i class="fa-solid fa-paperclip"></i> {{ att.original_filename or att.stored_filename }}
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  <form method="post" enctype="multipart/form-data" style="margin-top:1rem;display:flex;gap:0.5rem;flex-wrap:wrap;align-items:end;">
+    <input type="hidden" name="form_action" value="upload_attachment">
+    <input type="hidden" name="record_id" value="{{ view_record.id }}">
+    <div class="erp-field">
+      <input type="file" name="security_attachment" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,image/*" capture="environment">
+      <label>Upload Document (PDF/JPG/PNG/DOC)</label>
+    </div>
+    <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Upload</button>
+  </form>
+</div>
+{% endif %}
+
+{% if show_new or edit_record %}
+<div class="erp-form-card" id="new-record" style="margin-bottom: 1rem;">
+  <div style="display:flex;flex-wrap:wrap;gap:0.5rem;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+    <h3 class="erp-form-title" style="margin:0;">{% if edit_record %}Edit {{ edit_record.register_number }}{% else %}New Security / Guarantee Record{% endif %}</h3>
+    {% if edit_record %}
+    <a href="{{ url_for('securities_guarantees', view=edit_record.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm"><i class="fa-regular fa-eye"></i> View record</a>
+    {% endif %}
+  </div>
+  {% if not edit_record %}<p class="workflow-hint">Next register no: <strong>{{ next_register_number }}</strong>. Save one security per submit — use <em>Save &amp; Add Another</em> to register EMD, PBG, and other types for the same project.</p>{% endif %}
+  <form method="post" class="erp-form-grid" data-securities-form enctype="multipart/form-data">
+    {% if edit_record %}<input type="hidden" name="record_id" value="{{ edit_record.id }}">{% endif %}
+    <div class="erp-field">
+      <select name="security_type" id="sg_security_type" required class="has-value">
+        {% for t in security_types %}
+        <option value="{{ t }}" {% if (edit_record and edit_record.security_type == t) or (not edit_record and preselect_type == t) or (not edit_record and not preselect_type and loop.first) %}selected{% endif %}>{{ t }}</option>
+        {% endfor %}
+      </select>
+      <label>Security Type</label>
+    </div>
+    <div class="erp-field">
+      <select name="status" id="sg_status">
+        {% for st in security_statuses %}
+        <option value="{{ st }}" {% if edit_record and edit_record.status == st %}selected{% elif not edit_record and st == 'Draft' %}selected{% endif %}>{{ st }}</option>
+        {% endfor %}
+      </select>
+      <label>Status</label>
+    </div>
+    <div class="erp-field">
+      <select id="sg_project_code" name="project_code_select">
+        <option value="">Project ID</option>
+        {% for p in projects %}
+        <option value="{{ p.id }}" data-name="{{ p.project_name }}"
+          {% if (edit_record and edit_record.project_id|string == p.id|string) or (filter_project|string == p.id|string and show_new) %}selected{% endif %}>{{ p.project_code or p.id }}</option>
+        {% endfor %}
+      </select>
+      <label>Project ID</label>
+    </div>
+    <div class="erp-field span-2">
+      <select name="project_id" id="sg_project_id" required>
+        <option value="">Select project</option>
+        {% for p in projects %}
+        <option value="{{ p.id }}" data-code="{{ p.project_code or p.id }}"
+          {% if (edit_record and edit_record.project_id|string == p.id|string) or (filter_project|string == p.id|string and show_new) %}selected{% endif %}>{{ p.project_name }}</option>
+        {% endfor %}
+      </select>
+      <label>Project Name</label>
+    </div>
+    <div class="erp-field span-2"><input name="client_name" id="sg_client_name" placeholder=" " value="{{ edit_record.client_name if edit_record else '' }}"><label>Client / Department</label></div>
+    <div class="erp-field"><input name="agreement_number" id="sg_agreement_number" placeholder=" " value="{{ edit_record.agreement_number if edit_record else '' }}"><label>Agreement Number</label></div>
+    <div class="erp-field"><input name="agreement_date" type="date" id="sg_agreement_date" placeholder=" " value="{{ edit_record.agreement_date if edit_record else '' }}"><label>Agreement Date</label></div>
+    <div class="erp-field"><input name="work_order_number" id="sg_work_order_number" placeholder=" " value="{{ edit_record.work_order_number if edit_record else '' }}"><label>Work Order Number</label></div>
+    <div class="erp-field"><input name="contract_value" type="number" step="0.01" id="sg_contract_value" placeholder=" " value="{{ edit_record.contract_value if edit_record else '' }}"><label>Contract Value</label></div>
+    <input type="hidden" name="project_name" id="sg_project_name" value="{{ edit_record.project_name if edit_record else '' }}">
+    <input type="hidden" name="project_code" id="sg_project_code_hidden" value="{{ edit_record.project_code if edit_record else '' }}">
+
+    <div class="erp-form-subtitle span-2" data-sg-section="common-financial">Amount</div>
+    <div class="erp-field" data-sg-section="common-financial"><input name="deposit_amount" type="number" step="0.01" id="sg_deposit_amount" placeholder=" " required value="{{ edit_record.deposit_amount if edit_record else '' }}"><label>Deposit / Guarantee Amount</label></div>
+
+    <div class="erp-form-subtitle span-2" data-sg-section="bg">Bank Guarantee Details</div>
+    <div class="erp-field" data-sg-section="bg"><input name="bg_number" placeholder=" " value="{{ edit_record.bg_number if edit_record else '' }}"><label>BG Number</label></div>
+    <div class="erp-field" data-sg-section="bg"><input name="issuing_bank" placeholder=" " value="{{ edit_record.issuing_bank if edit_record else '' }}"><label>Issuing Bank</label></div>
+    <div class="erp-field" data-sg-section="bg"><input name="branch_name" placeholder=" " value="{{ edit_record.branch_name if edit_record else '' }}"><label>Branch</label></div>
+    <div class="erp-field span-2" data-sg-section="bg"><input name="beneficiary_name" placeholder=" " value="{{ edit_record.beneficiary_name if edit_record else '' }}"><label>Beneficiary</label></div>
+    <div class="erp-field" data-sg-section="bg"><input name="claim_period" placeholder=" " value="{{ edit_record.claim_period if edit_record else '' }}"><label>Claim Period (e.g. 3 months)</label></div>
+
+    <div class="erp-form-subtitle span-2" data-sg-section="treasury">Treasury / Security Deposit Details</div>
+    <div class="erp-field" data-sg-section="treasury"><input name="challan_number" placeholder=" " value="{{ edit_record.challan_number if edit_record else '' }}"><label>Challan / Treasury Ref</label></div>
+    <div class="erp-field" data-sg-section="treasury"><input name="instrument_number" placeholder=" " value="{{ edit_record.instrument_number if edit_record else '' }}"><label>Instrument / Receipt No</label></div>
+    <div class="erp-field" data-sg-section="treasury"><input name="bank_name" placeholder=" " value="{{ edit_record.bank_name if edit_record else '' }}"><label>Depositing Bank (if applicable)</label></div>
+
+    <div class="erp-form-subtitle span-2" data-sg-section="dates">Dates</div>
+    <div class="erp-field" data-sg-section="dates-deposit"><input name="deposit_date" type="date" placeholder=" " value="{{ edit_record.deposit_date if edit_record else '' }}"><label>Deposit Date</label></div>
+    <div class="erp-field" data-sg-section="dates-bg"><input name="issue_date" type="date" placeholder=" " value="{{ edit_record.issue_date if edit_record else '' }}"><label>Issue Date</label></div>
+    <div class="erp-field" data-sg-section="dates-bg"><input name="expiry_date" type="date" placeholder=" " value="{{ edit_record.expiry_date if edit_record else '' }}"><label>Expiry Date (BG)</label></div>
+    <div class="erp-field" data-sg-section="dates-deposit"><input name="maturity_date" type="date" placeholder=" " value="{{ edit_record.maturity_date if edit_record else '' }}"><label>Maturity Date (Deposit)</label></div>
+    <div class="erp-field" data-sg-section="dates-release"><input name="extension_date" type="date" placeholder=" " value="{{ edit_record.extension_date if edit_record else '' }}"><label>Extension Date</label></div>
+    <div class="erp-field" data-sg-section="dates-release"><input name="release_date" type="date" placeholder=" " value="{{ edit_record.release_date if edit_record else '' }}"><label>Release Date</label></div>
+
+    <div class="erp-form-subtitle span-2" data-sg-section="interest">Interest (Treasury / Security Deposit)</div>
+    <div class="erp-field" data-sg-section="interest"><input name="interest_rate" type="number" step="0.01" id="sg_interest_rate" placeholder=" " value="{{ edit_record.interest_rate if edit_record else '' }}"><label>Interest Rate %</label></div>
+    <div class="erp-field" data-sg-section="interest"><input name="interest_amount" type="number" step="0.01" id="sg_interest_amount" placeholder=" " value="{{ edit_record.interest_amount if edit_record else '' }}"><label>Interest Amount</label></div>
+    <div class="erp-field" data-sg-section="interest"><input name="total_recoverable" type="number" step="0.01" id="sg_total_recoverable" placeholder=" " value="{{ edit_record.total_recoverable if edit_record else '' }}"><label>Total Recoverable</label></div>
+
+    <div class="erp-form-subtitle span-2" data-sg-section="emd">EMD Details</div>
+    <div class="erp-field" data-sg-section="emd"><input name="tender_number" placeholder=" " value="{{ edit_record.tender_number if edit_record else '' }}"><label>Tender Number</label></div>
+    <div class="erp-field" data-sg-section="emd"><input name="tender_date" type="date" placeholder=" " value="{{ edit_record.tender_date if edit_record else '' }}"><label>Tender Date</label></div>
+    <div class="erp-field span-2" data-sg-section="emd"><input name="tender_authority" placeholder=" " value="{{ edit_record.tender_authority if edit_record else '' }}"><label>Tender Authority</label></div>
+    <div class="erp-field" data-sg-section="emd"><input name="emd_mode" placeholder=" " value="{{ edit_record.emd_mode if edit_record else '' }}"><label>EMD Mode (BG/DD/FDR)</label></div>
+
+    <div class="erp-form-subtitle span-2" data-sg-section="retention">Pending Bill Retention</div>
+    <div class="erp-field" data-sg-section="retention"><input name="bill_number" placeholder=" " value="{{ edit_record.bill_number if edit_record else '' }}"><label>Bill Number</label></div>
+    <div class="erp-field" data-sg-section="retention"><input name="bill_date" type="date" placeholder=" " value="{{ edit_record.bill_date if edit_record else '' }}"><label>Bill Date</label></div>
+    <div class="erp-field" data-sg-section="retention"><input name="bill_amount" type="number" step="0.01" id="sg_bill_amount" placeholder=" " value="{{ edit_record.bill_amount if edit_record else '' }}"><label>Bill Amount</label></div>
+    <div class="erp-field" data-sg-section="retention"><input name="retention_percent" type="number" step="0.01" id="sg_retention_percent" placeholder=" " value="{{ edit_record.retention_percent if edit_record else '' }}"><label>Retention %</label></div>
+    <div class="erp-field" data-sg-section="retention"><input name="retention_amount" type="number" step="0.01" id="sg_retention_amount" placeholder=" " value="{{ edit_record.retention_amount if edit_record else '' }}"><label>Retention Amount</label></div>
+
+    <div class="erp-form-subtitle span-2" data-sg-section="purpose">Purpose &amp; Document</div>
+    <div class="erp-field span-2" data-sg-section="purpose"><textarea name="remarks" placeholder=" ">{{ edit_record.remarks if edit_record else '' }}</textarea><label>Purpose / Remarks</label></div>
+    <div class="erp-field span-2" data-sg-section="upload">
+      <input type="file" name="security_attachment" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,image/*" capture="environment">
+      <label>Upload BG / EMD / Deposit Document</label>
+    </div>
+    {% if edit_record %}
+    <div class="erp-field span-2" data-sg-section="dates-release"><textarea name="release_remarks" placeholder=" ">{{ edit_record.release_remarks if edit_record else '' }}</textarea><label>Release Remarks</label></div>
+    {% endif %}
+
+    <div class="erp-form-actions span-2">
+      <button type="submit" name="form_action" value="save_record" class="erp-btn erp-btn-primary"><i class="fa-solid fa-floppy-disk"></i> Save Record</button>
+      {% if not edit_record %}
+      <button type="submit" name="form_action" value="save_and_new" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> Save &amp; Add Another</button>
+      {% endif %}
+      {% if edit_record %}
+      <a href="{{ url_for('securities_guarantees', view=edit_record.id) }}" class="erp-btn erp-btn-ghost">Cancel</a>
+      {% endif %}
+    </div>
+  </form>
+</div>
+{% endif %}
+
+<div class="erp-table-panel" data-erp-table>
+  <div class="erp-table-toolbar">
+    <h3 class="erp-table-title">Security Register</h3>
+    <form method="get" class="erp-table-controls" style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+      <div class="erp-table-search"><i class="fa-solid fa-magnifying-glass"></i><input type="search" name="q" value="{{ filter_q }}" placeholder="Search register, client, BG..."></div>
+      <select name="security_type">
+        <option value="">All types</option>
+        {% for t in security_types %}
+        <option value="{{ t }}" {% if filter_type == t %}selected{% endif %}>{{ t }}</option>
+        {% endfor %}
+      </select>
+      <select name="status">
+        <option value="">All statuses</option>
+        {% for st in security_statuses %}
+        <option value="{{ st }}" {% if filter_status == st %}selected{% endif %}>{{ st }}</option>
+        {% endfor %}
+      </select>
+      <select name="project_id">
+        <option value="">All projects</option>
+        {% for p in projects %}
+        <option value="{{ p.id }}" {% if filter_project|string == p.id|string %}selected{% endif %}>{{ p.project_name }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Filter</button>
+      <a href="{{ url_for('securities_guarantees') }}" class="erp-btn erp-btn-ghost erp-btn-sm">Clear</a>
+      {% if filter_project %}
+      <a href="{{ url_for('securities_guarantees', new=1, project_id=filter_project, security_type='Performance Bank Guarantee') }}#new-record" class="erp-btn erp-btn-primary erp-btn-sm"><i class="fa-solid fa-building-columns"></i> Add BG</a>
+      <a href="{{ url_for('securities_guarantees', new=1, project_id=filter_project, security_type='EMD') }}#new-record" class="erp-btn erp-btn-primary erp-btn-sm"><i class="fa-solid fa-file-invoice-dollar"></i> Add EMD</a>
+      {% endif %}
+    </form>
+  </div>
+  <div class="erp-table-scroll">
+    <table class="erp-table erp-table-module">
+      <thead><tr><th>Register #</th><th>Type</th><th>Project</th><th>Client</th><th>Amount</th><th>Expiry/Maturity</th><th>Status</th><th>Actions</th></tr></thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td><a href="{{ url_for('securities_guarantees', view=row.id) }}">{{ row.register_number or row.id }}</a></td>
+          <td>{{ row.security_type }}</td>
+          <td>{{ row.project_code or '—' }} — {{ row.project_name or '—' }}</td>
+          <td>{{ row.client_name or '—' }}</td>
+          <td>₹{{ '%.2f'|format(row.deposit_amount or 0) }}</td>
+          <td>{{ row.expiry_date or row.maturity_date or '—' }}</td>
+          <td><span class="approval-badge">{{ row.status }}</span></td>
+          <td>
+            <div class="workflow-row-actions">
+              <a href="{{ url_for('securities_guarantees', view=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm"><i class="fa-regular fa-eye"></i> View</a>
+              {% if row.status in ['Draft', 'Active', 'Expiring Soon', 'Maturity Pending', 'Release Requested'] %}
+              <a href="{{ url_for('securities_guarantees', edit=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm"><i class="fa-solid fa-pen-to-square"></i> Edit</a>
+              {% endif %}
+              <a href="{{ url_for('securities_guarantee_print', record_id=row.id) }}" target="_blank" class="erp-btn erp-btn-ghost erp-btn-sm"><i class="fa-solid fa-print"></i> Print</a>
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8">No security records yet. <a href="{{ url_for('securities_guarantees', new=1) }}#new-record">Create one</a>.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {{ erp_pagination(rows|length) }}
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/securities-guarantees.js') }}"></script>
+{% endblock %}

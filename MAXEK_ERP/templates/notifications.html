@@ -15,7 +15,7 @@
       <tbody>
         {% for n in items %}
         <tr class="{% if not n.is_read %}notification-unread{% endif %}">
-          <td>{{ n.created_at }}</td>
+          <td>{{ n.created_at|app_datetime }}</td>
           <td>{{ n.message }}</td>
           <td>{{ n.notification_type }}</td>
         </tr>

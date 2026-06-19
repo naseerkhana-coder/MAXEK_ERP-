@@ -1,77 +1,387 @@
 {% extends 'base_maxek.html' %}
-{% from 'macros/erp_ui.html' import role_status_badge, erp_pagination, maker_row_actions, approval_history_panel, rejection_notice, workflow_modals, transaction_view_tabs %}
+{% from 'macros/erp_ui.html' import role_status_badge, erp_pagination, approval_history_panel, rejection_notice, workflow_modals, transaction_view_tabs %}
 {% set page_title = 'Petty Cash' %}
-{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; Finance &gt; Petty Cash' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; Accounts &gt; Petty Cash' %}
 {% block page_actions %}
-<a href="#add-expense" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> Record Expense</a>
+<a href="{{ url_for('petty_cash', new=1) }}#new-request" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> New Request</a>
 {% endblock %}
 {% block content %}
 <div class="erp-validation" style="margin-bottom: 1rem;">
-  <strong>Flow:</strong> Maker [Save] → Checker [Verify] → Approver [Approve]
+  <strong>Flow:</strong> Request → Approve → Fund Transfer → Amount Received → Expenses → Settlement → Closed
 </div>
 
 {% if view_record %}
 <div class="erp-form-card" style="margin-bottom: 1rem;">
   {% call transaction_view_tabs(view_record, history, can_reopen, approval_id) %}
-  <h3 class="erp-form-title">Record #{{ view_record.id }}</h3>
-  <p><strong>Date:</strong> {{ view_record.expense_date }} | <strong>Project:</strong> {{ view_record.project_name or '—' }} | <strong>Amount:</strong> {{ view_record.amount }}</p>
-  <p><strong>Type:</strong> {{ view_record.expense_type }} | <strong>Status:</strong> {{ role_status_badge(view_record.approval_status, 'maker') }}</p>
+  <h3 class="erp-form-title">{{ view_record.request_number }}</h3>
+  <p><strong>Status:</strong> <span class="approval-badge">{{ view_record.status }}</span>
+    {% if view_record.approval_status and view_record.approval_status not in ['Draft'] %}
+    | <strong>Workflow:</strong> {{ role_status_badge(view_record.approval_status, 'maker') }}
+    {% endif %}
+  </p>
+  <p><strong>Date:</strong> {{ view_record.request_date }} |
+    <strong>Project:</strong> {{ view_record.project_code or view_record.project_id }} — {{ view_record.project_name or '—' }}</p>
+  <p><strong>Staff:</strong> {{ view_record.staff_name or '—' }} ({{ view_record.employee_code or '—' }}) |
+    <strong>Department:</strong> {{ view_record.department or '—' }}</p>
+  <p><strong>Purpose:</strong> {{ view_record.purpose }} |
+    <strong>Priority:</strong> {{ view_record.priority }} |
+    <strong>Required:</strong> ₹{{ '%.2f'|format(view_record.required_amount or 0) }}</p>
+  <p><strong>Description:</strong> {{ view_record.description or '—' }}</p>
   <p><strong>Remarks:</strong> {{ view_record.remarks or '—' }}</p>
-  {% set msg = maker_status_message(view_record.approval_status) %}
-  {% if msg %}<p class="workflow-hint"><strong>{{ msg }}</strong></p>{% endif %}
+  <p><strong>Transferred:</strong> ₹{{ '%.2f'|format(view_record.transferred_amount or 0) }} |
+    <strong>Expenses:</strong> ₹{{ '%.2f'|format(view_record.expenses_total or 0) }} |
+    <strong>Balance:</strong> ₹{{ '%.2f'|format(available_balance) }}</p>
   {{ rejection_notice(history, view_record.approval_status) }}
+  <div class="workflow-row-actions" style="margin-top:1rem;flex-wrap:wrap;">
+    {% if view_record.status in ['Approved', 'Funds Transferred'] %}
+    <a href="{{ url_for('petty_cash', transfer=view_record.id) }}" class="erp-btn erp-btn-primary erp-btn-sm">Fund Transfer</a>
+    {% endif %}
+    {% if view_record.status == 'Funds Transferred' %}
+    <form method="post" style="display:inline;">
+      <input type="hidden" name="form_action" value="confirm_received">
+      <input type="hidden" name="request_id" value="{{ view_record.id }}">
+      <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Confirm Amount Received</button>
+    </form>
+    {% endif %}
+    {% if view_record.status in ['Amount Received', 'Settlement Pending', 'Funds Transferred'] %}
+    <a href="{{ url_for('petty_cash', expenses=view_record.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Expenses</a>
+    {% endif %}
+    {% if view_record.status in ['Amount Received', 'Settlement Pending'] %}
+    <a href="{{ url_for('petty_cash', settle=view_record.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Settlement</a>
+    {% endif %}
+    {% if view_record.status == 'Settled' %}
+    <form method="post" style="display:inline;">
+      <input type="hidden" name="form_action" value="close_request">
+      <input type="hidden" name="request_id" value="{{ view_record.id }}">
+      <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Close Request</button>
+    </form>
+    {% endif %}
+    {% if view_record.status in ['Draft', 'Rejected'] or (view_record.status == 'Submitted' and view_record.approval_status == 'Pending Checker') %}
+    <a href="{{ url_for('petty_cash', edit=view_record.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Edit</a>
+    {% endif %}
+  </div>
+
+  {% if transfers %}
+  <h4 style="margin-top:1.25rem;">Fund Transfers</h4>
+  <table class="erp-table erp-table-compact">
+    <thead><tr><th>Date</th><th>Amount</th><th>Bank</th><th>UTR</th><th>Mode</th></tr></thead>
+    <tbody>
+      {% for t in transfers %}
+      <tr>
+        <td>{{ t.transfer_date }}</td>
+        <td>₹{{ '%.2f'|format(t.amount or 0) }}</td>
+        <td>{{ t.bank_name or '—' }}</td>
+        <td>{{ t.utr_number or '—' }}</td>
+        <td>{{ t.payment_mode or '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {% if expenses %}
+  <h4 style="margin-top:1.25rem;">Expenses</h4>
+  <table class="erp-table erp-table-compact">
+    <thead><tr><th>Category</th><th>Description</th><th>Vendor</th><th>Bill</th><th>Amount</th></tr></thead>
+    <tbody>
+      {% for e in expenses %}
+      <tr>
+        <td>{{ e.expense_category }}</td>
+        <td>{{ e.description or '—' }}</td>
+        <td>{{ e.vendor or '—' }}</td>
+        <td>{{ e.bill_number or '—' }}</td>
+        <td>₹{{ '%.2f'|format(e.amount or 0) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {% if attachments %}
+  <h4 style="margin-top:1.25rem;">Attachments</h4>
+  <ul class="erp-attachment-list">
+    {% for att in attachments %}
+    <li><a href="{{ url_for('petty_cash_attachment', attachment_id=att.id) }}">{{ att.original_filename or att.stored_filename }}</a></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  <form method="post" enctype="multipart/form-data" class="erp-form-grid" style="margin-top:1rem;">
+    <input type="hidden" name="form_action" value="upload_request_attachment">
+    <input type="hidden" name="request_id" value="{{ view_record.id }}">
+    <div class="erp-field span-2">
+      <input type="file" name="request_attachment" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx">
+      <label>Upload attachment (PDF, JPG, PNG, DOC, XLS)</label>
+    </div>
+    <div class="erp-form-actions"><button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Upload</button></div>
+  </form>
+
+  {% if view_record.status == 'Settlement Pending' %}
+  <div class="erp-form-card" style="margin-top:1rem;background:var(--erp-surface-muted, #f8fafc);">
+    <h4>Settlement Review</h4>
+    <p><strong>Submitted:</strong> {{ view_record.settlement_submitted_at or '—' }}</p>
+    <p><strong>Remarks:</strong> {{ view_record.settlement_remarks or '—' }}</p>
+    <form method="post" class="erp-form-grid">
+      <input type="hidden" name="request_id" value="{{ view_record.id }}">
+      <div class="erp-field span-2"><textarea name="settlement_comment" placeholder=" " required></textarea><label>Comment (mandatory)</label></div>
+      <div class="erp-field span-2">
+        <label style="position:static;display:flex;align-items:center;gap:0.5rem;">
+          <input type="checkbox" name="create_expense_draft" value="1">
+          Auto-create expense draft in Accounts (links petty cash)
+        </label>
+      </div>
+      <div class="erp-form-actions">
+        <button type="submit" name="form_action" value="approve_settlement" class="erp-btn erp-btn-primary erp-btn-sm">Approve Settlement</button>
+        <button type="submit" name="form_action" value="reject_settlement" class="erp-btn erp-btn-ghost erp-btn-sm">Reject Settlement</button>
+      </div>
+    </form>
+  </div>
+  {% endif %}
   {% endcall %}
 </div>
 {% endif %}
 
-<div class="module-layout">
-  <div class="erp-form-card" id="add-expense">
-    <h3 class="erp-form-title">{% if edit_record %}Edit Expense #{{ edit_record.id }}{% if edit_role %} ({{ edit_role|title }}){% endif %}{% else %}Record Expense{% endif %}</h3>
-    {% if edit_record and edit_role %}
-    <form method="post" class="erp-form-grid">
-      {% if edit_record %}<input type="hidden" name="record_id" value="{{ edit_record.id }}">{% endif %}
-      <div class="erp-field span-2"><select name="project_id"><option value="">Select project</option>{% for item in projects %}<option value="{{ item.id }}" {% if edit_record and edit_record.project_id == item.id %}selected{% endif %}>{{ item.project_name }}</option>{% endfor %}</select><label>Project</label></div>
-      <div class="erp-field"><input name="expense_date" type="date" placeholder=" " value="{{ edit_record.expense_date if edit_record else '' }}"><label>Expense Date</label></div>
-      <div class="erp-field"><input name="expense_type" placeholder=" " value="{{ edit_record.expense_type if edit_record else '' }}"><label>Expense Type</label></div>
-      <div class="erp-field"><input name="amount" type="number" step="0.01" placeholder=" " value="{{ edit_record.amount if edit_record else '' }}"><label>Amount</label></div>
-      <div class="erp-field"><select name="payment_mode"><option {% if edit_record and edit_record.payment_mode == 'Cash' %}selected{% endif %}>Cash</option><option {% if edit_record and edit_record.payment_mode == 'Bank Transfer' %}selected{% endif %}>Bank Transfer</option><option {% if edit_record and edit_record.payment_mode == 'Cheque' %}selected{% endif %}>Cheque</option><option {% if edit_record and edit_record.payment_mode == 'UPI' %}selected{% endif %}>UPI</option></select><label>Payment Mode</label></div>
-      <div class="erp-field span-2"><textarea name="remarks" placeholder=" ">{{ edit_record.remarks if edit_record else '' }}</textarea><label>Remarks</label></div>
-      <div class="erp-form-actions"><button class="erp-btn erp-btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> {% if edit_role == 'maker' %}Save{% else %}Save Changes{% endif %}</button></div>
-    </form>
-    {% elif not edit_record %}
-    <form method="post" class="erp-form-grid">
-      <div class="erp-field span-2"><select name="project_id"><option value="">Select project</option>{% for item in projects %}<option value="{{ item.id }}">{{ item.project_name }}</option>{% endfor %}</select><label>Project</label></div>
-      <div class="erp-field"><input name="expense_date" type="date" placeholder=" "><label>Expense Date</label></div>
-      <div class="erp-field"><input name="expense_type" placeholder=" "><label>Expense Type</label></div>
-      <div class="erp-field"><input name="amount" type="number" step="0.01" placeholder=" "><label>Amount</label></div>
-      <div class="erp-field"><select name="payment_mode"><option>Cash</option><option>Bank Transfer</option><option>Cheque</option><option>UPI</option></select><label>Payment Mode</label></div>
-      <div class="erp-field span-2"><textarea name="remarks" placeholder=" "></textarea><label>Remarks</label></div>
-      <div class="erp-form-actions"><button class="erp-btn erp-btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Save</button></div>
-    </form>
-    {% elif edit_record %}
-    <p class="workflow-hint">View only — {{ maker_status_message(edit_record.approval_status) or edit_record.approval_status }}</p>
-    {% endif %}
+{% if transfer_record %}
+<div class="erp-form-card" id="fund-transfer" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">Fund Transfer — {{ transfer_record.request_number }}</h3>
+  <p>Required: ₹{{ '%.2f'|format(transfer_record.required_amount or 0) }}</p>
+  <form method="post" class="erp-form-grid">
+    <input type="hidden" name="form_action" value="save_transfer">
+    <input type="hidden" name="request_id" value="{{ transfer_record.id }}">
+    <div class="erp-field"><input name="transfer_date" type="date" placeholder=" " required value="{{ transfer_record.request_date }}"><label>Transfer Date</label></div>
+    <div class="erp-field"><input name="transfer_amount" type="number" step="0.01" placeholder=" " required value="{{ transfer_record.required_amount }}"><label>Amount</label></div>
+    <div class="erp-field"><input name="bank_name" placeholder=" "><label>Bank Name</label></div>
+    <div class="erp-field"><input name="account_number" placeholder=" "><label>Account Number</label></div>
+    <div class="erp-field"><input name="utr_number" placeholder=" "><label>UTR Number</label></div>
+    <div class="erp-field"><input name="reference_number" placeholder=" "><label>Reference</label></div>
+    <div class="erp-field"><select name="payment_mode"><option>Bank Transfer</option><option>UPI</option><option>NEFT</option><option>RTGS</option><option>Cheque</option><option>Cash</option></select><label>Payment Mode</label></div>
+    <div class="erp-field span-2"><textarea name="transfer_remarks" placeholder=" "></textarea><label>Remarks</label></div>
+    <div class="erp-form-actions">
+      <button type="submit" class="erp-btn erp-btn-primary"><i class="fa-solid fa-money-bill-transfer"></i> Record Transfer</button>
+      <a href="{{ url_for('petty_cash', view=transfer_record.id) }}" class="erp-btn erp-btn-ghost">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endif %}
+
+{% if expenses_record %}
+<div class="erp-form-card" id="expenses" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">Expenses — {{ expenses_record.request_number }}</h3>
+  <p><strong>Transferred:</strong> ₹{{ '%.2f'|format(expenses_record.transferred_amount or 0) }} |
+    <strong>Spent:</strong> ₹{{ '%.2f'|format(expenses_record.expenses_total or 0) }} |
+    <strong>Available:</strong> ₹{{ '%.2f'|format(available_balance) }}</p>
+  <form method="post" enctype="multipart/form-data" class="erp-form-grid" data-petty-cash-expense-form>
+    <input type="hidden" name="form_action" value="add_expense">
+    <input type="hidden" name="request_id" value="{{ expenses_record.id }}">
+    <div class="erp-field"><select name="expense_category">{% for cat in expense_categories %}<option>{{ cat }}</option>{% endfor %}</select><label>Category</label></div>
+    <div class="erp-field"><input name="expense_amount" type="number" step="0.01" placeholder=" " required max="{{ available_balance }}"><label>Amount</label></div>
+    <div class="erp-field span-2"><input name="expense_description" placeholder=" "><label>Description</label></div>
+    <div class="erp-field"><input name="vendor" placeholder=" "><label>Vendor</label></div>
+    <div class="erp-field"><input name="bill_number" placeholder=" "><label>Bill No.</label></div>
+    <div class="erp-field">
+      <select id="pc_expense_staff_name">
+        <option value="">Select staff</option>
+        {% for s in staff_list %}
+        <option value="{{ s.staff_name }}" data-id="{{ s.id }}" data-code="{{ s.employee_code or '' }}"
+          {% if expenses_record.staff_id and expenses_record.staff_id|string == s.id|string %}selected{% endif %}>{{ s.staff_name }}</option>
+        {% endfor %}
+      </select>
+      <label>Staff Name</label>
+    </div>
+    <div class="erp-field">
+      <select id="pc_expense_employee_code">
+        <option value="">Select employee ID</option>
+        {% for s in staff_list %}
+        <option value="{{ s.id }}" data-name="{{ s.staff_name }}" data-code="{{ s.employee_code or '' }}"
+          {% if expenses_record.staff_id and expenses_record.staff_id|string == s.id|string %}selected{% endif %}>{{ s.employee_code or s.id }}</option>
+        {% endfor %}
+      </select>
+      <label>Employee ID</label>
+    </div>
+    <input type="hidden" name="expense_staff_id" id="pc_expense_staff_id" value="{{ expenses_record.staff_id or '' }}">
+    <input type="hidden" name="expense_staff_name" id="pc_expense_staff_name_hidden" value="{{ expenses_record.staff_name or '' }}">
+    <input type="hidden" name="expense_employee_code" id="pc_expense_employee_code_hidden" value="{{ expenses_record.employee_code or '' }}">
+    <div class="erp-field span-2"><input type="file" name="expense_attachment" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"><label>Bill attachment</label></div>
+    <div class="erp-form-actions"><button type="submit" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> Add Expense</button></div>
+  </form>
+  {% if expenses %}
+  <table class="erp-table erp-table-compact" style="margin-top:1rem;">
+    <thead><tr><th>Category</th><th>Description</th><th>Amount</th><th></th></tr></thead>
+    <tbody>
+      {% for e in expenses %}
+      <tr>
+        <td>{{ e.expense_category }}</td>
+        <td>{{ e.description or e.vendor or '—' }}</td>
+        <td>₹{{ '%.2f'|format(e.amount or 0) }}</td>
+        <td>
+          <form method="post" style="display:inline;" onsubmit="return confirm('Remove this expense?');">
+            <input type="hidden" name="form_action" value="delete_expense">
+            <input type="hidden" name="request_id" value="{{ expenses_record.id }}">
+            <input type="hidden" name="expense_id" value="{{ e.id }}">
+            <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+  <div style="margin-top:1rem;">
+    <a href="{{ url_for('petty_cash', settle=expenses_record.id) }}" class="erp-btn erp-btn-ghost">Proceed to Settlement</a>
+    <a href="{{ url_for('petty_cash', view=expenses_record.id) }}" class="erp-btn erp-btn-ghost">Back to Request</a>
   </div>
+</div>
+{% endif %}
+
+{% if settle_record %}
+<div class="erp-form-card" id="settlement" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">Submit Settlement — {{ settle_record.request_number }}</h3>
+  <p><strong>Total expenses:</strong> ₹{{ '%.2f'|format(settle_record.expenses_total or 0) }} |
+    <strong>Balance:</strong> ₹{{ '%.2f'|format(available_balance) }}</p>
+  <form method="post" class="erp-form-grid">
+    <input type="hidden" name="form_action" value="submit_settlement">
+    <input type="hidden" name="request_id" value="{{ settle_record.id }}">
+    <div class="erp-field span-2"><textarea name="settlement_remarks" placeholder=" ">{{ settle_record.settlement_remarks or '' }}</textarea><label>Settlement Remarks</label></div>
+    <div class="erp-form-actions">
+      <button type="submit" class="erp-btn erp-btn-primary"><i class="fa-solid fa-paper-plane"></i> Submit Settlement</button>
+      <a href="{{ url_for('petty_cash', view=settle_record.id) }}" class="erp-btn erp-btn-ghost">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endif %}
+
+<div class="module-layout">
+  {% if show_new or edit_record %}
+  <div class="erp-form-card" id="new-request">
+    <h3 class="erp-form-title">{% if edit_record %}Edit Request {{ edit_record.request_number }}{% else %}New Petty Cash Request{% endif %}</h3>
+    {% if not edit_record %}<p class="workflow-hint">Next number: <strong>{{ next_request_number }}</strong></p>{% endif %}
+    <form method="post" class="erp-form-grid" data-petty-cash-form>
+      {% if edit_record %}<input type="hidden" name="request_id" value="{{ edit_record.id }}">{% endif %}
+      <div class="erp-field"><input name="request_date" type="date" placeholder=" " required value="{{ edit_record.request_date if edit_record else '' }}"><label>Request Date</label></div>
+      <div class="erp-field">
+        <select id="pc_project_code" name="project_code_select">
+          <option value="">Project ID</option>
+          {% for p in projects %}
+          <option value="{{ p.id }}" data-name="{{ p.project_name }}"
+            {% if edit_record and edit_record.project_id|string == p.id|string %}selected{% endif %}>{{ p.project_code or p.id }}</option>
+          {% endfor %}
+        </select>
+        <label>Project ID</label>
+      </div>
+      <div class="erp-field span-2">
+        <select name="project_id" id="pc_project_name">
+          <option value="">Select project</option>
+          {% for p in projects %}
+          <option value="{{ p.id }}" data-code="{{ p.project_code or p.id }}"
+            {% if edit_record and edit_record.project_id|string == p.id|string %}selected{% endif %}>{{ p.project_name }}</option>
+          {% endfor %}
+        </select>
+        <label>Project Name</label>
+      </div>
+      <div class="erp-field">
+        <select name="staff_name" id="pc_staff_name">
+          <option value="">Select staff</option>
+          {% for s in staff_list %}
+          <option value="{{ s.staff_name }}" data-id="{{ s.id }}" data-code="{{ s.employee_code or '' }}" data-dept="{{ s.department or '' }}"
+            {% if edit_record and edit_record.staff_id and edit_record.staff_id|string == s.id|string %}selected{% endif %}>{{ s.staff_name }}</option>
+          {% endfor %}
+        </select>
+        <label>Staff Name</label>
+      </div>
+      <div class="erp-field">
+        <select id="pc_employee_code">
+          <option value="">Employee ID</option>
+          {% for s in staff_list %}
+          <option value="{{ s.id }}" data-name="{{ s.staff_name }}" data-code="{{ s.employee_code or '' }}" data-dept="{{ s.department or '' }}"
+            {% if edit_record and edit_record.staff_id and edit_record.staff_id|string == s.id|string %}selected{% endif %}>{{ s.employee_code or s.id }}</option>
+          {% endfor %}
+        </select>
+        <label>Employee ID</label>
+      </div>
+      <input type="hidden" name="staff_id" id="pc_staff_id" value="{{ edit_record.staff_id if edit_record else '' }}">
+      <input type="hidden" name="employee_code" id="pc_employee_code_hidden" value="{{ edit_record.employee_code if edit_record else '' }}">
+      <div class="erp-field">
+        <select name="department" id="pc_department">
+          <option value="">Department</option>
+          {% for d in departments %}
+          <option {% if edit_record and edit_record.department == d.department_name %}selected{% endif %}>{{ d.department_name }}</option>
+          {% endfor %}
+          {% if edit_record and edit_record.department %}
+          {% set dept_names = departments|map(attribute='department_name')|list if departments else [] %}
+          {% if edit_record.department not in dept_names %}
+          <option selected>{{ edit_record.department }}</option>
+          {% endif %}
+          {% endif %}
+        </select>
+        <label>Department</label>
+      </div>
+      <div class="erp-field span-2"><input name="purpose" placeholder=" " required value="{{ edit_record.purpose if edit_record else '' }}"><label>Purpose</label></div>
+      <div class="erp-field span-2"><textarea name="description" placeholder=" ">{{ edit_record.description if edit_record else '' }}</textarea><label>Description</label></div>
+      <div class="erp-field"><input name="required_amount" type="number" step="0.01" placeholder=" " required value="{{ edit_record.required_amount if edit_record else '' }}"><label>Required Amount</label></div>
+      <div class="erp-field"><select name="priority"><option {% if not edit_record or edit_record.priority == 'Normal' %}selected{% endif %}>Normal</option><option {% if edit_record and edit_record.priority == 'Urgent' %}selected{% endif %}>Urgent</option></select><label>Priority</label></div>
+      <div class="erp-field span-2"><textarea name="remarks" placeholder=" ">{{ edit_record.remarks if edit_record else '' }}</textarea><label>Remarks</label></div>
+      <div class="erp-form-actions">
+        <button type="submit" name="form_action" value="{% if edit_record %}save_request{% else %}save_draft{% endif %}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-floppy-disk"></i> Save Draft</button>
+        <button type="submit" name="form_action" value="submit_request" class="erp-btn erp-btn-primary"><i class="fa-solid fa-paper-plane"></i> Submit Request</button>
+        {% if edit_record %}
+        <a href="{{ url_for('petty_cash', view=edit_record.id) }}" class="erp-btn erp-btn-ghost">Cancel</a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+  {% endif %}
 
   <div class="erp-table-panel" data-erp-table>
-    <div class="erp-table-toolbar"><h3 class="erp-table-title">Petty Cash Records</h3></div>
+    <div class="erp-table-toolbar">
+      <h3 class="erp-table-title">Petty Cash Requests</h3>
+      <form method="get" class="erp-table-controls" style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+        <div class="erp-table-search"><i class="fa-solid fa-magnifying-glass"></i><input type="search" name="q" value="{{ filter_q }}" placeholder="Search request, staff, purpose..."></div>
+        <select name="status">
+          <option value="">All statuses</option>
+          {% for st in petty_cash_statuses %}
+          <option value="{{ st }}" {% if filter_status == st %}selected{% endif %}>{{ st }}</option>
+          {% endfor %}
+        </select>
+        <select name="project_id">
+          <option value="">All projects</option>
+          {% for p in projects %}
+          <option value="{{ p.id }}" {% if filter_project|string == p.id|string %}selected{% endif %}>{{ p.project_name }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Filter</button>
+        <a href="{{ url_for('petty_cash') }}" class="erp-btn erp-btn-ghost erp-btn-sm">Clear</a>
+      </form>
+    </div>
     <div class="erp-table-scroll">
       <table class="erp-table erp-table-module">
-        <thead><tr><th>#</th><th>Date</th><th>Project</th><th>Type</th><th>Amount</th><th>By</th><th>Status</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Request #</th><th>Date</th><th>Project</th><th>Staff</th><th>Purpose</th><th>Amount</th><th>Priority</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody>
           {% for row in rows %}
           <tr>
-            <td>{{ row.id }}</td>
-            <td>{{ row.expense_date }}</td>
-            <td>{{ row.project_name or '—' }}</td>
-            <td>{{ row.expense_type }}</td>
-            <td>{{ row.amount }}</td>
-            <td>{{ row.created_by }}</td>
-            <td>{{ role_status_badge(row.approval_status, 'maker') }}</td>
-            <td>{{ maker_row_actions('petty_cash', 'petty_cash', row.id, row.approval_status) }}</td>
+            <td>{{ row.request_number or row.id }}</td>
+            <td>{{ row.request_date }}</td>
+            <td>{{ row.project_code or '—' }} — {{ row.project_name or '—' }}</td>
+            <td>{{ row.staff_name or '—' }}</td>
+            <td>{{ row.purpose }}</td>
+            <td>₹{{ '%.2f'|format(row.required_amount or 0) }}</td>
+            <td>{{ row.priority or 'Normal' }}</td>
+            <td><span class="approval-badge">{{ row.status }}</span></td>
+            <td>
+              <div class="workflow-row-actions">
+                <a href="{{ url_for('petty_cash', view=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">View</a>
+                {% if row.status in ['Draft', 'Rejected'] or (row.status == 'Submitted' and row.approval_status == 'Pending Checker') %}
+                <a href="{{ url_for('petty_cash', edit=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Edit</a>
+                <form method="post" style="display:inline;" onsubmit="return confirm('Delete this request?');">
+                  <input type="hidden" name="form_action" value="delete_request">
+                  <input type="hidden" name="request_id" value="{{ row.id }}">
+                  <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Delete</button>
+                </form>
+                {% endif %}
+              </div>
+            </td>
           </tr>
           {% else %}
-          <tr><td colspan="8">No petty cash records yet.</td></tr>
+          <tr><td colspan="9">No petty cash requests yet. <a href="{{ url_for('petty_cash', new=1) }}#new-request">Create one</a>.</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -84,4 +394,5 @@
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/workflow.js') }}"></script>
+<script src="{{ url_for('static', filename='js/petty-cash-form.js') }}"></script>
 {% endblock %}

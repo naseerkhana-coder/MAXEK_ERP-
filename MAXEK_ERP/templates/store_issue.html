@@ -1,0 +1,142 @@
+{% extends 'base_maxek.html' %}
+{% from 'macros/erp_ui.html' import role_status_badge, maker_row_actions, rejection_notice, workflow_modals, transaction_view_tabs %}
+{% set page_title = 'Store Issue' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('store') ~ '">Store</a> &gt; Store Issue' %}
+{% block page_actions %}
+<a href="{{ url_for('store_issue', new=1) }}#issue-form" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> New Issue</a>
+{% endblock %}
+{% block content %}
+<div class="erp-validation" style="margin-bottom:1rem;">
+  Stock is validated against available balance when saving. Stock posts to ledger on final approval.
+</div>
+
+{% if view_record %}
+<div class="erp-form-card" style="margin-bottom:1rem;">
+  {% call transaction_view_tabs(view_record, history, can_reopen, approval_id) %}
+  <h3 class="erp-form-title">Store Issue #{{ view_record.id }}</h3>
+  <p><strong>Date:</strong> {{ view_record.issue_date or '—' }} | <strong>Project:</strong> {{ view_record.project_name or '—' }}</p>
+  <p><strong>Material:</strong> {{ view_record.material_code or '—' }} — {{ view_record.material_name or view_record.item_name or '—' }}</p>
+  <p><strong>Quantity:</strong> {{ view_record.quantity }} {{ view_record.unit or '' }} | <strong>Issued To:</strong> {{ view_record.issued_to or '—' }}</p>
+  <p><strong>Status:</strong> {{ role_status_badge(view_record.approval_status, 'maker') }}
+    {% if view_record.stock_posted %}<span class="erp-badge">Stock Posted</span>{% endif %}
+  </p>
+  {{ rejection_notice(history, view_record.approval_status) }}
+  {% endcall %}
+</div>
+{% endif %}
+
+{% if show_form %}
+<div class="erp-form-card" id="issue-form" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">{% if edit_record %}Edit Issue #{{ edit_record.id }}{% else %}New Store Issue{% endif %}</h3>
+  <form method="post" id="store-issue-form">
+    {% if edit_record %}<input type="hidden" name="record_id" value="{{ edit_record.id }}">{% endif %}
+    <div class="erp-form-grid">
+      <div class="erp-field">
+        <select name="project_id" id="issue_project_id">
+          <option value="">—</option>
+          {% for p in projects %}
+          <option value="{{ p.id }}" {% if edit_record and edit_record.project_id == p.id %}selected{% endif %}>{{ p.project_name }}</option>
+          {% endfor %}
+        </select>
+        <label>Project</label>
+      </div>
+      <div class="erp-field">
+        <input type="date" name="issue_date" required value="{{ edit_record.issue_date if edit_record else default_date }}">
+        <label>Issue Date *</label>
+      </div>
+      <div class="erp-field">
+        <select name="material_id" id="issue_material_id" required data-stock-check>
+          <option value="">Select Material</option>
+          {% for m in materials %}
+          <option value="{{ m.id }}" data-unit="{{ m.unit }}"
+            {% if edit_record and edit_record.material_id == m.id %}selected{% endif %}>{{ m.code }} — {{ m.name }}</option>
+          {% endfor %}
+        </select>
+        <label>Material *</label>
+      </div>
+      <div class="erp-field">
+        <input type="number" step="0.01" name="quantity" id="issue_quantity" required value="{{ edit_record.quantity if edit_record else '' }}">
+        <label>Quantity *</label>
+      </div>
+      <div class="erp-field">
+        <input name="unit" id="issue_unit" placeholder=" " value="{{ edit_record.unit if edit_record else '' }}">
+        <label>Unit</label>
+      </div>
+      <div class="erp-field">
+        <input name="issued_to" required placeholder=" " value="{{ edit_record.issued_to if edit_record else '' }}">
+        <label>Issued To *</label>
+      </div>
+      <div class="erp-field span-2">
+        <p id="stock-balance-hint" class="erp-hint" style="margin:0;padding:0.5rem 0;">Available stock: —</p>
+      </div>
+      <div class="erp-field span-2">
+        <textarea name="remarks" placeholder=" ">{{ edit_record.remarks if edit_record else '' }}</textarea>
+        <label>Remarks</label>
+      </div>
+    </div>
+    <div style="margin-top:1rem;display:flex;gap:0.75rem;">
+      <button type="submit" class="erp-btn erp-btn-primary">Save</button>
+      <a href="{{ url_for('store_issue') }}" class="erp-btn erp-btn-ghost">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endif %}
+
+<div class="erp-table-panel" data-erp-table>
+  <div class="erp-table-toolbar"><h3 class="erp-table-title">Issue Register</h3></div>
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead><tr><th>Date</th><th>Project</th><th>Material</th><th>Qty</th><th>Issued To</th><th>Status</th><th>Actions</th></tr></thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>{{ row.issue_date or '—' }}</td>
+          <td>{{ row.project_name or '—' }}</td>
+          <td>{{ row.material_code or row.item_name or '—' }}</td>
+          <td>{{ row.quantity }} {{ row.unit or '' }}</td>
+          <td>{{ row.issued_to or '—' }}</td>
+          <td>{{ role_status_badge(row.approval_status, 'maker') }}</td>
+          <td>
+            <a href="{{ url_for('store_issue', view=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">View</a>
+            {% if row.approval_status in ['Pending Checker', 'Rejected by Checker', 'Rejected by Approver'] and not row.stock_posted %}
+            <a href="{{ url_for('store_issue', edit=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Edit</a>
+            {% endif %}
+            {{ maker_row_actions('store_issue', 'store_issues', row.id, row.approval_status, 'store_issue') }}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7">No issues yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{ workflow_modals() }}
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  var matSel = document.getElementById('issue_material_id');
+  var projSel = document.getElementById('issue_project_id');
+  var hint = document.getElementById('stock-balance-hint');
+  var unitInput = document.getElementById('issue_unit');
+  if (!matSel || !hint) return;
+  function refreshBalance() {
+    var mid = matSel.value;
+    var pid = projSel ? projSel.value : '';
+    if (!mid) { hint.textContent = 'Available stock: —'; return; }
+    var opt = matSel.options[matSel.selectedIndex];
+    if (unitInput && opt && opt.getAttribute('data-unit') && !unitInput.value) {
+      unitInput.value = opt.getAttribute('data-unit');
+    }
+    fetch('{{ url_for("store_stock_balance_api") }}?material_id=' + encodeURIComponent(mid) + '&project_id=' + encodeURIComponent(pid))
+      .then(function (r) { return r.json(); })
+      .then(function (d) { hint.textContent = 'Available stock: ' + (d.balance != null ? Number(d.balance).toFixed(2) : '—'); })
+      .catch(function () { hint.textContent = 'Available stock: —'; });
+  }
+  matSel.addEventListener('change', refreshBalance);
+  if (projSel) projSel.addEventListener('change', refreshBalance);
+  refreshBalance();
+})();
+</script>
+{% endblock %}

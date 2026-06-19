@@ -1,0 +1,44 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Precast Yard' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('plant_dashboard') ~ '">Plant</a> &gt; Precast Yard' %}
+{% block page_actions %}
+<a href="{{ url_for('precast_yard_yards', new=1) }}#yard-form" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> New Yard</a>
+<a href="{{ url_for('plant_precast_production', new=1) }}#record-form" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-border-all"></i> Production</a>
+{% endblock %}
+{% block content %}
+
+<div class="erp-summary-grid erp-summary-grid--compact" style="margin: 0.75rem 0 1rem;">
+  <div class="erp-stat-card"><span>Total Yards</span><strong>{{ stats.total_yards }}</strong></div>
+  <div class="erp-stat-card"><span>Active Yards</span><strong>{{ stats.active_yards }}</strong></div>
+  <div class="erp-stat-card"><span>Today Production</span><strong>{{ '%.0f'|format(stats.today_production_qty) }} <small>Nos</small></strong></div>
+  <div class="erp-stat-card"><span>Today Dispatch</span><strong>{{ '%.0f'|format(stats.today_dispatch_qty) }} <small>Nos</small></strong></div>
+  <div class="erp-stat-card"><span>Yard Stock</span><strong>{{ '%.0f'|format(stats.stock_units) }} <small>Nos</small></strong></div>
+  <div class="erp-stat-card"><span>Ready Units</span><strong>{{ stats.ready_count }}</strong></div>
+</div>
+
+<div class="erp-form-card erp-form-card--compact">
+  <h3 class="erp-form-title">Registered Precast Yards</h3>
+  <div class="erp-table-scroll">
+    <table class="erp-table erp-table-compact">
+      <thead>
+        <tr><th>Code</th><th>Yard Name</th><th>Location</th><th>Linked Plant</th><th>In-charge</th><th>Status</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for row in yards %}
+        <tr>
+          <td>{{ row.yard_code }}</td>
+          <td>{{ row.yard_name }}</td>
+          <td>{{ row.location or '—' }}</td>
+          <td>{% if row.plant_name %}{{ row.plant_name }}{% if row.linked_plant_code %} ({{ row.linked_plant_code }}){% endif %}{% else %}—{% endif %}</td>
+          <td>{{ row.incharge or '—' }}</td>
+          <td>{{ row.status or '—' }}</td>
+          <td><a href="{{ url_for('precast_yard_yards', edit=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Edit</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7">No precast yards registered. <a href="{{ url_for('precast_yard_yards', new=1) }}">Add the first yard</a>.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

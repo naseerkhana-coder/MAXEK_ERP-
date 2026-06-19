@@ -1,0 +1,40 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Fleet Management' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('office_admin') ~ '">Office</a> &gt; Fleet' %}
+{% block content %}
+<div class="erp-summary-grid" style="margin-bottom: 1.5rem;">
+  <div class="erp-stat-card"><span>Active Vehicles</span><strong>{{ stats.active_vehicles }}</strong></div>
+  <div class="erp-stat-card"><span>Total Vehicles</span><strong>{{ stats.total_vehicles }}</strong></div>
+  <div class="erp-stat-card"><span>Running Logs</span><strong>{{ stats.running_logs }}</strong></div>
+  <div class="erp-stat-card"><span>Diesel Stock (L)</span><strong>{{ '%.2f'|format(stats.diesel_stock_liters) }}</strong></div>
+  <div class="erp-stat-card"><span>Diesel Purchases</span><strong>{{ stats.diesel_purchases }}</strong></div>
+  <div class="erp-stat-card"><span>Diesel Issues</span><strong>{{ stats.diesel_issues }}</strong></div>
+  <div class="erp-stat-card"><span>Doc Expiry Alerts</span><strong style="color:{% if stats.expiry_alerts %}#b45309{% else %}inherit{% endif %}">{{ stats.expiry_alerts }}</strong></div>
+</div>
+
+{% if stats.expiring_overdue or stats.expiry_alerts %}
+<div class="erp-validation" style="margin-bottom: 1rem;">
+  <strong>Vehicle document expiry</strong>
+  {% if stats.expiring_overdue|length %}
+  <span class="approval-badge" style="background:#fee2e2;color:#991b1b;">{{ stats.expiring_overdue|length }} overdue</span>
+  {% endif %}
+  {% for days in stats.alert_days %}
+  {% if stats.expiring[days|string]|default([])|length %}
+  <span>{{ stats.expiring[days|string]|length }} within {{ days }} days</span>{% if not loop.last %} · {% endif %}
+  {% endif %}
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="erp-summary-grid" style="grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem;">
+  {% for mod in modules %}
+  <a href="{{ url_for(mod.endpoint) }}" class="erp-form-card" style="text-decoration:none;color:inherit;display:block;padding:1.25rem;">
+    <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.5rem;">
+      <i class="fa-solid {{ mod.icon }}" style="font-size:1.5rem;color:var(--erp-primary,#2563eb);"></i>
+      <h3 style="margin:0;font-size:1rem;">{{ mod.label }}</h3>
+    </div>
+    <p style="margin:0;font-size:0.85rem;color:#64748b;">{{ mod.description }}</p>
+  </a>
+  {% endfor %}
+</div>
+{% endblock %}

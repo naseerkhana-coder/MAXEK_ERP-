@@ -1,8 +1,24 @@
 """MAXEK ERP – Standard 3-Step Approval Workflow (Maker → Checker → Approver)."""
 
-from datetime import datetime
+import os
+from datetime import datetime, timedelta
 
 WORKFLOW_STAGES = ("maker", "checker", "approver")
+
+# Per-module workflow routing (configured in Settings → Workflow)
+WORKFLOW_MODES = (
+    "maker_only",
+    "maker_checker",
+    "full",
+    "checker_approver_only",
+)
+WORKFLOW_MODE_LABELS = {
+    "maker_only": "Maker only (auto-approve, no checker/approver)",
+    "maker_checker": "Maker + Checker (skip approver)",
+    "full": "Full — Maker → Checker → Approver",
+    "checker_approver_only": "Checker + Approver (strict, no skip)",
+}
+DEFAULT_WORKFLOW_MODE = "full"
 
 # Internal workflow_status keys
 STATUS_PENDING_CHECKER = "pending_checker"
@@ -39,6 +55,12 @@ MAKER_EDITABLE = {
     RECORD_REJECTED_APPROVER,
 }
 
+MAKER_DELETABLE = {
+    RECORD_PENDING_CHECKER,
+    RECORD_REJECTED_CHECKER,
+    RECORD_REJECTED_APPROVER,
+}
+
 DEFAULT_MODULES = [
     {
         "module_id": "petty_cash",
@@ -65,6 +87,14 @@ DEFAULT_MODULES = [
         "approver": "Managing Director",
     },
     {
+        "module_id": "purchase_order",
+        "module_name": "Purchase Order",
+        "workflow_role_mapping": "Purchase Manager → Store Manager → Managing Director",
+        "maker": "Purchase Manager",
+        "checker": "Store Manager",
+        "approver": "Managing Director",
+    },
+    {
         "module_id": "payroll",
         "module_name": "Payroll",
         "workflow_role_mapping": "HR Staff → Accounts Manager → Managing Director",
@@ -78,6 +108,14 @@ DEFAULT_MODULES = [
         "workflow_role_mapping": "Supervisor → Project Manager → Managing Director",
         "maker": "Supervisor",
         "checker": "Project Manager",
+        "approver": "Managing Director",
+    },
+    {
+        "module_id": "monthly_staff_attendance",
+        "module_name": "Monthly Staff Attendance",
+        "workflow_role_mapping": "HR Staff → Accounts Manager → Managing Director",
+        "maker": "HR Staff",
+        "checker": "Accounts Manager",
         "approver": "Managing Director",
     },
     {
@@ -113,11 +151,27 @@ DEFAULT_MODULES = [
         "approver": "Managing Director",
     },
     {
+        "module_id": "project_creation",
+        "module_name": "Project Creation",
+        "workflow_role_mapping": "Project Engineer → Project Manager → Managing Director",
+        "maker": "Project Engineer",
+        "checker": "Project Manager",
+        "approver": "Managing Director",
+    },
+    {
         "module_id": "dpr",
         "module_name": "DPR Entry",
         "workflow_role_mapping": "Site Engineer → Project Manager → Managing Director",
         "maker": "Site Engineer",
         "checker": "Project Manager",
+        "approver": "Managing Director",
+    },
+    {
+        "module_id": "client_billing",
+        "module_name": "Client Billing",
+        "workflow_role_mapping": "Project Engineer → Accounts Manager → Managing Director",
+        "maker": "Project Engineer",
+        "checker": "Accounts Manager",
         "approver": "Managing Director",
     },
     {
@@ -139,6 +193,30 @@ DEFAULT_MODULES = [
     {
         "module_id": "account_payment",
         "module_name": "Accounts Payments",
+        "workflow_role_mapping": "Accounts Staff → Accounts Manager → Managing Director",
+        "maker": "Accounts Staff",
+        "checker": "Accounts Manager",
+        "approver": "Managing Director",
+    },
+    {
+        "module_id": "account_expense",
+        "module_name": "Expense / Purchase Entry",
+        "workflow_role_mapping": "Accounts Staff → Accounts Manager → Managing Director",
+        "maker": "Accounts Staff",
+        "checker": "Accounts Manager",
+        "approver": "Managing Director",
+    },
+    {
+        "module_id": "payment_voucher",
+        "module_name": "Payment Voucher",
+        "workflow_role_mapping": "Accounts Staff → Accounts Manager → Managing Director",
+        "maker": "Accounts Staff",
+        "checker": "Accounts Manager",
+        "approver": "Managing Director",
+    },
+    {
+        "module_id": "receipt_voucher",
+        "module_name": "Receipt Voucher",
         "workflow_role_mapping": "Accounts Staff → Accounts Manager → Managing Director",
         "maker": "Accounts Staff",
         "checker": "Accounts Manager",
@@ -188,6 +266,7 @@ DEFAULT_MODULES = [
 
 ALLOWED_RECORD_TABLES = {
     "petty_cash",
+    "petty_cash_requests",
     "material_requests",
     "purchase_requests",
     "payroll_records",
@@ -197,14 +276,28 @@ ALLOWED_RECORD_TABLES = {
     "subcontract_requests",
     "boq_items",
     "boq_master",
+    "projects",
     "dpr_entries",
+    "dpr_measurements",
     "manager_tasks",
     "account_transactions",
+    "account_expenses",
+    "account_expense_lines",
+    "payment_vouchers",
+    "receipt_vouchers",
+    "chart_of_accounts",
     "leave_requests",
     "salary",
+    "payroll_runs",
+    "payroll_lines",
     "attendance",
+    "staff_monthly_attendance",
     "store_issues",
     "store_receipts",
+    "purchase_orders",
+    "materials",
+    "vendors",
+    "client_bills",
 }
 
 
@@ -244,6 +337,182 @@ def get_workflow_for_module(db, module_id):
     return dict(row) if row else None
 
 
+def get_module_workflow_mode(db, module_id):
+    wf = get_workflow_for_module(db, module_id)
+    if not wf:
+        return DEFAULT_WORKFLOW_MODE
+    mode = (wf.get("workflow_mode") or DEFAULT_WORKFLOW_MODE).strip()
+    return mode if mode in WORKFLOW_MODES else DEFAULT_WORKFLOW_MODE
+
+
+def workflow_mode_requires_checker(mode):
+    return mode in ("maker_checker", "full", "checker_approver_only")
+
+
+def workflow_mode_requires_approver(mode):
+    return mode in ("full", "checker_approver_only")
+
+
+def initial_workflow_after_save(db, module_id):
+    """Return (workflow_status, current_stage, record_status) after maker save."""
+    mode = get_module_workflow_mode(db, module_id)
+    if mode == "maker_only":
+        return STATUS_APPROVED, "completed", RECORD_APPROVED
+    return STATUS_PENDING_CHECKER, "checker", RECORD_PENDING_CHECKER
+
+
+def format_reference_no(module_id, record_id):
+    code = (module_id or "WF").upper().replace("_", "")[:6]
+    return f"{code}-{record_id}"
+
+
+def is_pending_for_role(workflow_status, role_type):
+    if role_type == "checker":
+        return workflow_status == STATUS_PENDING_CHECKER
+    if role_type == "approver":
+        return workflow_status == STATUS_PENDING_APPROVAL
+    if role_type == "maker":
+        return workflow_status in (
+            STATUS_PENDING_CHECKER,
+            STATUS_PENDING_APPROVAL,
+            STATUS_REJECTED_CHECKER,
+            STATUS_REJECTED_APPROVER,
+        )
+    return False
+
+
+def summarize_approval_item(db, item, role_type="checker", include_history=False):
+    """Lightweight row for approvals list — no inline history unless requested."""
+    row = dict(item)
+    table = row.get("record_table")
+    if table in ALLOWED_RECORD_TABLES:
+        rec = db.execute(
+            f"SELECT approval_status FROM {table} WHERE id=?",
+            (row["record_id"],),
+        ).fetchone()
+        row["record_status"] = rec["approval_status"] if rec else WORKFLOW_STATUS.get(
+            row.get("workflow_status"), row.get("workflow_status")
+        )
+    else:
+        row["record_status"] = WORKFLOW_STATUS.get(
+            row.get("workflow_status"), row.get("workflow_status")
+        )
+    row["reference_no"] = format_reference_no(row.get("module_id"), row["record_id"])
+    row["maker_name"] = row.get("created_by") or "—"
+    row["is_pending"] = is_pending_for_role(row.get("workflow_status"), role_type)
+    if include_history:
+        row["history"] = get_approval_history(
+            db, row.get("module_id"), row["record_id"], row.get("record_table")
+        )
+    return row
+
+
+def get_approval_request_by_id(db, approval_id):
+    row = db.execute(
+        "SELECT ar.*, wm.module_name, "
+        "dm.designation_name AS maker_designation, "
+        "dc.designation_name AS checker_designation, "
+        "da.designation_name AS approver_designation "
+        "FROM approval_requests ar "
+        "JOIN workflow_master wm ON ar.module_id = wm.module_id "
+        "LEFT JOIN designations dm ON wm.maker_designation_id = dm.id "
+        "LEFT JOIN designations dc ON wm.checker_designation_id = dc.id "
+        "LEFT JOIN designations da ON wm.approver_designation_id = da.id "
+        "WHERE ar.id=?",
+        (approval_id,),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def get_user_workflow_preview(db, user_id, is_admin=False, limit=5):
+    """User-scoped pending items for dashboard (minimal fields, no sensitive detail)."""
+    designation_id = get_user_designation_id(db, user_id)
+    rows = []
+    if is_admin:
+        raw = db.execute(
+            "SELECT ar.*, wm.module_name FROM approval_requests ar "
+            "JOIN workflow_master wm ON ar.module_id = wm.module_id "
+            "WHERE ar.workflow_status IN (?, ?) "
+            f"ORDER BY {_workflow_queue_order_clause()} LIMIT ?",
+            (STATUS_PENDING_CHECKER, STATUS_PENDING_APPROVAL, limit),
+        ).fetchall()
+        rows = [dict(r) for r in raw]
+    elif designation_id:
+        wf_rows = db.execute(
+            "SELECT module_id, checker_designation_id, approver_designation_id "
+            "FROM workflow_master WHERE status='Active'"
+        ).fetchall()
+        checker_mods = [
+            w["module_id"] for w in wf_rows if w["checker_designation_id"] == designation_id
+        ]
+        approver_mods = [
+            w["module_id"] for w in wf_rows if w["approver_designation_id"] == designation_id
+        ]
+        module_ids = list(dict.fromkeys(checker_mods + approver_mods))
+        if module_ids:
+            ph = ",".join("?" * len(module_ids))
+            raw = db.execute(
+                f"SELECT ar.*, wm.module_name FROM approval_requests ar "
+                f"JOIN workflow_master wm ON ar.module_id = wm.module_id "
+                f"WHERE ar.workflow_status IN (?, ?) AND ar.module_id IN ({ph}) "
+                f"ORDER BY {_workflow_queue_order_clause()} LIMIT ?",
+                [STATUS_PENDING_CHECKER, STATUS_PENDING_APPROVAL] + module_ids + [limit],
+            ).fetchall()
+            rows = [dict(r) for r in raw]
+    preview = []
+    for item in rows:
+        preview.append({
+            "reference_no": format_reference_no(item.get("module_id"), item["record_id"]),
+            "module_name": item.get("module_name") or item.get("module_id"),
+            "date": (item.get("created_at") or "—")[:10],
+            "maker_name": item.get("created_by") or "—",
+            "status_label": display_status_from_workflow(
+                item.get("workflow_status"), "maker"
+            ),
+            "approval_id": item["id"],
+        })
+    return preview
+
+
+def count_user_pending_workflows(db, user_id, is_admin=False):
+    """Total actionable pending count for current user (dashboard badge)."""
+    designation_id = get_user_designation_id(db, user_id)
+    if is_admin:
+        return db.execute(
+            "SELECT COUNT(*) AS c FROM approval_requests "
+            "WHERE workflow_status IN (?, ?)",
+            (STATUS_PENDING_CHECKER, STATUS_PENDING_APPROVAL),
+        ).fetchone()["c"]
+    if not designation_id:
+        return 0
+    wf_rows = db.execute(
+        "SELECT module_id, checker_designation_id, approver_designation_id "
+        "FROM workflow_master WHERE status='Active'"
+    ).fetchall()
+    checker_mods = [
+        w["module_id"] for w in wf_rows if w["checker_designation_id"] == designation_id
+    ]
+    approver_mods = [
+        w["module_id"] for w in wf_rows if w["approver_designation_id"] == designation_id
+    ]
+    total = 0
+    if checker_mods:
+        ph = ",".join("?" * len(checker_mods))
+        total += db.execute(
+            f"SELECT COUNT(*) AS c FROM approval_requests "
+            f"WHERE workflow_status=? AND module_id IN ({ph})",
+            [STATUS_PENDING_CHECKER] + checker_mods,
+        ).fetchone()["c"]
+    if approver_mods:
+        ph = ",".join("?" * len(approver_mods))
+        total += db.execute(
+            f"SELECT COUNT(*) AS c FROM approval_requests "
+            f"WHERE workflow_status=? AND module_id IN ({ph})",
+            [STATUS_PENDING_APPROVAL] + approver_mods,
+        ).fetchone()["c"]
+    return total
+
+
 def user_matches_stage(db, user_id, module_id, stage, is_admin=False):
     if is_admin:
         return True
@@ -263,7 +532,7 @@ def can_maker_edit(approval_status):
 
 
 def get_edit_role_for_user(db, user_id, module_id, approval_status, is_admin=False):
-    """Who may edit: maker (rejected), checker (pending checker), approver (pending approval)."""
+    """Who may edit: maker (pending/rejected), checker (pending checker), approver (pending approval)."""
     status = approval_status or RECORD_PENDING_CHECKER
     if status == RECORD_APPROVED:
         return None
@@ -272,6 +541,8 @@ def get_edit_role_for_user(db, user_id, module_id, approval_status, is_admin=Fal
             return "maker"
         return None
     if status == RECORD_PENDING_CHECKER:
+        if user_matches_stage(db, user_id, module_id, "maker", is_admin):
+            return "maker"
         if user_matches_stage(db, user_id, module_id, "checker", is_admin):
             return "checker"
         return None
@@ -280,6 +551,58 @@ def get_edit_role_for_user(db, user_id, module_id, approval_status, is_admin=Fal
             return "approver"
         return None
     return None
+
+
+def can_maker_delete(approval_status):
+    status = approval_status or RECORD_PENDING_CHECKER
+    return status in MAKER_DELETABLE
+
+
+def delete_workflow_record(db, table, record_id, module_id, user_id, is_admin=False):
+    if table not in ALLOWED_RECORD_TABLES:
+        return False, "Invalid record table."
+    try:
+        rid = int(record_id)
+    except (TypeError, ValueError):
+        return False, "Invalid record id."
+    row = db.execute(
+        f"SELECT approval_status FROM {table} WHERE id=?", (rid,)
+    ).fetchone()
+    if not row:
+        return False, "Record not found."
+    status = row["approval_status"] or RECORD_PENDING_CHECKER
+    if not is_admin:
+        if not can_maker_delete(status):
+            return False, "This record cannot be deleted after verification."
+        if not user_matches_stage(db, user_id, module_id, "maker", is_admin):
+            return False, "You are not authorized to delete this record."
+    approval = db.execute(
+        "SELECT id FROM approval_requests WHERE record_table=? AND record_id=?",
+        (table, rid),
+    ).fetchone()
+    if approval:
+        db.execute(
+            "DELETE FROM approval_audit WHERE approval_request_id=?",
+            (approval["id"],),
+        )
+        db.execute("DELETE FROM approval_requests WHERE id=?", (approval["id"],))
+    db.execute(
+        "DELETE FROM notifications WHERE record_table=? AND record_id=?",
+        (table, rid),
+    )
+    if table == "client_bills":
+        for child in (
+            "client_bill_attachments",
+            "client_bill_extra_lines",
+            "client_bill_lines",
+            "client_bill_deductions",
+        ):
+            try:
+                db.execute(f"DELETE FROM {child} WHERE client_bill_id=?", (rid,))
+            except Exception:
+                pass
+    db.execute(f"DELETE FROM {table} WHERE id=?", (rid,))
+    return True, "Record deleted."
 
 
 def can_user_edit(db, user_id, module_id, approval_status, is_admin=False):
@@ -364,7 +687,9 @@ def display_status_from_workflow(workflow_status, role="maker"):
 
 
 def create_approval_request(db, module_id, record_id, record_table, created_by, user_id=None):
-    """Maker SAVE — status becomes Pending Checker."""
+    """Maker SAVE — route to next stage per module workflow_mode."""
+    wf_status, stage, record_status = initial_workflow_after_save(db, module_id)
+    mode = get_module_workflow_mode(db, module_id)
     db.execute(
         "INSERT INTO approval_requests("
         "module_id, record_id, record_table, current_stage, workflow_status, "
@@ -374,8 +699,8 @@ def create_approval_request(db, module_id, record_id, record_table, created_by, 
             module_id,
             record_id,
             record_table,
-            "checker",
-            STATUS_PENDING_CHECKER,
+            stage,
+            wf_status,
             user_id,
             created_by,
             _now(),
@@ -386,13 +711,35 @@ def create_approval_request(db, module_id, record_id, record_table, created_by, 
         "UPDATE approval_requests SET maker_action_at=? WHERE id=?",
         (_now(), approval_id),
     )
-    _notify_workflow(db, {"module_id": module_id, "record_id": record_id, "record_table": record_table, "created_by": created_by, "maker_user_id": user_id}, "submitted", user_id)
-    log_audit(db, approval_id, module_id, record_id, record_table, "created", user_id, "Saved — Pending Checker")
+    req = {
+        "module_id": module_id,
+        "record_id": record_id,
+        "record_table": record_table,
+        "created_by": created_by,
+        "maker_user_id": user_id,
+    }
+    _sync_record_status(db, req, record_status)
+    if wf_status == STATUS_APPROVED:
+        db.execute(
+            "UPDATE approval_requests SET approver_action_at=? WHERE id=?",
+            (_now(), approval_id),
+        )
+        log_audit(
+            db, approval_id, module_id, record_id, record_table,
+            "approved", user_id, f"Auto-approved ({WORKFLOW_MODE_LABELS.get(mode, mode)})",
+        )
+    else:
+        _notify_workflow(db, req, "submitted", user_id)
+        log_audit(
+            db, approval_id, module_id, record_id, record_table,
+            "created", user_id, "Saved — Pending Checker",
+        )
     return approval_id
 
 
 def resubmit_record(db, module_id, record_id, record_table, user_id=None):
-    """Re-SAVE after rejection — back to Pending Checker."""
+    """Re-SAVE after rejection — route per module workflow_mode."""
+    wf_status, stage, record_status = initial_workflow_after_save(db, module_id)
     req = db.execute(
         "SELECT id FROM approval_requests WHERE module_id=? AND record_id=? AND record_table=?",
         (module_id, record_id, record_table),
@@ -403,23 +750,35 @@ def resubmit_record(db, module_id, record_id, record_table, user_id=None):
             "rejection_reason=NULL, checker_user_id=NULL, approver_user_id=NULL, "
             "checker_action_at=NULL, approver_action_at=NULL, checker_comment=NULL, "
             "approver_comment=NULL, maker_action_at=? WHERE id=?",
-            (STATUS_PENDING_CHECKER, "checker", _now(), req["id"]),
+            (wf_status, stage, _now(), req["id"]),
         )
     else:
         create_approval_request(db, module_id, record_id, record_table, "", user_id)
+        return
     _sync_record_status(
-        db, {"record_table": record_table, "record_id": record_id}, RECORD_PENDING_CHECKER
+        db, {"record_table": record_table, "record_id": record_id}, record_status
     )
     req_row = db.execute(
         "SELECT * FROM approval_requests WHERE module_id=? AND record_id=? AND record_table=?",
         (module_id, record_id, record_table),
     ).fetchone()
     if req_row:
-        _notify_workflow(db, dict(req_row), "submitted", user_id)
-        log_audit(
-            db, dict(req_row)["id"], module_id, record_id, record_table,
-            "resubmitted", user_id, "Re-saved — Pending Checker",
-        )
+        req_row = dict(req_row)
+        if wf_status == STATUS_APPROVED:
+            db.execute(
+                "UPDATE approval_requests SET approver_action_at=? WHERE id=?",
+                (_now(), req_row["id"]),
+            )
+            log_audit(
+                db, req_row["id"], module_id, record_id, record_table,
+                "approved", user_id, "Re-saved — auto-approved",
+            )
+        else:
+            _notify_workflow(db, req_row, "submitted", user_id)
+            log_audit(
+                db, req_row["id"], module_id, record_id, record_table,
+                "resubmitted", user_id, "Re-saved — Pending Checker",
+            )
 
 
 def advance_approval(db, approval_id, user_id, action, comments="", is_admin=False):
@@ -473,15 +832,33 @@ def advance_approval(db, approval_id, user_id, action, comments="", is_admin=Fal
         if not user_matches_stage(db, user_id, module_id, "checker", is_admin):
             return False, "You are not authorized as Checker for this module."
         note = (comments or "").strip()
+        mode = get_module_workflow_mode(db, module_id)
+        if workflow_mode_requires_approver(mode):
+            db.execute(
+                "UPDATE approval_requests SET workflow_status=?, current_stage=?, "
+                "checker_user_id=?, checker_action_at=?, checker_comment=? WHERE id=?",
+                (STATUS_PENDING_APPROVAL, "approver", user_id, _now(), note or None, approval_id),
+            )
+            _sync_record_status(db, req, RECORD_PENDING_APPROVAL)
+            log_audit(db, approval_id, module_id, req["record_id"], req["record_table"], "verified", user_id, note or "—")
+            _notify_workflow(db, req, "verified", user_id)
+            return True, "Verified. Status: Pending Approval."
         db.execute(
             "UPDATE approval_requests SET workflow_status=?, current_stage=?, "
-            "checker_user_id=?, checker_action_at=?, checker_comment=? WHERE id=?",
-            (STATUS_PENDING_APPROVAL, "approver", user_id, _now(), note or None, approval_id),
+            "checker_user_id=?, checker_action_at=?, checker_comment=?, "
+            "approver_user_id=?, approver_action_at=? WHERE id=?",
+            (
+                STATUS_APPROVED, "completed", user_id, _now(), note or None,
+                user_id, _now(), approval_id,
+            ),
         )
-        _sync_record_status(db, req, RECORD_PENDING_APPROVAL)
-        log_audit(db, approval_id, module_id, req["record_id"], req["record_table"], "verified", user_id, note or "—")
-        _notify_workflow(db, req, "verified", user_id)
-        return True, "Verified. Status: Pending Approval."
+        _sync_record_status(db, req, RECORD_APPROVED)
+        log_audit(
+            db, approval_id, module_id, req["record_id"], req["record_table"],
+            "approved", user_id, note or "Verified — final approval (no approver step)",
+        )
+        _notify_workflow(db, req, "approved", user_id)
+        return True, "Verified and approved."
 
     if action == "approve" and status == STATUS_PENDING_APPROVAL:
         if not user_matches_stage(db, user_id, module_id, "approver", is_admin):
@@ -536,8 +913,69 @@ def _sync_record_status(db, req, status_label):
             f"UPDATE {table} SET approval_status=? WHERE id=?",
             (status_label, req["record_id"]),
         )
+        if table == "petty_cash_requests":
+            lifecycle = None
+            if status_label == RECORD_APPROVED:
+                lifecycle = "Approved"
+            elif status_label in (RECORD_REJECTED_CHECKER, RECORD_REJECTED_APPROVER):
+                lifecycle = "Rejected"
+            elif status_label in (RECORD_PENDING_CHECKER, RECORD_PENDING_APPROVAL):
+                lifecycle = "Submitted"
+            if lifecycle:
+                db.execute(
+                    "UPDATE petty_cash_requests SET status=? WHERE id=?",
+                    (lifecycle, req["record_id"]),
+                )
     except Exception:
         pass
+
+
+def _approval_list_order_clause(role_type):
+    """Pending/actionable items first; approved/completed history sinks to bottom."""
+    if role_type == "checker":
+        return (
+            "CASE ar.workflow_status "
+            f"WHEN '{STATUS_PENDING_CHECKER}' THEN 0 "
+            f"WHEN '{STATUS_PENDING_APPROVAL}' THEN 1 "
+            f"WHEN '{STATUS_REJECTED_CHECKER}' THEN 2 "
+            f"WHEN '{STATUS_APPROVED}' THEN 3 "
+            "ELSE 4 END ASC, "
+            "COALESCE(ar.checker_action_at, ar.approver_action_at, ar.created_at) DESC"
+        )
+    if role_type == "approver":
+        return (
+            "CASE ar.workflow_status "
+            f"WHEN '{STATUS_PENDING_APPROVAL}' THEN 0 "
+            f"WHEN '{STATUS_REJECTED_APPROVER}' THEN 1 "
+            f"WHEN '{STATUS_APPROVED}' THEN 2 "
+            "ELSE 3 END ASC, "
+            "COALESCE(ar.approver_action_at, ar.checker_action_at, ar.created_at) DESC"
+        )
+    # maker — pending workflow first, approved last
+    return (
+        "CASE ar.workflow_status "
+        f"WHEN '{STATUS_PENDING_CHECKER}' THEN 0 "
+        f"WHEN '{STATUS_PENDING_APPROVAL}' THEN 1 "
+        f"WHEN '{STATUS_REJECTED_CHECKER}' THEN 2 "
+        f"WHEN '{STATUS_REJECTED_APPROVER}' THEN 3 "
+        f"WHEN '{STATUS_APPROVED}' THEN 4 "
+        "ELSE 5 END ASC, "
+        "ar.created_at DESC"
+    )
+
+
+def _workflow_queue_order_clause():
+    """Dashboard workflow queue: open/pending stages before completed items."""
+    return (
+        "CASE ar.workflow_status "
+        f"WHEN '{STATUS_PENDING_CHECKER}' THEN 0 "
+        f"WHEN '{STATUS_PENDING_APPROVAL}' THEN 1 "
+        f"WHEN '{STATUS_REJECTED_CHECKER}' THEN 2 "
+        f"WHEN '{STATUS_REJECTED_APPROVER}' THEN 3 "
+        f"WHEN '{STATUS_APPROVED}' THEN 4 "
+        "ELSE 5 END ASC, "
+        "COALESCE(ar.approver_action_at, ar.checker_action_at, ar.created_at) DESC"
+    )
 
 
 def get_pending_counts(db, user_id, is_admin=False):
@@ -650,7 +1088,7 @@ def get_pending_items(db, user_id, role_type, is_admin=False):
                 "LEFT JOIN designations dc ON wm.checker_designation_id = dc.id "
                 "LEFT JOIN designations da ON wm.approver_designation_id = da.id "
                 f"WHERE ar.workflow_status IN ({status_placeholders}) "
-                "ORDER BY ar.created_at DESC LIMIT 50",
+                f"ORDER BY {_approval_list_order_clause(role_type)} LIMIT 50",
                 list(target_statuses),
             ).fetchall()
         elif username:
@@ -665,7 +1103,7 @@ def get_pending_items(db, user_id, role_type, is_admin=False):
                 "LEFT JOIN designations dc ON wm.checker_designation_id = dc.id "
                 "LEFT JOIN designations da ON wm.approver_designation_id = da.id "
                 f"WHERE ar.workflow_status IN ({status_placeholders}) AND ar.created_by=? "
-                "ORDER BY ar.created_at DESC LIMIT 50",
+                f"ORDER BY {_approval_list_order_clause(role_type)} LIMIT 50",
                 list(target_statuses) + [username],
             ).fetchall()
         else:
@@ -706,7 +1144,7 @@ def get_pending_items(db, user_id, role_type, is_admin=False):
         "LEFT JOIN designations dc ON wm.checker_designation_id = dc.id "
         "LEFT JOIN designations da ON wm.approver_designation_id = da.id "
         f"WHERE ar.workflow_status IN ({status_placeholders}){module_filter} "
-        "ORDER BY ar.created_at DESC",
+        f"ORDER BY {_approval_list_order_clause(role_type)}",
         params,
     ).fetchall()
     return [dict(r) for r in rows]
@@ -724,7 +1162,7 @@ def get_workflow_queue(db, limit=15):
         "LEFT JOIN designations dc ON wm.checker_designation_id = dc.id "
         "LEFT JOIN designations da ON wm.approver_designation_id = da.id "
         "WHERE ar.workflow_status NOT IN (?) "
-        "ORDER BY ar.created_at DESC LIMIT ?",
+        f"ORDER BY {_workflow_queue_order_clause()} LIMIT ?",
         (STATUS_APPROVED, limit),
     ).fetchall()
     return [dict(r) for r in rows]
@@ -771,6 +1209,9 @@ def migrate_workflow_statuses(db):
 
 
 def seed_designations(db):
+    cols = {row[1] for row in db.execute("PRAGMA table_info(designations)").fetchall()}
+    if cols and "status" not in cols:
+        db.execute("ALTER TABLE designations ADD COLUMN status TEXT DEFAULT 'Active'")
     default_names = [
         "Site Engineer",
         "Supervisor",
@@ -807,29 +1248,11 @@ def _find_designation_id(db, name):
 def sync_workflow_designations(db):
     """Apply current maker/checker/approver designation routing to all modules."""
     seed_designations(db)
-    mapping = {
-        "petty_cash": ("Site Engineer", "Accounts Manager", "Managing Director"),
-        "material_request": ("Store Keeper", "Store Manager", "Managing Director"),
-        "purchase_request": ("Project Engineer", "Purchase Manager", "Managing Director"),
-        "payroll": ("HR Staff", "Accounts Manager", "Managing Director"),
-        "daily_timesheet": ("Supervisor", "Project Manager", "Managing Director"),
-        "project_expenses": ("Project Staff", "Accounts Manager", "Managing Director"),
-        "head_office_expenses": ("Accounts Staff", "Accounts Manager", "Managing Director"),
-        "subcontract": ("Project Staff", "Project Manager", "Managing Director"),
-        "boq": ("Project Engineer", "Project Manager", "Managing Director"),
-        "dpr": ("Site Engineer", "Project Manager", "Managing Director"),
-        "manager_tool": ("Project Manager", "Department Head", "Managing Director"),
-        "account_receipt": ("Accounts Staff", "Accounts Manager", "Managing Director"),
-        "account_payment": ("Accounts Staff", "Accounts Manager", "Managing Director"),
-        "account_gst": ("Accounts Staff", "Accounts Manager", "Managing Director"),
-        "account_tds": ("Accounts Staff", "Accounts Manager", "Managing Director"),
-        "leave_request": ("Project Staff", "Department Head", "Managing Director"),
-        "store_issue": ("Store Keeper", "Store Manager", "Managing Director"),
-        "store_receipt": ("Store Keeper", "Store Manager", "Managing Director"),
-    }
     for mod in DEFAULT_MODULES:
         module_id = mod["module_id"]
-        maker, checker, approver = mapping[module_id]
+        maker = mod["maker"]
+        checker = mod["checker"]
+        approver = mod["approver"]
         maker_id = _find_designation_id(db, maker)
         checker_id = _find_designation_id(db, checker)
         approver_id = _find_designation_id(db, approver)
@@ -862,40 +1285,21 @@ def sync_workflow_designations(db):
 
 def seed_workflow_master(db):
     seed_designations(db)
-    mapping = {
-        "petty_cash": ("Site Engineer", "Accounts Manager", "Managing Director"),
-        "material_request": ("Store Keeper", "Store Manager", "Managing Director"),
-        "purchase_request": ("Project Engineer", "Purchase Manager", "Managing Director"),
-        "payroll": ("HR Staff", "Accounts Manager", "Managing Director"),
-        "daily_timesheet": ("Supervisor", "Project Manager", "Managing Director"),
-        "project_expenses": ("Project Staff", "Accounts Manager", "Managing Director"),
-        "head_office_expenses": ("Accounts Staff", "Accounts Manager", "Managing Director"),
-        "subcontract": ("Project Staff", "Project Manager", "Managing Director"),
-        "boq": ("Project Engineer", "Project Manager", "Managing Director"),
-        "dpr": ("Site Engineer", "Project Manager", "Managing Director"),
-        "manager_tool": ("Project Manager", "Department Head", "Managing Director"),
-        "account_receipt": ("Accounts Staff", "Accounts Manager", "Managing Director"),
-        "account_payment": ("Accounts Staff", "Accounts Manager", "Managing Director"),
-        "account_gst": ("Accounts Staff", "Accounts Manager", "Managing Director"),
-        "account_tds": ("Accounts Staff", "Accounts Manager", "Managing Director"),
-        "leave_request": ("Project Staff", "Department Head", "Managing Director"),
-        "store_issue": ("Store Keeper", "Store Manager", "Managing Director"),
-        "store_receipt": ("Store Keeper", "Store Manager", "Managing Director"),
-    }
     for mod in DEFAULT_MODULES:
         existing = db.execute(
             "SELECT id FROM workflow_master WHERE module_id=?", (mod["module_id"],)
         ).fetchone()
         if existing:
             continue
-        maker_id = _find_designation_id(db, mapping[mod["module_id"]][0])
-        checker_id = _find_designation_id(db, mapping[mod["module_id"]][1])
-        approver_id = _find_designation_id(db, mapping[mod["module_id"]][2])
+        maker_id = _find_designation_id(db, mod["maker"])
+        checker_id = _find_designation_id(db, mod["checker"])
+        approver_id = _find_designation_id(db, mod["approver"])
         db.execute(
             "INSERT INTO workflow_master("
             "module_name, module_id, workflow_role_mapping, "
-            "maker_designation_id, checker_designation_id, approver_designation_id, status"
-            ") VALUES(?,?,?,?,?,?, 'Active')",
+            "maker_designation_id, checker_designation_id, approver_designation_id, "
+            "workflow_mode, status"
+            ") VALUES(?,?,?,?,?,?,?, 'Active')",
             (
                 mod["module_name"],
                 mod["module_id"],
@@ -903,6 +1307,7 @@ def seed_workflow_master(db):
                 maker_id,
                 checker_id,
                 approver_id,
+                DEFAULT_WORKFLOW_MODE,
             ),
         )
 
@@ -1439,12 +1844,65 @@ def get_recent_activities(db, limit=12):
     return activities
 
 
-def seed_demo_users(db):
-    """Demo maker / checker / approver accounts for workflow testing."""
-    admin_desig = db.execute(
-        "SELECT id FROM designations WHERE designation_name='Managing Director'"
+def _upsert_demo_user(db, username, password, emp_name, dept, desig_name, role, wf_role):
+    desig = db.execute(
+        "SELECT id FROM designations WHERE designation_name=?", (desig_name,)
     ).fetchone()
-    admin_desig_id = admin_desig["id"] if admin_desig else None
+    desig_id = desig["id"] if desig else None
+    existing = db.execute(
+        "SELECT id FROM users WHERE username=?", (username,)
+    ).fetchone()
+    if existing:
+        db.execute(
+            "UPDATE users SET password=?, employee_name=?, department=?, "
+            "designation_id=?, workflow_role=?, role=?, status='Active' WHERE username=?",
+            (password, emp_name, dept, desig_id, wf_role, role, username),
+        )
+        return existing["id"]
+    cur = db.execute(
+        "INSERT INTO users(username, password, employee_name, department, "
+        "designation_id, workflow_role, role, status) VALUES(?,?,?,?,?,?,?, 'Active')",
+        (username, password, emp_name, dept, desig_id, wf_role, role),
+    )
+    return cur.lastrowid
+
+
+def _ensure_maker_assignments_table(db):
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS user_maker_assignments(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            slot_no INTEGER NOT NULL,
+            department TEXT,
+            module_id TEXT,
+            status TEXT DEFAULT 'Active',
+            UNIQUE(user_id, slot_no),
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        )
+        """
+    )
+
+
+def _seed_maker_modules(db, user_id, department, module_ids):
+    if not user_id:
+        return
+    _ensure_maker_assignments_table(db)
+    db.execute("DELETE FROM user_maker_assignments WHERE user_id=?", (user_id,))
+    for idx, module_id in enumerate(module_ids):
+        if not module_id:
+            continue
+        db.execute(
+            "INSERT INTO user_maker_assignments(user_id, slot_no, department, module_id, status) "
+            "VALUES(?,?,?,?, 'Active')",
+            (user_id, idx + 1, department, module_id),
+        )
+
+
+def seed_demo_users(db):
+    """Demo workflow, HR, and consumer-test accounts for ERP demonstrations."""
+    if os.environ.get("MAXEK_SKIP_DEMO_SEED"):
+        return
     db.execute(
         "UPDATE users SET employee_name=COALESCE(employee_name, 'System Administrator'), "
         "department=COALESCE(department, 'Head Office'), workflow_role='Administrator', "
@@ -1454,27 +1912,88 @@ def seed_demo_users(db):
         ("maker1", "maker123", "Rajesh Kumar", "Site Operations", "Site Engineer", "Maker", "Maker"),
         ("checker1", "checker123", "Priya Menon", "Accounts", "Accounts Manager", "Checker", "Checker"),
         ("approver1", "approver123", "Vikram Nair", "Management", "Managing Director", "Approver", "Approver"),
+        ("hr1", "hr123", "Meera Iyer", "HR & Payroll", "HR Staff", "User", "Maker"),
+        ("consumer1", "consumer123", "Demo Client User", "Site Operations", "Project Staff", "Guest", "Maker"),
     ]
+    user_ids = {}
     for username, password, emp_name, dept, desig_name, role, wf_role in demos:
-        desig = db.execute(
-            "SELECT id FROM designations WHERE designation_name=?", (desig_name,)
-        ).fetchone()
-        desig_id = desig["id"] if desig else None
-        existing = db.execute(
-            "SELECT id FROM users WHERE username=?", (username,)
-        ).fetchone()
-        if existing:
+        user_ids[username] = _upsert_demo_user(
+            db, username, password, emp_name, dept, desig_name, role, wf_role
+        )
+    _seed_maker_modules(
+        db,
+        user_ids.get("hr1"),
+        "HR & Payroll",
+        ["payroll", "leave_request", "monthly_staff_attendance"],
+    )
+    _seed_maker_modules(
+        db,
+        user_ids.get("consumer1"),
+        "Site Operations",
+        ["material_request", "daily_timesheet"],
+    )
+
+
+def seed_demo_sample_data(db):
+    """Seed minimal projects, workforce, and attendance so the dashboard demo has KPIs."""
+    if os.environ.get("MAXEK_SKIP_DEMO_SEED"):
+        return
+    project_count = db.execute("SELECT COUNT(*) AS c FROM projects").fetchone()["c"]
+    if project_count == 0:
+        db.execute(
+            "INSERT INTO projects(project_name, location, start_date, status, budget) "
+            "VALUES(?,?,?,?,?)",
+            ("Demo Highway Phase-1", "Walajabad, TN", "2026-01-15", "Active", 25000000),
+        )
+    project = db.execute(
+        "SELECT id FROM projects WHERE status='Active' ORDER BY id LIMIT 1"
+    ).fetchone()
+    project_id = project["id"] if project else None
+
+    staff_count = db.execute("SELECT COUNT(*) AS c FROM staff").fetchone()["c"]
+    if staff_count == 0:
+        for code, name, dept, designation in (
+            ("EMP001", "Anitha Rao", "HR & Payroll", "HR Staff"),
+            ("EMP002", "Suresh Pillai", "Site Operations", "Site Engineer"),
+        ):
             db.execute(
-                "UPDATE users SET password=?, employee_name=?, department=?, "
-                "designation_id=?, workflow_role=?, role=?, status='Active' WHERE username=?",
-                (password, emp_name, dept, desig_id, wf_role, role, username),
+                "INSERT INTO staff("
+                "employee_code, staff_name, department, designation, salary_type, salary_amount, status"
+                ") VALUES(?,?,?,?,?,?,?)",
+                (code, name, dept, designation, "Monthly", 45000, "Active"),
             )
-        else:
+
+    worker_count = db.execute("SELECT COUNT(*) AS c FROM workers").fetchone()["c"]
+    if worker_count == 0 and project_id:
+        for idx, name in enumerate(("Ravi K", "Manoj S", "Velu M"), start=1):
             db.execute(
-                "INSERT INTO users(username, password, employee_name, department, "
-                "designation_id, workflow_role, role, status) VALUES(?,?,?,?,?,?,?, 'Active')",
-                (username, password, emp_name, dept, desig_id, wf_role, role),
+                "INSERT INTO workers("
+                "worker_code, worker_name, worker_category, designation, salary_type, "
+                "salary_amount, project_id, status"
+                ") VALUES(?,?,?,?,?,?,?,?)",
+                (f"W{idx:03d}", name, "Direct Labour", "Mason", "Daily", 850, project_id, "Active"),
             )
+
+    if project_id:
+        workers = db.execute(
+            "SELECT id FROM workers WHERE status='Active' LIMIT 5"
+        ).fetchall()
+        today = datetime.now().date()
+        for day_offset in range(7):
+            attendance_date = (today - timedelta(days=6 - day_offset)).strftime("%Y-%m-%d")
+            for worker in workers:
+                exists = db.execute(
+                    "SELECT 1 FROM attendance WHERE worker_id=? AND attendance_date=?",
+                    (worker["id"], attendance_date),
+                ).fetchone()
+                if exists:
+                    continue
+                db.execute(
+                    "INSERT INTO attendance("
+                    "worker_id, project_id, attendance_date, in_time, out_time, total_hours, status"
+                    ") VALUES(?,?,?,?,?,?,?)",
+                    (worker["id"], project_id, attendance_date, "08:00", "17:00", 8.0, "Present"),
+                )
 
 
 def _table_exists(db, table):

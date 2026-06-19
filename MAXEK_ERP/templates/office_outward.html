@@ -1,0 +1,70 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Outward Register' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('office_admin') ~ '">Office</a> &gt; Outward' %}
+{% block page_actions %}
+<a href="{{ url_for('office_outward', new=1) }}#record-form" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> New Outward</a>
+{% endblock %}
+{% block content %}
+{% if view_record %}
+<div class="erp-form-card" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">{{ view_record.register_number }}</h3>
+  <p><strong>Date:</strong> {{ view_record.dispatch_date }} | <strong>To:</strong> {{ view_record.recipient_name }}</p>
+  <p><strong>Subject:</strong> {{ view_record.subject }} | <strong>Type:</strong> {{ view_record.document_type or '—' }}</p>
+  <p><strong>Mode:</strong> {{ view_record.mode or '—' }} | <strong>Ref:</strong> {{ view_record.reference_no or '—' }}</p>
+  {% if view_record.attachment %}
+  <p><a href="{{ url_for('office_document_download', filename=view_record.attachment) }}" class="erp-btn erp-btn-ghost erp-btn-sm"><i class="fa-solid fa-download"></i> Attachment</a></p>
+  {% endif %}
+  <a href="{{ url_for('office_outward', edit=view_record.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Edit</a>
+</div>
+{% endif %}
+
+{% if show_form %}
+<div class="erp-form-card" id="record-form" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">{% if edit_record %}Edit {{ edit_record.register_number }}{% else %}New Outward Entry{% endif %}</h3>
+  <form method="post" enctype="multipart/form-data">
+    {% if edit_record %}<input type="hidden" name="record_id" value="{{ edit_record.id }}">{% endif %}
+    <div class="erp-form-grid">
+      <div class="erp-field"><input type="date" name="dispatch_date" required value="{{ edit_record.dispatch_date if edit_record else default_date }}"><label>Dispatch Date *</label></div>
+      <div class="erp-field"><input name="recipient_name" required placeholder=" " value="{{ edit_record.recipient_name if edit_record else '' }}"><label>Recipient Name *</label></div>
+      <div class="erp-field span-2"><textarea name="recipient_address" placeholder=" ">{{ edit_record.recipient_address if edit_record else '' }}</textarea><label>Recipient Address</label></div>
+      <div class="erp-field"><select name="document_type">{% for t in document_types %}<option value="{{ t }}" {% if edit_record and edit_record.document_type == t %}selected{% endif %}>{{ t }}</option>{% endfor %}</select><label>Document Type</label></div>
+      <div class="erp-field"><input name="subject" required placeholder=" " value="{{ edit_record.subject if edit_record else '' }}"><label>Subject *</label></div>
+      <div class="erp-field"><input name="reference_no" placeholder=" " value="{{ edit_record.reference_no if edit_record else '' }}"><label>Reference No</label></div>
+      <div class="erp-field"><select name="mode">{% for m in modes %}<option value="{{ m }}" {% if edit_record and edit_record.mode == m %}selected{% endif %}>{{ m }}</option>{% endfor %}</select><label>Mode</label></div>
+      <div class="erp-field"><input name="dispatched_by" placeholder=" " value="{{ edit_record.dispatched_by if edit_record else '' }}"><label>Dispatched By</label></div>
+      <div class="erp-field"><input name="department" placeholder=" " value="{{ edit_record.department if edit_record else '' }}"><label>Department</label></div>
+      <div class="erp-field"><select name="project_id"><option value="">—</option>{% for p in projects %}<option value="{{ p.id }}" {% if edit_record and edit_record.project_id == p.id %}selected{% endif %}>{{ p.project_name }}</option>{% endfor %}</select><label>Project</label></div>
+      <div class="erp-field span-2"><textarea name="remarks" placeholder=" ">{{ edit_record.remarks if edit_record else '' }}</textarea><label>Remarks</label></div>
+      <div class="erp-field span-2"><input type="file" name="attachment" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx" {% if not edit_record %}required{% endif %}><label>Attachment * (PDF/JPG/DOC/XLSX)</label></div>
+    </div>
+    <button type="submit" class="erp-btn erp-btn-primary">Save</button>
+  </form>
+</div>
+{% endif %}
+
+<form method="get" class="erp-table-toolbar" style="margin-bottom:0.75rem;">
+  <input name="q" value="{{ search }}" placeholder="Search outward…" style="max-width:280px;">
+  <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Search</button>
+</form>
+<div class="erp-table-panel" data-erp-table>
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead><tr><th>Reg No</th><th>Date</th><th>Recipient</th><th>Subject</th><th>File</th><th></th></tr></thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>{{ row.register_number }}</td>
+          <td>{{ row.dispatch_date or '—' }}</td>
+          <td>{{ row.recipient_name }}</td>
+          <td>{{ row.subject }}</td>
+          <td>{% if row.attachment %}<i class="fa-solid fa-paperclip"></i>{% else %}—{% endif %}</td>
+          <td><a href="{{ url_for('office_outward', view=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">View</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6">No outward records yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

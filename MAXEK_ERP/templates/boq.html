@@ -1,192 +1,571 @@
 {% extends 'base_maxek.html' %}
-{% from 'macros/erp_ui.html' import approval_badge, erp_pagination %}
+
+{% from 'macros/erp_ui.html' import role_status_badge, rejection_notice, workflow_modals, transaction_view_tabs, checker_row_actions, approver_row_actions, erp_pagination %}
+
 {% set page_title = 'BOQ Creation' %}
+
 {% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; Projects &gt; BOQ Creation' %}
+
 {% block page_actions %}
+
 <a href="{{ url_for('projects') }}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-layer-group"></i> Projects</a>
+
+<a href="{{ url_for('cost_planning') }}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-coins"></i> Cost Planning</a>
+
 <a href="#boq-form" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> New BOQ</a>
+
 {% endblock %}
+
 {% block content %}
-<div class="module-layout">
+
+<div class="erp-validation" style="margin-bottom: 1rem;">
+
+  <strong>Flow:</strong> Maker [Save] → Checker [Verify / Edit / Reject] → Approver [Approve / Edit / Reject]
+
+</div>
+
+<div class="module-layout boq-module-layout">
+
   {% if view_boq %}
+
   <div class="erp-form-card" style="margin-bottom: 1rem;">
+
+    {% call transaction_view_tabs(view_boq, history, can_reopen, approval_id) %}
+
     <h3 class="erp-form-title">BOQ Summary — {{ view_boq.boq_number }}</h3>
+
     <div class="erp-form-grid">
+
       <p class="span-2"><strong>Project:</strong> {{ view_boq.project_code or '—' }} — {{ view_boq.project_name or '—' }}</p>
+
       <p><strong>Line Items:</strong> {{ view_boq.line_count }}</p>
+
       <p><strong>Total Amount:</strong> {{ '%.2f'|format(view_boq.total_amount or 0) }}</p>
-      <p><strong>Status:</strong> {{ approval_badge(view_boq.approval_status) }}</p>
+
+      <p><strong>Workflow:</strong> {{ role_status_badge(view_boq.approval_status, 'maker') }}</p>
+
       <p><strong>Created By:</strong> {{ view_boq.created_by or '—' }}</p>
+
       <p><strong>Created At:</strong> {{ view_boq.created_at or '—' }}</p>
+
+      <p><strong>Modified By:</strong> {{ view_boq.modified_by or '—' }}</p>
+
+      <p><strong>Modified At:</strong> {{ view_boq.modified_at or '—' }}</p>
+
     </div>
+
     <div class="erp-table-scroll" style="margin-top: 1rem;">
+
       <table class="erp-table erp-table-module boq-lines-table">
+
         <thead>
+
           <tr>
-            <th>#</th>
+
+            <th>Item No.</th>
+
             <th>Description</th>
+
             <th>Qty</th>
+
             <th>Unit</th>
+
             <th>Rate</th>
+
             <th>Amount</th>
+
           </tr>
+
         </thead>
+
         <tbody>
+
           {% for line in view_lines %}
+
           <tr>
-            <td>{{ line.line_no or loop.index }}</td>
+
+            <td>{{ line.item_code or ('BOQ' ~ (line.line_no or loop.index)) }}</td>
+
             <td>{{ line.item_description or '—' }}</td>
+
             <td>{{ line.quantity or 0 }}</td>
+
             <td>{{ line.unit or '—' }}</td>
+
             <td>{{ '%.2f'|format(line.rate or 0) }}</td>
+
             <td>{{ '%.2f'|format(line.amount or 0) }}</td>
+
           </tr>
+
           {% endfor %}
+
         </tbody>
+
         <tfoot>
+
           <tr>
+
             <td colspan="5" style="text-align:right;font-weight:600;">Grand Total</td>
+
             <td style="font-weight:700;">{{ '%.2f'|format(view_boq.total_amount or 0) }}</td>
+
           </tr>
+
         </tfoot>
+
       </table>
+
     </div>
-    <div class="erp-form-actions" style="margin-top: 1rem;">
-      <a href="{{ url_for('boq_management') }}#boq-form" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> Create Another BOQ</a>
+
+    {{ rejection_notice(history, view_boq.approval_status) }}
+
+    <div class="erp-form-actions" style="margin-top: 1rem;flex-wrap:wrap;">
+
+      {% if edit_role == 'checker' and approval_id and view_boq.approval_status == 'Pending Checker' %}
+
+      {{ checker_row_actions(approval_id, 'boq_management', view_boq.id, view_boq.approval_status) }}
+
+      {% elif edit_role == 'approver' and approval_id and view_boq.approval_status == 'Pending Approval' %}
+
+      {{ approver_row_actions(approval_id, 'boq_management', view_boq.id, view_boq.approval_status) }}
+
+      {% else %}
+
+      {% set s = view_boq.approval_status or 'Pending Checker' %}
+
+      {% if edit_role == 'maker' and s in ['Pending Checker', 'Rejected by Checker', 'Rejected by Approver'] %}
+
+      <a href="{{ url_for('boq_management', edit=view_boq.id) }}#boq-form" class="erp-btn erp-btn-primary erp-btn-sm"><i class="fa-solid fa-pen-to-square"></i> Edit BOQ</a>
+
+      {% if s in ['Pending Checker', 'Rejected by Checker', 'Rejected by Approver'] %}
+
+      <form method="post" style="display:inline" onsubmit="return confirm('Delete this BOQ?');">
+
+        <input type="hidden" name="form_action" value="delete_boq">
+
+        <input type="hidden" name="boq_id" value="{{ view_boq.id }}">
+
+        <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm"><i class="fa-solid fa-trash"></i> Delete</button>
+
+      </form>
+
+      {% endif %}
+
+      {% endif %}
+
+      {% endif %}
+
+      <a href="{{ url_for('boq_print', boq_id=view_boq.id, print=1) }}" target="_blank" class="erp-btn erp-btn-ghost erp-btn-sm"><i class="fa-solid fa-print"></i> Print</a>
+
+      <a href="{{ url_for('boq_management') }}#boq-form" class="erp-btn erp-btn-ghost erp-btn-sm"><i class="fa-solid fa-plus"></i> New BOQ</a>
+
+      {% if view_lines %}
+
+      <a href="{{ url_for('cost_planning', project_id=view_boq.project_id) }}#cost-plan-form" class="erp-btn erp-btn-ghost erp-btn-sm"><i class="fa-solid fa-coins"></i> Cost Planning</a>
+
+      {% endif %}
+
     </div>
+
+    {% endcall %}
+
   </div>
+
   {% endif %}
 
+
+
+  {% if not view_boq %}
+
   <div class="erp-form-card" id="boq-form">
-    <h3 class="erp-form-title">BOQ Creation</h3>
+
+    <h3 class="erp-form-title">{% if editing_boq %}Edit BOQ — {{ editing_boq.boq_number }}{% if edit_role %} ({{ edit_role|title }}){% endif %}{% else %}BOQ Creation{% endif %}</h3>
+
     <form method="post" class="erp-form-grid" data-boq-form data-max-lines="{{ max_boq_lines }}">
+
+      {% if editing_boq %}<input type="hidden" name="boq_id" value="{{ editing_boq.id }}">{% endif %}
+
       <div class="erp-field span-2">
-        <select name="project_id" required>
+
+        <select name="project_id" required class="has-value" data-boq-project-select>
+
           <option value="">Select project (ID — Name)</option>
+
           {% for p in projects %}
-          <option value="{{ p.id }}">{{ p.project_code or p.id }} — {{ p.project_name }}</option>
+
+          <option value="{{ p.id }}"{% if (editing_boq and editing_boq.project_id == p.id) or (not editing_boq and boq_form_project_id == p.id) %} selected{% endif %}>{{ p.project_code or p.id }} — {{ p.project_name }}</option>
+
           {% endfor %}
+
         </select>
+
         <label>Project</label>
+
       </div>
-      <div class="erp-field">
-        <input name="boq_number_display" placeholder=" " value="{{ next_boq_number }}" readonly>
-        <label>BOQ Number</label>
+
+      <div class="erp-field erp-field-auto-number">
+
+        <span class="erp-auto-number" id="boq_number_display" data-boq-number-display>{{ editing_boq.boq_number if editing_boq else next_boq_number }}</span>
+
+        <label>BOQ Number (Auto)</label>
+
       </div>
+
+
 
       <div class="span-2">
+
         <h4 class="erp-form-subtitle">BOQ Line Items (max {{ max_boq_lines }})</h4>
+
         <div class="erp-table-scroll">
+
           <table class="erp-table erp-table-module boq-lines-table">
+
             <thead>
+
               <tr>
-                <th style="width:3rem;">#</th>
-                <th>Description</th>
-                <th style="width:6rem;">Qty</th>
-                <th style="width:7rem;">Unit</th>
-                <th style="width:7rem;">Rate</th>
-                <th style="width:8rem;">Amount</th>
-                <th style="width:4rem;"></th>
+
+                <th class="boq-col-no">Item No.</th>
+
+                <th class="boq-col-desc">Description</th>
+
+                <th class="boq-col-qty">Qty</th>
+
+                <th class="boq-col-unit">Unit</th>
+
+                <th class="boq-col-rate">Rate</th>
+
+                <th class="boq-col-amount">Amount</th>
+
+                <th class="boq-col-actions"></th>
+
               </tr>
+
             </thead>
+
             <tbody data-boq-rows>
-              {% for n in range(3) %}
+
+              {% if editing_boq and editing_lines %}
+
+              {% for line in editing_lines %}
+
               <tr data-boq-row>
-                <td class="boq-line-no">{{ loop.index }}</td>
-                <td><input type="text" name="item_description[]" class="boq-input" placeholder="Item description"></td>
-                <td><input type="number" name="quantity[]" class="boq-input boq-qty" step="0.01" min="0" placeholder="0"></td>
+
+                <td class="boq-line-no">{{ line.item_code or ('BOQ' ~ (line.line_no or loop.index)) }}</td>
+
+                <td class="boq-col-desc"><textarea name="item_description[]" class="boq-input boq-desc" rows="2" placeholder="Item description">{{ line.item_description or '' }}</textarea></td>
+
+                <td class="boq-col-qty"><input type="number" name="quantity[]" class="boq-input boq-qty" step="0.01" min="0" inputmode="decimal" value="{{ line.quantity if line.quantity is not none else '' }}" placeholder="0"></td>
+
                 <td>
+
                   <select name="unit[]" class="boq-input boq-unit">
+
                     <option value="">Unit</option>
+
                     {% for u in boq_units %}
-                    <option value="{{ u }}">{{ u }}</option>
+
+                    <option value="{{ u }}"{% if line.unit == u %} selected{% endif %}>{{ u }}</option>
+
                     {% endfor %}
+
                   </select>
+
                 </td>
-                <td><input type="number" name="rate[]" class="boq-input boq-rate" step="0.01" min="0" placeholder="0"></td>
-                <td><input type="text" class="boq-input boq-amount" readonly tabindex="-1" value="0.00"></td>
+
+                <td class="boq-col-rate"><input type="number" name="rate[]" class="boq-input boq-rate" step="0.01" min="0" inputmode="decimal" value="{{ line.rate if line.rate is not none else '' }}" placeholder="0"></td>
+
+                <td><input type="text" class="boq-input boq-amount" readonly tabindex="-1" value="{{ '%.2f'|format(line.amount or 0) }}"></td>
+
                 <td><button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-boq-remove title="Remove row"><i class="fa-solid fa-trash"></i></button></td>
+
               </tr>
+
               {% endfor %}
-              <tr data-boq-row-template hidden>
-                <td class="boq-line-no">0</td>
-                <td><input type="text" name="item_description[]" class="boq-input" placeholder="Item description"></td>
-                <td><input type="number" name="quantity[]" class="boq-input boq-qty" step="0.01" min="0" placeholder="0"></td>
+
+              {% else %}
+
+              {% for n in range(3) %}
+
+              <tr data-boq-row>
+
+                <td class="boq-line-no">BOQ{{ loop.index }}</td>
+
+                <td class="boq-col-desc"><textarea name="item_description[]" class="boq-input boq-desc" rows="2" placeholder="Item description"></textarea></td>
+
+                <td class="boq-col-qty"><input type="number" name="quantity[]" class="boq-input boq-qty" step="0.01" min="0" inputmode="decimal" placeholder="0"></td>
+
                 <td>
+
                   <select name="unit[]" class="boq-input boq-unit">
+
                     <option value="">Unit</option>
+
                     {% for u in boq_units %}
+
                     <option value="{{ u }}">{{ u }}</option>
+
                     {% endfor %}
+
                   </select>
+
                 </td>
-                <td><input type="number" name="rate[]" class="boq-input boq-rate" step="0.01" min="0" placeholder="0"></td>
+
+                <td class="boq-col-rate"><input type="number" name="rate[]" class="boq-input boq-rate" step="0.01" min="0" inputmode="decimal" placeholder="0"></td>
+
                 <td><input type="text" class="boq-input boq-amount" readonly tabindex="-1" value="0.00"></td>
+
                 <td><button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-boq-remove title="Remove row"><i class="fa-solid fa-trash"></i></button></td>
+
               </tr>
+
+              {% endfor %}
+
+              {% endif %}
+
+              <tr data-boq-row-template hidden>
+
+                <td class="boq-line-no">0</td>
+
+                <td class="boq-col-desc"><textarea name="item_description[]" class="boq-input boq-desc" rows="2" placeholder="Item description"></textarea></td>
+
+                <td class="boq-col-qty"><input type="number" name="quantity[]" class="boq-input boq-qty" step="0.01" min="0" inputmode="decimal" placeholder="0"></td>
+
+                <td>
+
+                  <select name="unit[]" class="boq-input boq-unit">
+
+                    <option value="">Unit</option>
+
+                    {% for u in boq_units %}
+
+                    <option value="{{ u }}">{{ u }}</option>
+
+                    {% endfor %}
+
+                  </select>
+
+                </td>
+
+                <td class="boq-col-rate"><input type="number" name="rate[]" class="boq-input boq-rate" step="0.01" min="0" inputmode="decimal" placeholder="0"></td>
+
+                <td><input type="text" class="boq-input boq-amount" readonly tabindex="-1" value="0.00"></td>
+
+                <td><button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-boq-remove title="Remove row"><i class="fa-solid fa-trash"></i></button></td>
+
+              </tr>
+
             </tbody>
+
             <tfoot>
+
               <tr>
+
                 <td colspan="5" style="text-align:right;font-weight:600;">Grand Total</td>
+
                 <td colspan="2"><strong data-boq-grand-total>0.00</strong></td>
+
               </tr>
+
             </tfoot>
+
           </table>
+
         </div>
+
         <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-boq-add style="margin-top:0.75rem;">
+
           <i class="fa-solid fa-plus"></i> Add more BOQ items
+
         </button>
+
       </div>
+
+
 
       <div class="erp-form-actions span-2">
-        <button class="erp-btn erp-btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Save BOQ</button>
+
+        <button class="erp-btn erp-btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> {{ 'Update BOQ' if editing_boq else 'Save BOQ' }}</button>
+
+        {% if editing_boq %}<a class="erp-btn erp-btn-ghost" href="{{ url_for('boq_management', view=editing_boq.id) }}">Cancel Edit</a>{% endif %}
+
       </div>
+
     </form>
+
   </div>
 
+  {% endif %}
+
+
+
   <div class="erp-table-panel" data-erp-table>
+
     <div class="erp-table-toolbar">
+
       <h3 class="erp-table-title">Created BOQ List</h3>
+
       <div class="erp-table-controls">
+
         <div class="erp-table-search"><i class="fa-solid fa-magnifying-glass"></i><input type="search" data-table-search placeholder="Search BOQ..."></div>
+
       </div>
+
     </div>
+
     <div class="erp-table-scroll">
+
       <table class="erp-table erp-table-module">
+
         <thead>
+
           <tr>
+
             <th>BOQ No.</th>
+
             <th>Project ID</th>
+
             <th>Project Name</th>
+
             <th>Items</th>
+
             <th>Total Amount</th>
+
             <th>Status</th>
+
             <th>Actions</th>
+
           </tr>
+
         </thead>
+
         <tbody>
+
           {% for row in rows %}
+
           <tr>
+
             <td>{{ row.boq_number }}</td>
+
             <td>{{ row.project_code or row.project_id }}</td>
+
             <td>{{ row.project_name or '—' }}</td>
+
             <td>{{ row.line_count or 0 }}</td>
+
             <td>{{ '%.2f'|format(row.total_amount or 0) }}</td>
-            <td>{{ approval_badge(row.approval_status) }}</td>
+
+            <td>{{ role_status_badge(row.approval_status, 'maker') }}</td>
+
             <td>
-              <a href="{{ url_for('boq_management', view=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">View</a>
+
+              <div class="workflow-row-actions">
+
+                <a href="{{ url_for('boq_management', view=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm"><i class="fa-regular fa-eye"></i> View</a>
+
+                {% set s = row.approval_status or 'Pending Checker' %}
+
+                {% if s in ['Pending Checker', 'Rejected by Checker', 'Rejected by Approver'] %}
+
+                <a href="{{ url_for('boq_management', edit=row.id) }}#boq-form" class="erp-btn erp-btn-ghost erp-btn-sm"><i class="fa-solid fa-pen-to-square"></i> Edit</a>
+
+                {% elif s == 'Pending Approval' %}
+
+                <span class="workflow-hint">Waiting for Approval</span>
+
+                {% elif s == 'Approved' %}
+
+                <span class="workflow-hint">Approved</span>
+
+                {% endif %}
+
+                <a href="{{ url_for('boq_print', boq_id=row.id) }}" target="_blank" class="erp-btn erp-btn-ghost erp-btn-sm"><i class="fa-solid fa-print"></i> Print</a>
+
+                {% if s in ['Pending Checker', 'Rejected by Checker', 'Rejected by Approver'] %}
+
+                <form method="post" style="display:inline" onsubmit="return confirm('Delete BOQ {{ row.boq_number }}?');">
+
+                  <input type="hidden" name="form_action" value="delete_boq">
+
+                  <input type="hidden" name="boq_id" value="{{ row.id }}">
+
+                  <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm"><i class="fa-solid fa-trash"></i> Delete</button>
+
+                </form>
+
+                {% endif %}
+
+              </div>
+
             </td>
+
           </tr>
+
           {% else %}
+
           <tr><td colspan="7">No BOQ records yet.</td></tr>
+
           {% endfor %}
+
         </tbody>
+
       </table>
+
     </div>
+
     {{ erp_pagination(rows|length) }}
+
   </div>
+
 </div>
+
+
+
+<div class="erp-modal" id="boq-continue-modal"{% if not show_continue_prompt %} hidden aria-hidden="true"{% else %} aria-hidden="false"{% endif %}
+
+     data-dashboard-url="{{ url_for('dashboard') }}"
+
+     data-saved-boq="{{ saved_boq_number }}">
+
+  <div class="erp-modal-backdrop" data-boq-continue-no></div>
+
+  <div class="erp-modal-card" role="dialog" aria-modal="true" aria-labelledby="boq-continue-title">
+
+    <div class="erp-modal-header">
+
+      <div>
+
+        <h3 id="boq-continue-title">BOQ Saved</h3>
+
+        <p>{% if saved_boq_number %}<strong>{{ saved_boq_number }}</strong> saved successfully.{% else %}BOQ saved successfully.{% endif %} Continue next BOQ item for the same project?</p>
+
+      </div>
+
+    </div>
+
+    <div class="erp-form-actions">
+
+      <button type="button" class="erp-btn erp-btn-ghost" data-boq-continue-no><i class="fa-solid fa-house"></i> No — Dashboard</button>
+
+      <button type="button" class="erp-btn erp-btn-primary" data-boq-continue-yes><i class="fa-solid fa-plus"></i> Yes — Add Next BOQ</button>
+
+    </div>
+
+  </div>
+
+</div>
+
+{{ workflow_modals() }}
+
 {% endblock %}
+
 {% block scripts %}
+
 <script src="{{ url_for('static', filename='js/boq-forms.js') }}"></script>
+
+<script src="{{ url_for('static', filename='js/workflow.js') }}"></script>
+
 {% endblock %}
+
+

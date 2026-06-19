@@ -2,39 +2,99 @@
 {% from 'macros/erp_ui.html' import approval_badge, erp_pagination %}
 {% set page_title = 'Subcontractor Workers' %}
 {% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; Subcontract &gt; Workers' %}
+{% set form_worker = editing_worker %}
 {% block page_actions %}
 <a href="{{ url_for('subcontractors') }}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-people-group"></i> Subcontractors</a>
-<a href="#add-worker" class="erp-btn erp-btn-primary"><i class="fa-solid fa-user-plus"></i> Add Worker</a>
+<a href="{{ url_for('workers') }}#add-worker" class="erp-btn erp-btn-primary"><i class="fa-solid fa-user-plus"></i> Add Worker</a>
+{% if form_worker %}<a href="{{ url_for('workers') }}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-xmark"></i> Cancel Edit</a>{% endif %}
 {% endblock %}
 {% block content %}
 <div class="module-layout worker-module-layout">
-  <div class="erp-form-card" id="add-worker">
-    <h3 class="erp-form-title">Add Worker</h3>
-    <form method="post" enctype="multipart/form-data" class="erp-form-grid worker-form-grid">
-      <div class="erp-field"><input id="worker_code_preview" value="{{ next_worker_code }}" readonly placeholder=" "><label>Worker Code (Auto)</label></div>
-      <div class="erp-field"><input name="worker_name" placeholder=" " required><label>Worker Name</label></div>
-      <div class="erp-field"><input name="mobile" placeholder=" "><label>Mobile</label></div>
-      <div class="erp-field"><input name="aadhaar_number" placeholder=" "><label>Aadhaar Number</label></div>
-      <div class="erp-field"><input name="pan_number" placeholder=" "><label>PAN Number</label></div>
-      <div class="erp-field span-2"><select id="worker_category" name="worker_category"><option selected>Company Staff</option><option>Sub Contractor Staff</option></select><label>Worker Category</label></div>
-      <div class="erp-field span-2" id="subcontractor-row" style="display:none"><select name="subcontractor_id" id="worker_subcontractor_id"><option value="">Select subcontractor</option>{% for item in subcontractors %}<option value="{{ item.id }}" data-next-code="{{ item.next_worker_code }}">{{ item.subcontractor_name }}</option>{% endfor %}</select><label>Sub Contractor</label></div>
-      <div class="erp-field span-2"><select name="project_id"><option value="">Select project</option>{% for item in projects %}<option value="{{ item.id }}">{{ item.project_name }}</option>{% endfor %}</select><label>Project</label></div>
-      <div class="erp-field"><input name="designation" placeholder=" "><label>Designation</label></div>
-      <div class="erp-field"><select name="salary_type"><option>Monthly</option><option>Daily</option></select><label>Salary Type</label></div>
-      <div class="erp-field"><input name="salary_amount" type="number" step="0.01" placeholder=" "><label>Salary Amount</label></div>
-      <div class="erp-field"><select name="ot_applicable"><option>Yes</option><option selected>No</option></select><label>OT Applicable</label></div>
-      <div class="erp-field"><input name="working_hours" type="number" step="0.1" placeholder=" "><label>Working Hours</label></div>
-      <div class="erp-field"><input name="joining_date" type="date" placeholder=" "><label>Joining Date</label></div>
-      <div class="erp-field"><input name="bank_account" placeholder=" "><label>Bank Account Number</label></div>
-      <div class="erp-field"><input name="bank_name" placeholder=" "><label>Bank Name</label></div>
-      <div class="erp-field"><input name="ifsc_code" placeholder=" "><label>IFSC Code</label></div>
-      <div class="erp-field"><input name="branch_name" placeholder=" "><label>Branch Name</label></div>
-      <div class="erp-field span-2"><input name="photo" type="file"><label>Photo</label></div>
-      <div class="erp-field span-2"><input name="id_proof" type="file"><label>ID Proof</label></div>
-      <div class="erp-field span-2"><input name="aadhaar_document" type="file"><label>Aadhaar Document</label></div>
-      <div class="erp-field span-2"><input name="pan_document" type="file"><label>PAN Document</label></div>
-      <div class="erp-field"><select name="status"><option selected>Active</option><option>Inactive</option></select><label>Status</label></div>
-      <div class="erp-form-actions"><button class="erp-btn erp-btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Save Worker</button></div>
+  <div class="erp-form-card worker-form-card" id="add-worker">
+    <h3 class="erp-form-title">{{ 'Edit Subcontractor Worker' if form_worker else 'Add Subcontractor Worker' }}</h3>
+    <form method="post" enctype="multipart/form-data" class="erp-form-grid worker-form-grid worker-form-grid--compact" data-worker-form
+          {% if form_worker %}
+          data-edit-mode="1"
+          data-subcontractor-id="{{ form_worker.subcontractor_id or '' }}"
+          data-trade-name="{{ form_worker.designation or '' }}"
+          data-worker-code="{{ form_worker.worker_code or '' }}"
+          {% endif %}>
+      {% if form_worker %}<input type="hidden" name="worker_id" value="{{ form_worker.id }}">{% endif %}
+
+      <div class="erp-field span-2">
+        <select id="worker_subcontractor_name" required>
+          <option value="">Select subcontractor name</option>
+          {% for item in subcontractors %}
+          <option value="{{ item.id }}"
+            data-sub-code="{{ item.subcontractor_code or '' }}"
+            data-next-code="{{ item.next_worker_code }}"
+            data-sub-name="{{ item.subcontractor_name }}"
+            {% if form_worker and form_worker.subcontractor_id == item.id %} selected{% endif %}>
+            {{ item.subcontractor_name }}
+          </option>
+          {% endfor %}
+        </select>
+        <label>Subcontractor Name</label>
+      </div>
+      <div class="erp-field">
+        <select id="worker_subcontractor_code">
+          <option value="">Select subcontractor ID</option>
+          {% for item in subcontractors %}
+          <option value="{{ item.id }}"
+            data-sub-code="{{ item.subcontractor_code or '' }}"
+            data-next-code="{{ item.next_worker_code }}"
+            data-sub-name="{{ item.subcontractor_name }}"
+            {% if form_worker and form_worker.subcontractor_id == item.id %} selected{% endif %}>
+            {{ item.subcontractor_code or '—' }}
+          </option>
+          {% endfor %}
+        </select>
+        <label>Subcontractor ID</label>
+      </div>
+      <input type="hidden" name="subcontractor_id" id="worker_subcontractor_id" value="{{ form_worker.subcontractor_id if form_worker else '' }}">
+
+      <div class="erp-field">
+        <input id="worker_code_preview" value="{{ form_worker.worker_code if form_worker else next_worker_code }}" readonly placeholder=" ">
+        <label>Worker ID (Auto)</label>
+      </div>
+      <div class="erp-field"><input name="worker_name" placeholder=" " required value="{{ form_worker.worker_name if form_worker else '' }}"><label>Worker Name</label></div>
+      <div class="erp-field"><input name="mobile" placeholder=" " value="{{ form_worker.mobile if form_worker else '' }}"><label>Mobile</label></div>
+
+      <div class="erp-field span-2">
+        <select name="trade_name" id="worker_trade_name" required{% if not form_worker %} disabled{% endif %}>
+          <option value="">{% if form_worker %}Loading trades…{% else %}Select subcontractor first{% endif %}</option>
+        </select>
+        <label>Trade</label>
+      </div>
+
+      <div class="worker-rate-summary span-2" id="worker_rate_summary" hidden aria-live="polite">
+        <span class="worker-rate-summary-label">Subcontractor rate</span>
+        <span class="worker-rate-pill"><strong>Salary</strong> <span id="worker_rate_salary">—</span></span>
+        <span class="worker-rate-pill"><strong>Hours/day</strong> <span id="worker_rate_hours">—</span></span>
+        <span class="worker-rate-pill"><strong>Basis</strong> <span id="worker_rate_unit">—</span></span>
+      </div>
+
+      <div class="erp-field"><input name="joining_date" type="date" placeholder=" " value="{{ form_worker.joining_date if form_worker else '' }}"><label>Joined Date</label></div>
+      <div class="erp-field"><input name="aadhaar_number" placeholder=" " value="{{ form_worker.aadhaar_number if form_worker else '' }}"><label>Aadhaar Number</label></div>
+      <div class="erp-field"><input name="pan_number" placeholder=" " value="{{ form_worker.pan_number if form_worker else '' }}"><label>PAN Number</label></div>
+
+      <div class="erp-field"><input name="photo" type="file" accept="image/*"><label>Photo{% if form_worker and form_worker.photo %} <span class="erp-hint">(on file)</span>{% endif %}</label></div>
+      <div class="erp-field"><input name="id_proof" type="file" accept="image/*,.pdf"><label>ID Proof{% if form_worker and form_worker.id_proof %} <span class="erp-hint">(on file)</span>{% endif %}</label></div>
+      <div class="erp-field"><input name="aadhaar_document" type="file" accept="image/*,.pdf"><label>Aadhaar Doc{% if form_worker and form_worker.aadhaar_document %} <span class="erp-hint">(on file)</span>{% endif %}</label></div>
+      <div class="erp-field"><input name="pan_document" type="file" accept="image/*,.pdf"><label>PAN Doc{% if form_worker and form_worker.pan_document %} <span class="erp-hint">(on file)</span>{% endif %}</label></div>
+
+      <div class="erp-field">
+        <select name="status">
+          <option value="Active"{% if not form_worker or form_worker.status == 'Active' %} selected{% endif %}>Active</option>
+          <option value="Inactive"{% if form_worker and form_worker.status == 'Inactive' %} selected{% endif %}>Inactive</option>
+        </select>
+        <label>Status</label>
+      </div>
+
+      <div class="erp-form-actions">
+        <button class="erp-btn erp-btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> {{ 'Update Worker' if form_worker else 'Save Worker' }}</button>
+        {% if form_worker %}<a href="{{ url_for('workers') }}" class="erp-btn erp-btn-ghost">Cancel</a>{% endif %}
+      </div>
     </form>
   </div>
 
@@ -49,19 +109,26 @@
     </div>
     <div class="erp-table-scroll">
       <table class="erp-table erp-table-module">
-        <thead><tr><th>#</th><th>Worker Code</th><th>Name</th><th>Category</th><th>Project</th><th>Status</th></tr></thead>
+        <thead><tr><th>Worker ID</th><th>Name</th><th>Subcontractor</th><th>Trade</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody>
           {% for row in rows %}
           <tr>
-            <td>{{ row.id }}</td>
             <td>{{ row.worker_code or '—' }}</td>
             <td>{{ row.worker_name }}</td>
-            <td>{{ row.worker_category }}</td>
-            <td>{{ row.project_name or '—' }}</td>
+            <td>{{ row.subcontractor_name or '—' }}{% if row.subcontractor_code %} ({{ row.subcontractor_code }}){% endif %}</td>
+            <td>{{ row.designation or '—' }}</td>
             <td>{{ approval_badge(row.status) }}</td>
+            <td style="white-space:nowrap;">
+              <a href="{{ url_for('workers', edit=row.id) }}#add-worker" class="erp-btn erp-btn-sm erp-btn-ghost"><i class="fa-solid fa-pen"></i> Edit</a>
+              <form method="post" style="display:inline;" onsubmit="return confirm('Delete worker {{ row.worker_name|e }}? This cannot be undone.');">
+                <input type="hidden" name="form_action" value="delete">
+                <input type="hidden" name="worker_id" value="{{ row.id }}">
+                <button type="submit" class="erp-btn erp-btn-sm erp-btn-ghost" title="Delete"><i class="fa-solid fa-trash"></i></button>
+              </form>
+            </td>
           </tr>
           {% else %}
-          <tr><td colspan="6">No worker records yet.</td></tr>
+          <tr><td colspan="6">No subcontractor worker records yet.</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -69,4 +136,7 @@
     {{ erp_pagination(rows|length) }}
   </div>
 </div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/workers-form.js') }}"></script>
 {% endblock %}

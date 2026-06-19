@@ -1,0 +1,51 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Diesel Purchase' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('fleet_dashboard') ~ '">Fleet</a> &gt; Diesel Purchase' %}
+{% block page_actions %}
+<a href="{{ url_for('fleet_diesel_purchase', new=1) }}#record-form" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> Record Purchase</a>
+<a href="{{ url_for('fleet_diesel_stock') }}" class="erp-btn erp-btn-ghost">Stock View</a>
+{% endblock %}
+{% block content %}
+<div class="erp-stat-card" style="margin-bottom:1rem;display:inline-block;padding:1rem 1.5rem;">
+  <span>Current Stock</span><strong>{{ '%.2f'|format(stock_balance) }} L</strong>
+</div>
+
+{% if show_form %}
+<div class="erp-form-card" id="record-form" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">Bulk Diesel Purchase</h3>
+  <form method="post">
+    <div class="erp-form-grid">
+      <div class="erp-field"><input type="date" name="purchase_date" required value="{{ default_date }}"><label>Purchase Date *</label></div>
+      <div class="erp-field"><input name="supplier" required placeholder=" "><label>Supplier *</label></div>
+      <div class="erp-field"><input type="number" step="0.01" name="quantity_liters" required placeholder=" "><label>Quantity (L) *</label></div>
+      <div class="erp-field"><input type="number" step="0.01" name="rate_per_liter" placeholder=" "><label>Rate per Liter</label></div>
+      <div class="erp-field"><input name="invoice_ref" placeholder=" "><label>Invoice Ref</label></div>
+      <div class="erp-field span-2"><textarea name="remarks" placeholder=" "></textarea><label>Remarks</label></div>
+    </div>
+    <button type="submit" class="erp-btn erp-btn-primary">Save Purchase</button>
+  </form>
+</div>
+{% endif %}
+
+<div class="erp-table-panel" data-erp-table>
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead><tr><th>Purchase No</th><th>Date</th><th>Supplier</th><th>Qty (L)</th><th>Rate</th><th>Amount</th></tr></thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>{{ row.purchase_number }}</td>
+          <td>{{ row.purchase_date or '—' }}</td>
+          <td>{{ row.supplier }}</td>
+          <td>{{ '%.2f'|format(row.quantity_liters or 0) }}</td>
+          <td>{{ '%.2f'|format(row.rate_per_liter or 0) }}</td>
+          <td>₹{{ '%.2f'|format(row.total_amount or 0) }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6">No diesel purchases yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

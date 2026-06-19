@@ -1,0 +1,65 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Project Photo Timeline' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('project_photos_register') ~ '">Project Photos</a> &gt; Timeline' %}
+{% block page_actions %}
+<a href="{{ url_for('project_photos_register', project_id=project_filter or none, category=category_filter or none) }}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-images"></i> Gallery</a>
+<a href="{{ url_for('project_photos_reports') }}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-file-pdf"></i> Reports</a>
+{% endblock %}
+{% block content %}
+<style>
+  .timeline-day { margin-bottom: 1.5rem; }
+  .timeline-day h3 { margin: 0 0 0.75rem; font-size: 1rem; color: #374151; border-bottom: 2px solid #e5e7eb; padding-bottom: 0.35rem; }
+  .timeline-row { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+  .timeline-item { width: 160px; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; background: #fff; font-size: 0.8rem; }
+  .timeline-item img { width: 100%; height: 110px; object-fit: cover; display: block; }
+  .timeline-item .body { padding: 0.5rem; }
+  .timeline-item .pdf { height: 110px; display: flex; align-items: center; justify-content: center; background: #f9fafb; color: #dc2626; font-size: 2rem; }
+</style>
+
+<form method="get" class="erp-table-toolbar" style="margin-bottom:1rem;display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+  <input name="q" value="{{ search }}" placeholder="Search…" style="max-width:200px;">
+  <select name="project_id" style="max-width:200px;">
+    <option value="">All projects</option>
+    {% for p in projects %}
+    <option value="{{ p.id }}" {% if project_filter == p.id %}selected{% endif %}>{{ p.project_code or p.id }} — {{ p.project_name }}</option>
+    {% endfor %}
+  </select>
+  <select name="category" style="max-width:180px;">
+    <option value="">All categories</option>
+    {% for c in categories %}
+    <option value="{{ c }}" {% if category_filter == c %}selected{% endif %}>{{ c }}</option>
+    {% endfor %}
+  </select>
+  <input type="date" name="date_from" value="{{ date_from }}">
+  <input type="date" name="date_to" value="{{ date_to }}">
+  <input name="uploaded_by" value="{{ uploaded_by_filter }}" placeholder="Uploaded by" style="max-width:140px;">
+  <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Filter</button>
+</form>
+
+{% for day in timeline %}
+<section class="timeline-day">
+  <h3><i class="fa-regular fa-calendar"></i> {{ day.date }}</h3>
+  <div class="timeline-row">
+    {% for photo in day.photos %}
+    <div class="timeline-item">
+      <a href="{{ url_for('project_photos_file', photo_id=photo.id) }}" target="_blank">
+        {% if photo.file_type == 'image' %}
+        <img src="{{ url_for('project_photos_file', photo_id=photo.id) }}" alt="" loading="lazy">
+        {% else %}
+        <div class="pdf"><i class="fa-solid fa-file-pdf"></i></div>
+        {% endif %}
+      </a>
+      <div class="body">
+        <strong>{{ photo.category }}</strong><br>
+        {{ photo.project_code or '' }} {{ photo.project_name }}<br>
+        {% if photo.location %}{{ photo.location }}<br>{% endif %}
+        {{ photo.uploaded_by or '' }}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% else %}
+<p class="erp-empty">No photos match the selected filters.</p>
+{% endfor %}
+{% endblock %}

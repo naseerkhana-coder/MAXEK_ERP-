@@ -1,0 +1,161 @@
+{% extends 'base_maxek.html' %}
+{% from 'macros/erp_ui.html' import role_status_badge, maker_row_actions, rejection_notice, workflow_modals, transaction_view_tabs %}
+{% set page_title = 'Goods Receipt (GRN)' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('store') ~ '">Store</a> &gt; GRN' %}
+{% block page_actions %}
+<a href="{{ url_for('store_receipt', new=1) }}#grn-form" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> New GRN</a>
+{% endblock %}
+{% block content %}
+{% if view_record %}
+<div class="erp-form-card" style="margin-bottom:1rem;">
+  {% call transaction_view_tabs(view_record, history, can_reopen, approval_id) %}
+  <h3 class="erp-form-title">GRN {{ view_record.grn_number or ('#' ~ view_record.id) }}</h3>
+  <p><strong>Date:</strong> {{ view_record.receipt_date or '—' }} | <strong>Project:</strong> {{ view_record.project_name or '—' }}</p>
+  <p><strong>Vendor:</strong> {{ view_record.vendor_name or view_record.supplier or '—' }} | <strong>PO:</strong> {{ view_record.po_number or '—' }}</p>
+  <table class="erp-table" style="margin-top:0.75rem;">
+    <thead><tr><th>Material</th><th>Description</th><th>Qty</th><th>Unit</th><th>Rate</th></tr></thead>
+    <tbody>
+      {% for line in view_record.lines %}
+      <tr>
+        <td>{{ line.material_code or line.material_name or '—' }}</td>
+        <td>{{ line.description or '—' }}</td>
+        <td>{{ line.quantity }}</td>
+        <td>{{ line.unit or '—' }}</td>
+        <td>{{ '%.2f'|format(line.rate or 0) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p><strong>Status:</strong> {{ role_status_badge(view_record.approval_status, 'maker') }}
+    {% if view_record.stock_posted %}<span class="erp-badge">Stock Posted</span>{% endif %}
+  </p>
+  {{ rejection_notice(history, view_record.approval_status) }}
+  {% endcall %}
+</div>
+{% endif %}
+
+{% if show_form %}
+<div class="erp-form-card" id="grn-form" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">{% if edit_record %}Edit GRN{% else %}New Goods Receipt{% endif %}</h3>
+  <form method="post" data-store-lines-form>
+    {% if edit_record %}<input type="hidden" name="record_id" value="{{ edit_record.id }}">{% endif %}
+    <div class="erp-form-grid">
+      <div class="erp-field">
+        <select name="project_id">
+          <option value="">—</option>
+          {% for p in projects %}
+          <option value="{{ p.id }}" {% if edit_record and edit_record.project_id == p.id %}selected{% endif %}>{{ p.project_name }}</option>
+          {% endfor %}
+        </select>
+        <label>Project</label>
+      </div>
+      <div class="erp-field">
+        <input type="date" name="receipt_date" required value="{{ edit_record.receipt_date if edit_record else default_date }}">
+        <label>Receipt Date *</label>
+      </div>
+      <div class="erp-field">
+        <select name="vendor_id" id="grn_vendor">
+          <option value="">—</option>
+          {% for v in vendors %}
+          <option value="{{ v.id }}" {% if edit_record and edit_record.vendor_id == v.id %}selected{% endif %}>{{ v.name }}</option>
+          {% endfor %}
+        </select>
+        <label>Vendor</label>
+      </div>
+      <div class="erp-field">
+        <select name="purchase_order_id">
+          <option value="">— Optional —</option>
+          {% for po in purchase_orders %}
+          <option value="{{ po.id }}" {% if edit_record and edit_record.purchase_order_id == po.id %}selected{% endif %}>{{ po.po_number }} — {{ po.vendor_name }}</option>
+          {% endfor %}
+        </select>
+        <label>Link PO</label>
+      </div>
+      <div class="erp-field">
+        <input name="supplier" placeholder=" " value="{{ edit_record.supplier if edit_record else '' }}">
+        <label>Supplier (if no vendor)</label>
+      </div>
+      <div class="erp-field">
+        <input name="invoice_ref" placeholder=" " value="{{ edit_record.invoice_ref if edit_record else '' }}">
+        <label>Invoice / Challan Ref</label>
+      </div>
+      <div class="erp-field span-2">
+        <textarea name="remarks" placeholder=" ">{{ edit_record.remarks if edit_record else '' }}</textarea>
+        <label>Remarks</label>
+      </div>
+    </div>
+    <div class="erp-table-panel" style="margin-top:1rem;">
+      <div class="erp-table-toolbar">
+        <h3 class="erp-table-title">Receipt Lines</h3>
+        <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-add-line>Add Line</button>
+      </div>
+      <div class="erp-table-scroll">
+        <table class="erp-table" data-lines-table>
+          <thead><tr><th>Material *</th><th>Description</th><th>Qty</th><th>Unit</th><th>Rate</th><th>Remarks</th><th></th></tr></thead>
+          <tbody>
+            {% set lines = edit_record.lines if edit_record else [{'material_id':'','quantity':1,'unit':'Nos','rate':0}] %}
+            {% for line in lines %}
+            <tr data-line-row>
+              <td>
+                <select name="material_id[]" required>
+                  <option value="">Select</option>
+                  {% for m in materials %}
+                  <option value="{{ m.id }}" data-unit="{{ m.unit }}"
+                    {% if line.material_id == m.id %}selected{% endif %}>{{ m.code }} — {{ m.name }}</option>
+                  {% endfor %}
+                </select>
+              </td>
+              <td><input name="description[]" value="{{ line.description or '' }}"></td>
+              <td><input type="number" step="0.01" name="quantity[]" value="{{ line.quantity or 1 }}"></td>
+              <td><input name="unit[]" value="{{ line.unit or 'Nos' }}"></td>
+              <td><input type="number" step="0.01" name="rate[]" value="{{ line.rate or 0 }}"></td>
+              <td><input name="line_remarks[]" value="{{ line.remarks or '' }}"></td>
+              <td><button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-remove-line>×</button></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div style="margin-top:1rem;display:flex;gap:0.75rem;">
+      <button type="submit" class="erp-btn erp-btn-primary">Save</button>
+      <a href="{{ url_for('store_receipt') }}" class="erp-btn erp-btn-ghost">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endif %}
+
+<div class="erp-table-panel" data-erp-table>
+  <div class="erp-table-toolbar"><h3 class="erp-table-title">GRN Register</h3></div>
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead><tr><th>GRN No.</th><th>Date</th><th>Project</th><th>Vendor</th><th>Items</th><th>Status</th><th>Actions</th></tr></thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>{{ row.grn_number or row.id }}</td>
+          <td>{{ row.receipt_date or '—' }}</td>
+          <td>{{ row.project_name or '—' }}</td>
+          <td>{{ row.vendor_name or row.supplier or '—' }}</td>
+          <td>{{ row.item_name or '—' }} ({{ row.quantity or 0 }})</td>
+          <td>{{ role_status_badge(row.approval_status, 'maker') }}</td>
+          <td>
+            <a href="{{ url_for('store_receipt', view=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">View</a>
+            {% if row.approval_status in ['Pending Checker', 'Rejected by Checker', 'Rejected by Approver'] and not row.stock_posted %}
+            <a href="{{ url_for('store_receipt', edit=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Edit</a>
+            {% endif %}
+            {{ maker_row_actions('store_receipt', 'store_receipts', row.id, row.approval_status, 'store_receipt') }}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7">No GRN entries yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{ workflow_modals() }}
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/store-forms.js') }}"></script>
+{% endblock %}

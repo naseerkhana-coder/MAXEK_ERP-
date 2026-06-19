@@ -1,0 +1,49 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Diesel Issue' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('fleet_dashboard') ~ '">Fleet</a> &gt; Diesel Issue' %}
+{% block page_actions %}
+<a href="{{ url_for('fleet_diesel_issue', new=1) }}#record-form" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> Issue Diesel</a>
+<a href="{{ url_for('fleet_diesel_stock') }}" class="erp-btn erp-btn-ghost">Stock: {{ '%.2f'|format(stock_balance) }} L</a>
+{% endblock %}
+{% block content %}
+{% if show_form %}
+<div class="erp-form-card" id="record-form" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">Issue Diesel to Vehicle</h3>
+  <p style="color:#64748b;margin-bottom:1rem;">Available stock: <strong>{{ '%.2f'|format(stock_balance) }} L</strong></p>
+  <form method="post">
+    <div class="erp-form-grid">
+      <div class="erp-field"><input type="date" name="issue_date" required value="{{ default_date }}"><label>Issue Date *</label></div>
+      <div class="erp-field"><select name="vehicle_id" required><option value="">Select Vehicle</option>{% for v in vehicles %}<option value="{{ v.id }}">{{ v.registration_number }}</option>{% endfor %}</select><label>Vehicle *</label></div>
+      <div class="erp-field"><input type="number" step="0.01" name="quantity_liters" required placeholder=" "><label>Quantity (L) *</label></div>
+      <div class="erp-field"><input type="number" step="0.01" name="odometer_km" placeholder=" "><label>Odometer (km)</label></div>
+      <div class="erp-field"><input name="issued_to" placeholder=" "><label>Issued To</label></div>
+      <div class="erp-field"><select name="project_id"><option value="">—</option>{% for p in projects %}<option value="{{ p.id }}">{{ p.project_name }}</option>{% endfor %}</select><label>Project</label></div>
+      <div class="erp-field span-2"><textarea name="remarks" placeholder=" "></textarea><label>Remarks</label></div>
+    </div>
+    <button type="submit" class="erp-btn erp-btn-primary">Record Issue</button>
+  </form>
+</div>
+{% endif %}
+
+<div class="erp-table-panel" data-erp-table>
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead><tr><th>Issue No</th><th>Date</th><th>Vehicle</th><th>Qty (L)</th><th>Odometer</th><th>Issued To</th></tr></thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>{{ row.issue_number }}</td>
+          <td>{{ row.issue_date or '—' }}</td>
+          <td>{{ row.registration_number or '—' }}</td>
+          <td>{{ '%.2f'|format(row.quantity_liters or 0) }}</td>
+          <td>{{ '%.0f'|format(row.odometer_km or 0) }}</td>
+          <td>{{ row.issued_to or '—' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6">No diesel issues yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

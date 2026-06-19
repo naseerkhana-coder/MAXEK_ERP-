@@ -1,105 +1,147 @@
 {% extends 'base_maxek.html' %}
-{% from 'macros/erp_ui.html' import approval_badge, erp_pagination %}
+{% from 'macros/erp_ui.html' import approval_badge, role_status_badge, rejection_notice, workflow_modals, transaction_view_tabs, checker_row_actions, approver_row_actions, maker_row_actions, erp_pagination %}
 {% set page_title = 'Project Creation' %}
 {% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; Projects' %}
 {% block page_actions %}
 <a href="{{ url_for('clients') }}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-building"></i> Clients</a>
+<a href="{{ url_for('cost_planning') }}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-coins"></i> Cost Planning</a>
 <a href="#add-project" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> New Project</a>
 {% endblock %}
 {% block content %}
+{% set form_project = editing_project %}
+<div class="erp-validation" style="margin-bottom: 1rem;">
+  <strong>Flow:</strong> Maker [Save] → Checker [Verify / Edit / Reject] → Approver [Approve / Edit / Reject]
+</div>
+
+{% if view_project %}
+<div class="erp-form-card" style="margin-bottom: 1rem;">
+  {% call transaction_view_tabs(view_project, history, can_reopen, approval_id) %}
+  <h3 class="erp-form-title">Project — {{ view_project.project_name }}</h3>
+  <div class="erp-form-grid">
+    <p><strong>Project No.:</strong> {{ view_project.project_code or view_project.id }}</p>
+    <p><strong>Type:</strong> {{ view_project.project_type or 'Private' }}</p>
+    <p><strong>Client / Dept:</strong> {% if view_project.project_type == 'Government' %}{{ view_project.gov_department or '—' }}{% else %}{{ view_project.private_client_name or view_project.company_name or view_project.client_name or '—' }}{% endif %}</p>
+    <p><strong>Location:</strong> {{ view_project.location or '—' }}</p>
+    <p><strong>Approved Total:</strong> {{ view_project.approved_total_amount or view_project.budget or '—' }}</p>
+    <p><strong>Status:</strong> {{ view_project.status or 'Active' }}</p>
+    <p><strong>Workflow:</strong> {{ role_status_badge(view_project.approval_status, 'maker') }}</p>
+    <p><strong>Created By:</strong> {{ view_project.created_by or '—' }}</p>
+    <p><strong>Created At:</strong> {{ view_project.created_at or '—' }}</p>
+  </div>
+  {{ rejection_notice(history, view_project.approval_status) }}
+  <div class="erp-form-actions" style="margin-top: 1rem; flex-wrap: wrap;">
+    {% if edit_role == 'checker' and approval_id and view_project.approval_status == 'Pending Checker' %}
+    {{ checker_row_actions(approval_id, 'projects', view_project.id, view_project.approval_status) }}
+    {% elif edit_role == 'approver' and approval_id and view_project.approval_status == 'Pending Approval' %}
+    {{ approver_row_actions(approval_id, 'projects', view_project.id, view_project.approval_status) }}
+    {% elif edit_role == 'maker' and view_project.approval_status in ['Pending Checker', 'Rejected by Checker', 'Rejected by Approver'] %}
+    <a href="{{ url_for('projects', edit=view_project.id) }}#add-project" class="erp-btn erp-btn-primary erp-btn-sm"><i class="fa-solid fa-pen-to-square"></i> Edit Project</a>
+    {% endif %}
+    <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-modal-open="project-hub-{{ view_project.id }}"><i class="fa-solid fa-circle-nodes"></i> Project 360</button>
+    <a href="{{ url_for('projects') }}" class="erp-btn erp-btn-ghost erp-btn-sm">Back to List</a>
+  </div>
+  {% endcall %}
+</div>
+{% endif %}
+
 <div class="module-layout">
+  {% if not view_project %}
   <div class="erp-form-card" id="add-project">
-    <h3 class="erp-form-title">Project Creation</h3>
+    <h3 class="erp-form-title">{% if form_project %}Edit Project{% if edit_role %} ({{ edit_role|title }}){% endif %}{% else %}Project Creation{% endif %}</h3>
     <form method="post" enctype="multipart/form-data" class="erp-form-grid" data-master-form="project">
+      {% if form_project %}<input type="hidden" name="project_id" value="{{ form_project.id }}">{% endif %}
       <div class="erp-field span-2">
-        <select name="project_type" required>
-          <option value="Government">Government Project</option>
-          <option value="Private" selected>Private Project</option>
+        <select name="project_type" required class="has-value">
+          <option value="Government"{% if form_project and form_project.project_type == 'Government' %} selected{% endif %}>Government Project</option>
+          <option value="Private"{% if not form_project or form_project.project_type != 'Government' %} selected{% endif %}>Private Project</option>
         </select>
         <label>Project Type</label>
       </div>
-      <div class="erp-field"><input name="project_code_display" placeholder=" " readonly value="{{ next_project_code }}"><label>Project ID (Auto)</label></div>
-      <div class="erp-field span-2"><input name="project_name" placeholder=" " required><label>Project Name</label></div>
+      <div class="erp-field erp-field-auto-number">
+        <span class="erp-auto-number" id="project_code_display" data-project-code-preview>{{ form_project.project_code if form_project else next_project_code }}</span>
+        <label>Project Number (Auto from name)</label>
+      </div>
+      <div class="erp-field span-2"><input name="project_name" value="{{ form_project.project_name if form_project else '' }}" placeholder=" " required class="{% if form_project and form_project.project_name %}has-value{% endif %}"><label>Project Name</label></div>
 
       <div class="erp-field span-2" data-project-section="government" hidden>
-        <select name="gov_department">
+        <select name="gov_department" class="{% if form_project and form_project.gov_department %}has-value{% endif %}">
           <option value="">Select department</option>
           {% for dept in gov_departments %}
-          <option value="{{ dept }}">{{ dept }}</option>
+          <option value="{{ dept }}"{% if form_project and form_project.gov_department == dept %} selected{% endif %}>{{ dept }}</option>
           {% endfor %}
         </select>
         <label>Department</label>
       </div>
-      <div class="erp-field" data-project-section="government" hidden><input name="agreement_number" placeholder=" "><label>Agreement Number</label></div>
-      <div class="erp-field" data-project-section="government" hidden><input name="agreement_date" type="date" placeholder=" "><label>Agreement Date</label></div>
-      <div class="erp-field" data-project-section="government" hidden><input name="completion_time" placeholder=" "><label>Completion Time</label></div>
-      <div class="erp-field" data-project-section="government" hidden><input name="quoted_amount" type="number" step="0.01" placeholder=" "><label>Quoted Amount</label></div>
-      <div class="erp-field" data-project-section="government" hidden><input name="security_deposit_pct" type="number" step="0.01" placeholder=" "><label>Security Deposit %</label></div>
+      <div class="erp-field" data-project-section="government" hidden><input name="agreement_number" value="{{ form_project.agreement_number if form_project else '' }}" placeholder=" " class="{% if form_project and form_project.agreement_number %}has-value{% endif %}"><label>Agreement Number</label></div>
+      <div class="erp-field" data-project-section="government" hidden><input name="agreement_date" type="date" value="{{ form_project.agreement_date if form_project else '' }}" placeholder=" " class="{% if form_project and form_project.agreement_date %}has-value{% endif %}"><label>Agreement Date</label></div>
+      <div class="erp-field" data-project-section="government" hidden><input name="completion_time" value="{{ form_project.completion_time if form_project else '' }}" placeholder=" " class="{% if form_project and form_project.completion_time %}has-value{% endif %}"><label>Completion Time</label></div>
+      <div class="erp-field" data-project-section="government" hidden><input name="quoted_amount" type="number" step="0.01" value="{{ form_project.quoted_amount if form_project else '' }}" placeholder=" " class="{% if form_project and form_project.quoted_amount %}has-value{% endif %}"><label>Quoted Amount</label></div>
+      <div class="erp-field" data-project-section="government" hidden><input name="security_deposit_pct" type="number" step="0.01" value="{{ form_project.security_deposit_pct if form_project else '' }}" placeholder=" " class="{% if form_project and form_project.security_deposit_pct %}has-value{% endif %}"><label>Security Deposit %</label></div>
       <div class="erp-field span-2" data-project-section="government" hidden>
-        <select name="guarantee_type">
+        <select name="guarantee_type" class="{% if form_project and form_project.guarantee_type %}has-value{% endif %}">
           <option value="">Select guarantee type</option>
           {% for gt in guarantee_types %}
-          <option value="{{ gt }}">{{ gt }}</option>
+          <option value="{{ gt }}"{% if form_project and form_project.guarantee_type == gt %} selected{% endif %}>{{ gt }}</option>
           {% endfor %}
         </select>
         <label>Performance / Bank Guarantee</label>
       </div>
 
       <div class="erp-form-subtitle span-2" data-guarantee-section="bank" data-project-section="government" hidden>Bank Guarantee Details</div>
-      <div class="erp-field" data-guarantee-section="bank" data-project-section="government" hidden><input name="bank_guarantee_number" placeholder=" "><label>Bank Guarantee Number</label></div>
-      <div class="erp-field" data-guarantee-section="bank" data-project-section="government" hidden><input name="bank_guarantee_issued_date" type="date" placeholder=" "><label>Issued Date</label></div>
-      <div class="erp-field" data-guarantee-section="bank" data-project-section="government" hidden><input name="bank_guarantee_expiry_date" type="date" placeholder=" "><label>Expiry Date</label></div>
-      <div class="erp-field" data-guarantee-section="bank" data-project-section="government" hidden><input name="bank_guarantee_amount" type="number" step="0.01" placeholder=" "><label>Bank Guarantee Amount</label></div>
+      <div class="erp-field" data-guarantee-section="bank" data-project-section="government" hidden><input name="bank_guarantee_number" value="{{ form_project.bank_guarantee_number if form_project else '' }}" placeholder=" " class="{% if form_project and form_project.bank_guarantee_number %}has-value{% endif %}"><label>Bank Guarantee Number</label></div>
+      <div class="erp-field" data-guarantee-section="bank" data-project-section="government" hidden><input name="bank_guarantee_issued_date" type="date" value="{{ form_project.bank_guarantee_issued_date if form_project else '' }}" placeholder=" " class="{% if form_project and form_project.bank_guarantee_issued_date %}has-value{% endif %}"><label>Issued Date</label></div>
+      <div class="erp-field" data-guarantee-section="bank" data-project-section="government" hidden><input name="bank_guarantee_expiry_date" type="date" value="{{ form_project.bank_guarantee_expiry_date if form_project else '' }}" placeholder=" " class="{% if form_project and form_project.bank_guarantee_expiry_date %}has-value{% endif %}"><label>Expiry Date</label></div>
+      <div class="erp-field" data-guarantee-section="bank" data-project-section="government" hidden><input name="bank_guarantee_amount" type="number" step="0.01" value="{{ form_project.bank_guarantee_amount if form_project else '' }}" placeholder=" " class="{% if form_project and form_project.bank_guarantee_amount %}has-value{% endif %}"><label>Bank Guarantee Amount</label></div>
       <div class="erp-field span-2" data-guarantee-section="bank" data-project-section="government" hidden>
         <input type="file" name="bank_guarantee_document" accept=".pdf,.jpg,.jpeg,.png">
-        <label>Attach Bank Guarantee Document</label>
+        <label>{{ 'Replace Bank Guarantee Document' if form_project and form_project.bank_guarantee_document else 'Attach Bank Guarantee Document' }}</label>
       </div>
 
       <div class="erp-form-subtitle span-2" data-project-section="government" hidden>Security Deposit (Treasury)</div>
-      <div class="erp-field" data-project-section="government" hidden><input name="treasury_deposit_number" placeholder=" "><label>Treasury Deposit Number</label></div>
-      <div class="erp-field" data-project-section="government" hidden><input name="security_deposit_amount" type="number" step="0.01" placeholder=" "><label>Deposit Amount</label></div>
-      <div class="erp-field" data-project-section="government" hidden><input name="security_deposit_issued_date" type="date" placeholder=" "><label>Issued Date</label></div>
-      <div class="erp-field" data-project-section="government" hidden><input name="security_deposit_maturity_date" type="date" placeholder=" "><label>Maturity Date</label></div>
+      <div class="erp-field" data-project-section="government" hidden><input name="treasury_deposit_number" value="{{ form_project.treasury_deposit_number if form_project else '' }}" placeholder=" " class="{% if form_project and form_project.treasury_deposit_number %}has-value{% endif %}"><label>Treasury Deposit Number</label></div>
+      <div class="erp-field" data-project-section="government" hidden><input name="security_deposit_amount" type="number" step="0.01" value="{{ form_project.security_deposit_amount if form_project else '' }}" placeholder=" " class="{% if form_project and form_project.security_deposit_amount %}has-value{% endif %}"><label>Deposit Amount</label></div>
+      <div class="erp-field" data-project-section="government" hidden><input name="security_deposit_issued_date" type="date" value="{{ form_project.security_deposit_issued_date if form_project else '' }}" placeholder=" " class="{% if form_project and form_project.security_deposit_issued_date %}has-value{% endif %}"><label>Issued Date</label></div>
+      <div class="erp-field" data-project-section="government" hidden><input name="security_deposit_maturity_date" type="date" value="{{ form_project.security_deposit_maturity_date if form_project else '' }}" placeholder=" " class="{% if form_project and form_project.security_deposit_maturity_date %}has-value{% endif %}"><label>Maturity Date</label></div>
       <div class="erp-field span-2" data-project-section="government" hidden>
         <input type="file" name="security_deposit_document" accept=".pdf,.jpg,.jpeg,.png">
-        <label>Attach Security Deposit Document</label>
+        <label>{{ 'Replace Security Deposit Document' if form_project and form_project.security_deposit_document else 'Attach Security Deposit Document' }}</label>
       </div>
       <div class="erp-field span-2" data-project-section="government" hidden>
         <input type="file" name="agreement_document" accept=".pdf,.jpg,.jpeg,.png">
-        <label>Attach Agreement Copy</label>
+        <label>{{ 'Replace Agreement Copy' if form_project and form_project.agreement_document else 'Attach Agreement Copy' }}</label>
       </div>
 
       <div class="erp-field span-2 erp-field-with-action" data-project-section="private">
-        <select name="client_id">
+        <select name="client_id" id="project_client_id" class="{% if selected_client_id or (form_project and form_project.client_id) %}has-value{% endif %}">
           <option value="">Select client (optional)</option>
           {% for item in clients %}
-          <option value="{{ item.id }}">{{ item.company_name or item.client_name }}{% if item.contact_person %} — {{ item.contact_person }}{% endif %}</option>
+          <option value="{{ item.id }}"{% if selected_client_id == item.id or (form_project and form_project.client_id == item.id) %} selected{% endif %}>{{ item.company_name or item.client_name }}{% if item.contact_person %} — {{ item.contact_person }}{% endif %}</option>
           {% endfor %}
         </select>
         <label>Client Name</label>
-        <button type="button" class="erp-inline-action" data-modal-open="new-client-modal"><i class="fa-solid fa-building-circle-arrow-right"></i> New Client</button>
+        <button type="button" class="erp-inline-action" id="open-new-client-modal"><i class="fa-solid fa-building-circle-arrow-right"></i> New Client</button>
       </div>
-      <div class="erp-field span-2" data-project-section="private">
-        <input name="private_client_name" placeholder=" ">
-        <label>Client Name (if not in list)</label>
-      </div>
-      <div class="erp-field" data-project-section="private"><input name="work_order_number" placeholder=" "><label>Work Order Number</label></div>
-      <div class="erp-field" data-project-section="private"><input name="work_order_date" type="date" placeholder=" "><label>Work Order Date</label></div>
-      <div class="erp-field" data-project-section="private"><input name="work_order_amount" type="number" step="0.01" placeholder=" "><label>Work Order Amount</label></div>
-      <div class="erp-field span-2" data-project-section="private"><input name="project_contact_person" placeholder=" "><label>Contact Person for Project</label></div>
+      <div class="erp-field" data-project-section="private"><input name="work_order_number" value="{{ form_project.work_order_number if form_project else '' }}" placeholder=" " class="{% if form_project and form_project.work_order_number %}has-value{% endif %}"><label>Work Order Number</label></div>
+      <div class="erp-field" data-project-section="private"><input name="work_order_date" type="date" value="{{ form_project.work_order_date if form_project else '' }}" placeholder=" " class="{% if form_project and form_project.work_order_date %}has-value{% endif %}"><label>Work Order Date</label></div>
+      <div class="erp-field" data-project-section="private"><input name="work_order_amount" type="number" step="0.01" value="{{ form_project.work_order_amount if form_project else '' }}" placeholder=" " class="{% if form_project and form_project.work_order_amount %}has-value{% endif %}"><label>Work Order Amount</label></div>
+      <div class="erp-field span-2" data-project-section="private"><input name="project_contact_person" value="{{ form_project.project_contact_person if form_project else '' }}" placeholder=" " class="{% if form_project and form_project.project_contact_person %}has-value{% endif %}"><label>Contact Person for Project</label></div>
       <div class="erp-field span-2" data-project-section="private">
         <input type="file" name="work_order_document" accept=".pdf,.jpg,.jpeg,.png">
-        <label>Attach Work Order Document</label>
+        <label>{{ 'Replace Work Order Document' if form_project and form_project.work_order_document else 'Attach Work Order Document' }}</label>
       </div>
 
-      <div class="erp-field"><input name="location" placeholder=" "><label>Location</label></div>
-      <div class="erp-field"><input name="start_date" type="date" placeholder=" "><label>Start Date</label></div>
-      <div class="erp-field"><input name="end_date" type="date" placeholder=" "><label>End Date</label></div>
-      <div class="erp-field"><input name="budget" type="number" step="0.01" placeholder=" "><label>Budget</label></div>
-      <div class="erp-field"><select name="status"><option selected>Active</option><option>Completed</option><option>On Hold</option></select><label>Status</label></div>
-      <div class="erp-form-actions span-2"><button class="erp-btn erp-btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Save Project</button></div>
+      <div class="erp-field"><input name="location" value="{{ form_project.location if form_project else '' }}" placeholder=" " class="{% if form_project and form_project.location %}has-value{% endif %}"><label>Location</label></div>
+      <div class="erp-field"><input name="start_date" type="date" value="{{ form_project.start_date if form_project else '' }}" placeholder=" " class="{% if form_project and form_project.start_date %}has-value{% endif %}"><label>Start Date</label></div>
+      <div class="erp-field"><input name="end_date" type="date" value="{{ form_project.end_date if form_project else '' }}" placeholder=" " class="{% if form_project and form_project.end_date %}has-value{% endif %}"><label>End Date</label></div>
+      <div class="erp-field"><input name="approved_total_amount" type="number" step="0.01" value="{{ form_project.approved_total_amount if form_project else '' }}" placeholder=" " class="{% if form_project and form_project.approved_total_amount %}has-value{% endif %}"><label>Approved Total Amount</label></div>
+      <div class="erp-field"><select name="status" class="has-value"><option{% if not form_project or form_project.status == 'Active' %} selected{% endif %}>Active</option><option{% if form_project and form_project.status == 'Completed' %} selected{% endif %}>Completed</option><option{% if form_project and form_project.status == 'On Hold' %} selected{% endif %}>On Hold</option></select><label>Status</label></div>
+      <div class="erp-form-actions span-2">
+        <button class="erp-btn erp-btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> {{ 'Update Project' if form_project else 'Save Project' }}</button>
+        {% if form_project %}<a class="erp-btn erp-btn-ghost" href="{{ url_for('projects') }}">Cancel Edit</a>{% endif %}
+      </div>
     </form>
   </div>
+  {% endif %}
 
   <div class="erp-table-panel" data-erp-table>
     <div class="erp-table-toolbar">
@@ -112,19 +154,36 @@
     </div>
     <div class="erp-table-scroll">
       <table class="erp-table erp-table-module">
-        <thead><tr><th>Code</th><th>Name</th><th>Type</th><th>Client / Dept</th><th>Amount</th><th>Status</th></tr></thead>
+        <thead><tr><th>Project No.</th><th>Name</th><th>Type</th><th>Client / Dept</th><th>Approved Total</th><th>Status</th><th>Workflow</th><th>Actions</th></tr></thead>
         <tbody>
           {% for row in rows %}
           <tr>
             <td>{{ row.project_code or row.id }}</td>
-            <td>{{ row.project_name }}</td>
+            <td>
+              <button type="button" class="erp-link-btn" data-modal-open="project-hub-{{ row.id }}" title="Open Project 360">
+                {{ row.project_name }}
+              </button>
+            </td>
             <td>{{ row.project_type or 'Private' }}</td>
             <td>{% if row.project_type == 'Government' %}{{ row.gov_department or '—' }}{% else %}{{ row.private_client_name or row.company_name or row.client_name or '—' }}{% endif %}</td>
-            <td>{% if row.project_type == 'Government' %}{{ row.quoted_amount or '—' }}{% else %}{{ row.work_order_amount or row.budget or '—' }}{% endif %}</td>
-            <td>{{ approval_badge(row.status) }}</td>
+            <td>{{ row.approved_total_amount or row.budget or '—' }}</td>
+            <td>{{ row.status or 'Active' }}</td>
+            <td>{{ role_status_badge(row.approval_status or 'Approved', 'maker') }}</td>
+            <td>
+              <div class="workflow-row-actions">
+                <a href="{{ url_for('projects', view=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">View</a>
+                {% if row.approval_status in ['Pending Checker', 'Rejected by Checker', 'Rejected by Approver'] %}
+                <a href="{{ url_for('projects', edit=row.id) }}#add-project" class="erp-btn erp-btn-ghost erp-btn-sm">Edit</a>
+                {% elif row.approval_status == 'Pending Approval' %}
+                <span class="workflow-hint">Waiting for Approval</span>
+                {% elif row.approval_status == 'Approved' %}
+                <button type="button" class="erp-btn erp-btn-primary erp-btn-sm" data-modal-open="project-hub-{{ row.id }}"><i class="fa-solid fa-circle-nodes"></i> Hub</button>
+                {% endif %}
+              </div>
+            </td>
           </tr>
           {% else %}
-          <tr><td colspan="6">No project records yet.</td></tr>
+          <tr><td colspan="8">No project records yet.</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -133,7 +192,174 @@
   </div>
 </div>
 
-<div class="erp-modal" id="new-client-modal" hidden>
+{% for row in rows %}
+{% set hub = hub_index.get(row.id, {}) %}
+{% set boq_list = hub.get('boqs', []) %}
+{% set sec_list = hub.get('securities', []) %}
+{% set cp_list = hub.get('cost_plans', []) %}
+<div id="project-hub-{{ row.id }}" class="erp-modal project-hub-modal" hidden>
+  <div class="erp-modal-backdrop" data-modal-close></div>
+  <div class="erp-modal-card project-hub-card">
+    <div class="erp-modal-header">
+      <div>
+        <h3><i class="fa-solid fa-circle-nodes"></i> Project 360 — {{ row.project_name }}</h3>
+        <p>{{ row.project_code or row.id }} · {{ row.project_type or 'Private' }} · {{ row.status or 'Active' }}</p>
+      </div>
+      <button type="button" class="erp-modal-close" data-modal-close aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+
+    <div class="project-hub-summary">
+      <div class="project-hub-stat">
+        <span>BOQ Records</span>
+        <strong>{{ boq_list|length }}</strong>
+      </div>
+      <div class="project-hub-stat">
+        <span>Securities</span>
+        <strong>{{ sec_list|length }}</strong>
+      </div>
+      <div class="project-hub-stat">
+        <span>Cost Plans</span>
+        <strong>{{ cp_list|length }}</strong>
+      </div>
+      <div class="project-hub-stat">
+        <span>Approved Total</span>
+        <strong>{{ row.approved_total_amount or row.budget or '—' }}</strong>
+      </div>
+    </div>
+
+    <section class="project-hub-section">
+      <div class="project-hub-section-head">
+        <h4><i class="fa-solid fa-diagram-project"></i> Project Master</h4>
+        <a href="{{ url_for('projects', edit=row.id) }}#add-project" class="erp-btn erp-btn-primary erp-btn-sm"><i class="fa-solid fa-pen-to-square"></i> Edit Project</a>
+      </div>
+      <div class="employee-detail-grid">
+        <div><span>Client / Department</span><strong>{% if row.project_type == 'Government' %}{{ row.gov_department or '—' }}{% else %}{{ row.private_client_name or row.company_name or row.client_name or '—' }}{% endif %}</strong></div>
+        <div><span>Location</span><strong>{{ row.location or '—' }}</strong></div>
+        <div><span>Start Date</span><strong>{{ row.start_date or '—' }}</strong></div>
+        <div><span>End Date</span><strong>{{ row.end_date or '—' }}</strong></div>
+        {% if row.project_type == 'Government' %}
+        <div><span>Agreement No.</span><strong>{{ row.agreement_number or '—' }}</strong></div>
+        <div><span>Quoted Amount</span><strong>{{ row.quoted_amount or '—' }}</strong></div>
+        <div><span>Security Deposit %</span><strong>{{ row.security_deposit_pct or '—' }}</strong></div>
+        <div><span>Guarantee Type</span><strong>{{ row.guarantee_type or '—' }}</strong></div>
+        {% else %}
+        <div><span>Work Order No.</span><strong>{{ row.work_order_number or '—' }}</strong></div>
+        <div><span>Work Order Amount</span><strong>{{ row.work_order_amount or '—' }}</strong></div>
+        <div><span>Contact Person</span><strong>{{ row.project_contact_person or '—' }}</strong></div>
+        {% endif %}
+      </div>
+      <div class="employee-document-links">
+        {% if row.agreement_document %}<a href="{{ url_for('static', filename='uploads/projects/' ~ row.agreement_document) }}" target="_blank" rel="noopener"><i class="fa-solid fa-file-contract"></i> Agreement</a>{% endif %}
+        {% if row.work_order_document %}<a href="{{ url_for('static', filename='uploads/projects/' ~ row.work_order_document) }}" target="_blank" rel="noopener"><i class="fa-solid fa-file-lines"></i> Work Order</a>{% endif %}
+        {% if row.bank_guarantee_document %}<a href="{{ url_for('static', filename='uploads/projects/' ~ row.bank_guarantee_document) }}" target="_blank" rel="noopener"><i class="fa-solid fa-building-columns"></i> Bank Guarantee</a>{% endif %}
+        {% if row.security_deposit_document %}<a href="{{ url_for('static', filename='uploads/projects/' ~ row.security_deposit_document) }}" target="_blank" rel="noopener"><i class="fa-solid fa-vault"></i> Security Deposit</a>{% endif %}
+        {% if not row.agreement_document and not row.work_order_document and not row.bank_guarantee_document and not row.security_deposit_document %}<span class="project-hub-muted">No documents uploaded on project master.</span>{% endif %}
+      </div>
+    </section>
+
+    <section class="project-hub-section">
+      <div class="project-hub-section-head">
+        <h4><i class="fa-solid fa-list-check"></i> BOQ</h4>
+        <a href="{{ url_for('boq_management', project_id=row.id) }}#boq-form" class="erp-btn erp-btn-primary erp-btn-sm"><i class="fa-solid fa-plus"></i> New BOQ</a>
+      </div>
+      <div class="erp-table-scroll project-hub-table-scroll">
+        <table class="erp-table erp-table-module erp-table-compact">
+          <thead><tr><th>BOQ No.</th><th>Lines</th><th>Amount</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody>
+            {% for boq in boq_list %}
+            <tr>
+              <td>{{ boq.boq_number or boq.id }}</td>
+              <td>{{ boq.line_count or 0 }}</td>
+              <td>{{ '%.2f'|format(boq.total_amount or 0) }}</td>
+              <td>{{ approval_badge(boq.approval_status) }}</td>
+              <td>
+                <div class="workflow-row-actions">
+                  <a href="{{ url_for('boq_management', view=boq.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm"><i class="fa-regular fa-eye"></i> View</a>
+                  <a href="{{ url_for('boq_management', edit=boq.id) }}#boq-form" class="erp-btn erp-btn-ghost erp-btn-sm"><i class="fa-solid fa-pen-to-square"></i> Edit</a>
+                </div>
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" class="project-hub-empty">No BOQ records for this project yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="project-hub-section">
+      <div class="project-hub-section-head">
+        <h4><i class="fa-solid fa-shield-halved"></i> Securities &amp; Guarantees</h4>
+        <div class="project-hub-section-actions">
+          <a href="{{ url_for('securities_guarantees', project_id=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm"><i class="fa-solid fa-table-list"></i> Full Register</a>
+          <a href="{{ url_for('securities_guarantees', new=1, project_id=row.id, security_type='Performance Bank Guarantee') }}#new-record" class="erp-btn erp-btn-primary erp-btn-sm"><i class="fa-solid fa-building-columns"></i> Add BG</a>
+          <a href="{{ url_for('securities_guarantees', new=1, project_id=row.id, security_type='EMD') }}#new-record" class="erp-btn erp-btn-primary erp-btn-sm"><i class="fa-solid fa-file-invoice-dollar"></i> Add EMD</a>
+        </div>
+      </div>
+      <div class="erp-table-scroll project-hub-table-scroll">
+        <table class="erp-table erp-table-module erp-table-compact">
+          <thead><tr><th>Register No.</th><th>Type</th><th>Amount</th><th>Status</th><th>Expiry</th><th>Actions</th></tr></thead>
+          <tbody>
+            {% for sec in sec_list %}
+            <tr>
+              <td>{{ sec.register_number or sec.id }}</td>
+              <td>{{ sec.security_type or '—' }}</td>
+              <td>{{ '%.2f'|format(sec.deposit_amount or 0) }}</td>
+              <td>{{ approval_badge(sec.status) }}</td>
+              <td>{{ sec.expiry_date or sec.maturity_date or '—' }}</td>
+              <td>
+                <div class="workflow-row-actions">
+                  <a href="{{ url_for('securities_guarantees', view=sec.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm"><i class="fa-regular fa-eye"></i> View</a>
+                  <a href="{{ url_for('securities_guarantees', edit=sec.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm"><i class="fa-solid fa-pen-to-square"></i> Edit</a>
+                </div>
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" class="project-hub-empty">No security / guarantee records for this project yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="project-hub-section">
+      <div class="project-hub-section-head">
+        <h4><i class="fa-solid fa-coins"></i> Cost Planning</h4>
+        <a href="{{ url_for('cost_planning', project_id=row.id) }}#cost-plan-form" class="erp-btn erp-btn-primary erp-btn-sm"><i class="fa-solid fa-plus"></i> Open Cost Planning</a>
+      </div>
+      <div class="erp-table-scroll project-hub-table-scroll">
+        <table class="erp-table erp-table-module erp-table-compact">
+          <thead><tr><th>BOQ</th><th>Item</th><th>Description</th><th>Actions</th></tr></thead>
+          <tbody>
+            {% for plan in cp_list %}
+            <tr>
+              <td>{{ plan.boq_number or '—' }}</td>
+              <td>{{ plan.item_code or '—' }}</td>
+              <td>{{ plan.item_description or '—' }}</td>
+              <td>
+                <div class="workflow-row-actions">
+                  <a href="{{ url_for('cost_planning', view=plan.id, project_id=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm"><i class="fa-regular fa-eye"></i> View</a>
+                  <a href="{{ url_for('cost_planning', edit=plan.id, project_id=row.id) }}#cost-plan-form" class="erp-btn erp-btn-ghost erp-btn-sm"><i class="fa-solid fa-pen-to-square"></i> Edit</a>
+                </div>
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" class="project-hub-empty">No cost plans for this project yet. Create BOQ items first.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <div class="employee-detail-actions project-hub-footer">
+      <a href="{{ url_for('projects', edit=row.id) }}#add-project" class="erp-btn erp-btn-primary"><i class="fa-solid fa-pen-to-square"></i> Edit Project</a>
+      <button type="button" class="erp-btn erp-btn-ghost" data-modal-close>Close</button>
+    </div>
+  </div>
+</div>
+{% endfor %}
+
+<div class="erp-modal" id="new-client-modal" hidden aria-hidden="true">
   <div class="erp-modal-backdrop" data-modal-close></div>
   <div class="erp-modal-card" role="dialog" aria-modal="true" aria-labelledby="new-client-title">
     <div class="erp-modal-header">
@@ -143,7 +369,7 @@
       </div>
       <button type="button" class="erp-modal-close" data-modal-close aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
     </div>
-    <form method="post" class="erp-form-grid">
+    <form method="post" class="erp-form-grid" id="new-client-form" action="{{ url_for('projects') }}#add-project">
       <input type="hidden" name="form_action" value="create_client">
       <div class="erp-field span-2"><input name="company_name" placeholder=" " required><label>Company Name</label></div>
       <div class="erp-field span-2"><input name="contact_person" placeholder=" " required><label>Contact Person Name</label></div>
@@ -162,5 +388,20 @@
 </div>
 {% endblock %}
 {% block scripts %}
+{{ workflow_modals() }}
+<script src="{{ url_for('static', filename='js/workflow.js') }}"></script>
 <script src="{{ url_for('static', filename='js/master-forms.js') }}"></script>
+{% if view_project_id %}
+<script>
+(function () {
+  var modal = document.getElementById('project-hub-{{ view_project_id }}');
+  if (modal) {
+    modal.hidden = false;
+    if (history.replaceState) {
+      history.replaceState(null, '', '{{ url_for("projects") }}');
+    }
+  }
+})();
+</script>
+{% endif %}
 {% endblock %}

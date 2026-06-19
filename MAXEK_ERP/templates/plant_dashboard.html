@@ -1,0 +1,24 @@
+{% extends 'base_maxek.html' %}
+{% from 'macros/erp_ui.html' import erp_module_grid %}
+{% set page_title = 'Plant Operations' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; Plant Operations' %}
+{% block content %}
+<div class="erp-summary-grid erp-summary-grid--stats" style="margin-bottom: 1rem;">
+  <div class="erp-stat-card"><span>Total Plants</span><strong>{{ stats.total_plants }}</strong></div>
+  <div class="erp-stat-card"><span>Active Plants</span><strong>{{ stats.active_plants }}</strong></div>
+  <div class="erp-stat-card"><span>Asphalt Today</span><strong>{{ stats.today_production_count }} <small>({{ '%.1f'|format(stats.today_production_ton) }} T prod / {{ '%.1f'|format(stats.today_dispatch_ton) }} T disp)</small></strong></div>
+  <div class="erp-stat-card"><span>RMC Today</span><strong>{{ stats.today_rmc_production_count }} <small>({{ '%.1f'|format(stats.today_rmc_production_m3) }} m³ / {{ stats.today_rmc_dispatch_count }} disp)</small></strong></div>
+  <div class="erp-stat-card"><span>Wet Mix Today</span><strong>{{ stats.today_wetmix_production_count }} <small>({{ '%.1f'|format(stats.today_wetmix_production_qty) }} T)</small></strong></div>
+  <div class="erp-stat-card"><span>Crusher/M-Sand Today</span><strong>{{ stats.today_crusher_production_count }} <small>({{ '%.1f'|format(stats.today_crusher_production_ton) }} T)</small></strong></div>
+  <div class="erp-stat-card"><span>QC Today</span><strong>{{ stats.today_qc_count }} <small>({{ stats.qc_fail_count }} fail MTD)</small></strong></div>
+  <div class="erp-stat-card"><span>Open Maintenance</span><strong>{{ stats.open_maintenance_jobs }}</strong></div>
+  <div class="erp-stat-card"><span>Precast Yard</span><strong>{{ '%.0f'|format(stats.precast_stock_units) }} <small>Nos stock · {{ stats.today_precast_dispatch_count }} disp today</small></strong></div>
+</div>
+
+<div class="erp-notice-bar">
+  <strong>Diesel tracking</strong> — Plant diesel consumption is recorded on asphalt production entries. Fleet diesel stock &amp; issue is managed under
+  <a href="{{ url_for('fleet_diesel_stock') }}">Fleet → Diesel Stock</a>.
+</div>
+
+{{ erp_module_grid(modules, 'Plant modules') }}
+{% endblock %}

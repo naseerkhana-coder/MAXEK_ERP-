@@ -1,0 +1,39 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Sub-contractor Billing' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; HR &gt; Sub Billing' %}
+{% block page_actions %}
+<a href="{{ url_for('sub_billing_form', new=1) }}" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> New Sub Bill</a>
+{% endblock %}
+{% block content %}
+<form method="get" class="erp-table-toolbar" style="margin-bottom:0.75rem;display:flex;gap:0.5rem;">
+  <input name="q" value="{{ search }}" placeholder="Search bill, invoice…">
+  <select name="subcontractor_id"><option value="">All subs</option>
+    {% for s in subcontractors %}<option value="{{ s.id }}" {% if sub_filter == s.id %}selected{% endif %}>{{ s.subcontractor_name }}</option>{% endfor %}
+  </select>
+  <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Filter</button>
+</form>
+<div class="erp-table-wrap">
+  <table class="erp-table">
+    <thead><tr><th>Bill No.</th><th>Invoice</th><th>Sub-contractor</th><th>Period</th><th class="num">Gross</th><th class="num">Net Payment</th><th>Actions</th></tr></thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td><a href="{{ url_for('sub_billing_form', view=row.id) }}">{{ row.bill_number }}</a></td>
+        <td>{{ row.invoice_no or '—' }}</td>
+        <td>{{ row.subcontractor_name }}</td>
+        <td>{{ row.period_from or '—' }} → {{ row.period_to or '—' }}</td>
+        <td class="num">{{ '%.2f'|format(row.gross_amount or 0) }}</td>
+        <td class="num">{{ '%.2f'|format(row.net_payment or 0) }}</td>
+        <td>
+          <a href="{{ url_for('sub_billing_print', bill_id=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm" target="_blank">Detail</a>
+          <a href="{{ url_for('sub_billing_abstract_print', bill_id=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm" target="_blank">Abstract</a>
+          <a href="{{ url_for('sub_billing_form', edit=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Edit</a>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" class="erp-empty">No sub-contractor bills yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

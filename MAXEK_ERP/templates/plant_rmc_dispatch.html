@@ -1,0 +1,97 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'RMC Dispatch' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('plant_dashboard') ~ '">Plant</a> &gt; RMC Dispatch' %}
+{% block page_actions %}
+<a href="{{ url_for('plant_rmc_dispatch', new=1) }}#record-form" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> New Dispatch</a>
+{% endblock %}
+{% block content %}
+{% if view_record %}
+<div class="erp-form-card" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">{{ view_record.dispatch_number }}</h3>
+  <p><strong>Date:</strong> {{ view_record.dispatch_date }} | <strong>Plant:</strong> {{ view_record.plant_name }}</p>
+  <p><strong>Transit Mixer:</strong> {{ view_record.vehicle_number or '—' }} | <strong>Grade:</strong> {{ view_record.grade }} | <strong>Qty:</strong> {{ '%.2f'|format(view_record.qty_m3 or 0) }} m³</p>
+  <p><strong>Loading:</strong> {{ view_record.loading_time or '—' }} | <strong>Dispatch:</strong> {{ view_record.dispatch_time or '—' }} | <strong>Delivery:</strong> {{ view_record.delivery_time or '—' }}</p>
+  <p><strong>Project:</strong> {{ view_record.project_name or '—' }}</p>
+  <a href="{{ url_for('plant_rmc_dispatch_print', dispatch_id=view_record.id) }}" target="_blank" class="erp-btn erp-btn-ghost erp-btn-sm"><i class="fa-solid fa-print"></i> Print Challan</a>
+  <a href="{{ url_for('plant_rmc_dispatch', edit=view_record.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Edit</a>
+</div>
+{% endif %}
+
+{% if show_form %}
+<div class="erp-form-card" id="record-form" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">{% if edit_record %}Edit RMC Dispatch{% else %}RMC Dispatch{% endif %}</h3>
+  <form method="post">
+    {% if edit_record %}<input type="hidden" name="record_id" value="{{ edit_record.id }}">{% endif %}
+    <div class="erp-form-grid">
+      <div class="erp-field"><input type="date" name="dispatch_date" required value="{{ edit_record.dispatch_date if edit_record else default_date }}"><label>Date *</label></div>
+      <div class="erp-field"><select name="plant_id" required><option value="">Select Plant</option>{% for pl in plants %}<option value="{{ pl.id }}" {% if edit_record and edit_record.plant_id == pl.id %}selected{% endif %}>{{ pl.plant_name }} ({{ pl.plant_id }})</option>{% endfor %}</select><label>Plant *</label></div>
+      <div class="erp-field"><select name="project_id"><option value="">—</option>{% for p in projects %}<option value="{{ p.id }}" {% if edit_record and edit_record.project_id == p.id %}selected{% endif %}>{{ p.project_name }}</option>{% endfor %}</select><label>Project</label></div>
+      <div class="erp-field"><input name="vehicle_number" placeholder="Transit mixer / vehicle" list="fleet-vehicles" value="{{ edit_record.vehicle_number if edit_record else '' }}"><label>Transit Mixer / Vehicle</label></div>
+      <datalist id="fleet-vehicles">{% for v in vehicles %}<option value="{{ v.registration_number }}">{% endfor %}</datalist>
+      <div class="erp-field"><select name="grade">{% for g in grades %}<option value="{{ g }}" {% if edit_record and edit_record.grade == g %}selected{% endif %}>{{ g }}</option>{% endfor %}</select><label>Grade</label></div>
+      <div class="erp-field"><input type="number" step="0.01" name="qty_m3" required placeholder=" " value="{{ edit_record.qty_m3 if edit_record else '' }}"><label>Qty (m³) *</label></div>
+      <div class="erp-field"><input type="time" name="loading_time" value="{{ edit_record.loading_time if edit_record else '' }}"><label>Loading Time</label></div>
+      <div class="erp-field"><input type="time" name="dispatch_time" value="{{ edit_record.dispatch_time if edit_record else '' }}"><label>Dispatch Time</label></div>
+      <div class="erp-field"><input type="time" name="delivery_time" value="{{ edit_record.delivery_time if edit_record else '' }}"><label>Delivery Time (optional)</label></div>
+      <div class="erp-field span-2"><textarea name="remarks" placeholder=" ">{{ edit_record.remarks if edit_record else '' }}</textarea><label>Remarks</label></div>
+    </div>
+    <button type="submit" class="erp-btn erp-btn-primary">Save Dispatch</button>
+    {% if edit_record %}
+    <button type="submit" name="form_action" value="delete" class="erp-btn erp-btn-ghost" onclick="return confirm('Delete this dispatch? Stock will be adjusted.');">Delete</button>
+    {% endif %}
+  </form>
+</div>
+{% endif %}
+
+<form method="get" style="margin-bottom:0.75rem;display:flex;gap:0.5rem;flex-wrap:wrap;">
+  <input name="q" value="{{ search }}" placeholder="Search dispatch / vehicle…" style="max-width:200px;">
+  <select name="plant_id" onchange="this.form.submit()"><option value="">All plants</option>{% for pl in plants %}<option value="{{ pl.id }}" {% if plant_filter == pl.id %}selected{% endif %}>{{ pl.plant_name }}</option>{% endfor %}</select>
+  <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Filter</button>
+</form>
+
+{% if stock_rows %}
+<div class="erp-form-card" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title" style="font-size:0.95rem;">RMC Stock Balance (by Grade)</h3>
+  <div class="erp-table-scroll">
+    <table class="erp-table erp-table-compact">
+      <thead><tr><th>Plant</th><th>Grade</th><th>Opening</th><th>Production</th><th>Dispatch</th><th>Closing</th></tr></thead>
+      <tbody>
+        {% for s in stock_rows %}
+        <tr>
+          <td>{{ s.plant_name }}</td>
+          <td>{{ (s.material_type or '')|replace('RMC:', '') }}</td>
+          <td>{{ '%.2f'|format(s.opening or 0) }}</td>
+          <td>{{ '%.2f'|format(s.production or 0) }}</td>
+          <td>{{ '%.2f'|format(s.dispatch or 0) }}</td>
+          <td><strong>{{ '%.2f'|format(s.closing or 0) }}</strong></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<div class="erp-table-panel" data-erp-table>
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead><tr><th>Dispatch No</th><th>Date</th><th>Plant</th><th>Vehicle</th><th>Grade</th><th>Qty (m³)</th><th></th></tr></thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>{{ row.dispatch_number }}</td>
+          <td>{{ row.dispatch_date or '—' }}</td>
+          <td>{{ row.plant_name }}</td>
+          <td>{{ row.vehicle_number or '—' }}</td>
+          <td>{{ row.grade or '—' }}</td>
+          <td>{{ '%.2f'|format(row.qty_m3 or 0) }}</td>
+          <td><a href="{{ url_for('plant_rmc_dispatch', view=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">View</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7">No RMC dispatch records yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

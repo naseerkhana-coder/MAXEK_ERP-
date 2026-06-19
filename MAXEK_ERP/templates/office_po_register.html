@@ -1,0 +1,32 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'PO Register' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('office_admin') ~ '">Office</a> &gt; PO Register' %}
+{% block content %}
+<p style="margin-bottom:1rem;color:#64748b;">Read-only register of purchase orders from Store & Procurement. Create or edit POs in <a href="{{ url_for('purchase_orders') }}">Purchase Orders</a>.</p>
+<form method="get" style="margin-bottom:0.75rem;"><input name="q" value="{{ search }}" placeholder="Search PO, vendor, project…" style="max-width:320px;"> <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Search</button></form>
+<div class="erp-table-panel" data-erp-table>
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead><tr><th>PO No</th><th>Date</th><th>Vendor</th><th>Project</th><th>Total</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>{{ row.po_number }}</td>
+          <td>{{ row.order_date or '—' }}</td>
+          <td>{{ row.vendor_name or '—' }}</td>
+          <td>{{ row.project_name or '—' }}</td>
+          <td>₹{{ '%.2f'|format(row.grand_total or 0) }}</td>
+          <td>{{ row.approval_status or '—' }}</td>
+          <td>
+            <a href="{{ url_for('purchase_orders', view=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">View PO</a>
+            <a href="{{ url_for('purchase_order_print', po_id=row.id) }}" target="_blank" class="erp-btn erp-btn-ghost erp-btn-sm">Print</a>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7">No purchase orders found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

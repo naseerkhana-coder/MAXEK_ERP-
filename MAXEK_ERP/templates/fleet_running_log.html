@@ -1,0 +1,84 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Daily Running Log' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('fleet_dashboard') ~ '">Fleet</a> &gt; Running Log' %}
+{% block page_actions %}
+<a href="{{ url_for('fleet_running_log', new=1, vehicle_id=vehicle_filter) }}#record-form" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> New Entry</a>
+{% endblock %}
+{% block content %}
+{% if view_record %}
+<div class="erp-form-card" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">{{ view_record.registration_number }} — {{ view_record.log_date }}</h3>
+  <p><strong>Driver:</strong> {{ view_record.driver_name or '—' }} | <strong>KM:</strong> {{ '%.0f'|format(view_record.start_km or 0) }} → {{ '%.0f'|format(view_record.end_km or 0) }} = <strong>{{ '%.2f'|format(view_record.total_km or 0) }}</strong></p>
+  <p><strong>Purpose:</strong> {{ view_record.purpose or '—' }} | <strong>Fuel:</strong> {{ view_record.fuel_liters or 0 }} L</p>
+  <a href="{{ url_for('fleet_running_log', edit=view_record.id, vehicle_id=vehicle_filter) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Edit</a>
+</div>
+{% endif %}
+
+{% if show_form %}
+<div class="erp-form-card" id="record-form" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">{% if edit_record %}Edit Running Log{% else %}New Running Log Entry{% endif %}</h3>
+  <form method="post" id="running-log-form">
+    {% if edit_record %}<input type="hidden" name="record_id" value="{{ edit_record.id }}">{% endif %}
+    <div class="erp-form-grid">
+      <div class="erp-field"><select name="vehicle_id" required><option value="">Select Vehicle</option>{% for v in vehicles %}<option value="{{ v.id }}" data-odo="{{ v.odometer_km or 0 }}" {% if (edit_record and edit_record.vehicle_id == v.id) or (vehicle_filter == v.id) %}selected{% endif %}>{{ v.registration_number }}</option>{% endfor %}</select><label>Vehicle *</label></div>
+      <div class="erp-field"><input type="date" name="log_date" required value="{{ edit_record.log_date if edit_record else default_date }}"><label>Log Date *</label></div>
+      <div class="erp-field"><input name="driver_name" placeholder=" " value="{{ edit_record.driver_name if edit_record else '' }}"><label>Driver Name</label></div>
+      <div class="erp-field"><input type="number" step="0.01" name="start_km" id="start-km" value="{{ edit_record.start_km if edit_record else 0 }}"><label>Start KM</label></div>
+      <div class="erp-field"><input type="number" step="0.01" name="end_km" id="end-km" value="{{ edit_record.end_km if edit_record else 0 }}"><label>End KM</label></div>
+      <div class="erp-field"><input type="number" step="0.01" id="total-km" readonly value="{{ edit_record.total_km if edit_record else 0 }}"><label>Total KM (auto)</label></div>
+      <div class="erp-field"><input type="number" step="0.01" name="fuel_liters" value="{{ edit_record.fuel_liters if edit_record else 0 }}"><label>Fuel (L)</label></div>
+      <div class="erp-field"><select name="project_id"><option value="">—</option>{% for p in projects %}<option value="{{ p.id }}" {% if edit_record and edit_record.project_id == p.id %}selected{% endif %}>{{ p.project_name }}</option>{% endfor %}</select><label>Project</label></div>
+      <div class="erp-field span-2"><input name="purpose" placeholder=" " value="{{ edit_record.purpose if edit_record else '' }}"><label>Purpose</label></div>
+      <div class="erp-field span-2"><textarea name="remarks" placeholder=" ">{{ edit_record.remarks if edit_record else '' }}</textarea><label>Remarks</label></div>
+    </div>
+    <button type="submit" class="erp-btn erp-btn-primary">Save</button>
+  </form>
+</div>
+{% endif %}
+
+<form method="get" style="margin-bottom:0.75rem;">
+  <select name="vehicle_id" onchange="this.form.submit()">
+    <option value="">All vehicles</option>
+    {% for v in vehicles %}<option value="{{ v.id }}" {% if vehicle_filter == v.id %}selected{% endif %}>{{ v.registration_number }}</option>{% endfor %}
+  </select>
+</form>
+<div class="erp-table-panel" data-erp-table>
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead><tr><th>Date</th><th>Vehicle</th><th>Driver</th><th>Start</th><th>End</th><th>Total KM</th><th></th></tr></thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>{{ row.log_date or '—' }}</td>
+          <td>{{ row.registration_number }}</td>
+          <td>{{ row.driver_name or '—' }}</td>
+          <td>{{ '%.0f'|format(row.start_km or 0) }}</td>
+          <td>{{ '%.0f'|format(row.end_km or 0) }}</td>
+          <td>{{ '%.2f'|format(row.total_km or 0) }}</td>
+          <td><a href="{{ url_for('fleet_running_log', view=row.id, vehicle_id=vehicle_filter) }}" class="erp-btn erp-btn-ghost erp-btn-sm">View</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7">No running log entries yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  var start = document.getElementById('start-km');
+  var end = document.getElementById('end-km');
+  var total = document.getElementById('total-km');
+  function recalc() {
+    if (!start || !end || !total) return;
+    var s = parseFloat(start.value) || 0;
+    var e = parseFloat(end.value) || 0;
+    total.value = Math.max(0, e - s).toFixed(2);
+  }
+  if (start) start.addEventListener('input', recalc);
+  if (end) end.addEventListener('input', recalc);
+})();
+</script>
+{% endblock %}

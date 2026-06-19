@@ -1,42 +1,32 @@
 # Python
 __pycache__/
 *.py[cod]
-*$py.class
-*.so
-.Python
-.venv/
+*.pyo
+*.pyd
 venv/
-env/
+.venv/
+.env
 
-# Streamlit
-.streamlit/secrets.toml
-
-# Local data (never commit production DB or uploads)
-database/*.db
-database/*.db-journal
-database/*.sqlite
-uploads/**/*
-!uploads/.gitkeep
-photos/**/*
-!photos/.gitkeep
-reports/**
-!reports/.gitkeep
-
-# IDE / OS
-.idea/
+# VS Code
 .vscode/
-*.swp
+
+# OS
 .DS_Store
 Thumbs.db
-desktop.ini
 
-# Logs / env
-*.log
-.env
-.env.*
+# PyInstaller
+dist/
+build/
+*.spec
 
-# Cursor
-.cursor/
+# Excel output
+attendance.xlsx
 
-# Legacy desktop app (optional keep in repo - we keep maxek_erp_all_in_one.py in repo)
-# Remove line above if you want to exclude legacy tk app
+# MAXEK ERP — production secrets and data (use private backup repo instead)
+MAXEK_ERP/database/*.db
+MAXEK_ERP/deploy/github_backup.env
+MAXEK_ERP/.github_backup_repo/
+MAXEK_ERP/backups/
+MAXEK_ERP/deploy/*.zip
+MAXEK_ERP/photos/
+MAXEK_ERP/reports/**/*.xlsx

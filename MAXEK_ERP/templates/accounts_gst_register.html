@@ -1,0 +1,261 @@
+{% extends 'base_maxek.html' %}
+
+{% set page_title = 'GST Register' %}
+
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('accounts_hub') ~ '">Accounts</a> &gt; GST Register' %}
+
+{% block content %}
+
+<form method="get" class="erp-form-card" style="margin-bottom:1rem;display:flex;gap:1rem;flex-wrap:wrap;align-items:end;">
+
+  <div class="erp-field"><input type="date" name="from_date" value="{{ from_date }}"><label>From</label></div>
+
+  <div class="erp-field"><input type="date" name="to_date" value="{{ to_date }}"><label>To</label></div>
+
+  <button type="submit" class="erp-btn erp-btn-primary">Filter GSTR Summary</button>
+
+  <a href="{{ url_for('accounts_gst_register', export='excel', from_date=from_date, to_date=to_date) }}" class="erp-btn erp-btn-ghost">Purchase Excel</a>
+
+  <a href="{{ url_for('accounts_gst_register', export='sales_excel', from_date=from_date, to_date=to_date) }}" class="erp-btn erp-btn-ghost">Sales Excel</a>
+
+  <a href="{{ url_for('accounts_gst_register', export='gstr_summary', from_date=from_date, to_date=to_date) }}" class="erp-btn erp-btn-ghost">GSTR Summary</a>
+
+  <a href="{{ url_for('accounts_gst_register', export='csv', from_date=from_date, to_date=to_date) }}" class="erp-btn erp-btn-ghost">Purchase CSV</a>
+
+  <a href="{{ url_for('accounts_gst_register', export='sales_csv', from_date=from_date, to_date=to_date) }}" class="erp-btn erp-btn-ghost">Sales CSV</a>
+
+</form>
+
+
+
+<div class="erp-summary-grid" style="margin-bottom:1rem;">
+
+  <div class="erp-stat-card"><span>Purchase Taxable</span><strong>₹{{ '%.2f'|format(gstr.purchase_taxable or 0) }}</strong></div>
+
+  <div class="erp-stat-card"><span>Sales Taxable</span><strong>₹{{ '%.2f'|format(gstr.sales_taxable or 0) }}</strong></div>
+
+  <div class="erp-stat-card"><span>Net CGST</span><strong>₹{{ '%.2f'|format(gstr.net_cgst or 0) }}</strong></div>
+
+  <div class="erp-stat-card"><span>Net SGST</span><strong>₹{{ '%.2f'|format(gstr.net_sgst or 0) }}</strong></div>
+
+  <div class="erp-stat-card"><span>Net IGST</span><strong>₹{{ '%.2f'|format(gstr.net_igst or 0) }}</strong></div>
+
+</div>
+
+
+
+<h3 style="margin:1rem 0 0.5rem;">GST Filing Periods</h3>
+
+<div class="erp-table-panel" style="margin-bottom:1.5rem;">
+
+  <div class="erp-table-scroll">
+
+    <table class="erp-table">
+
+      <thead><tr><th>Period</th><th>Due Date</th><th>Alert</th><th>Status</th><th>Filed</th><th>Update</th></tr></thead>
+
+      <tbody>
+
+        {% for row in filing_periods %}
+
+        <tr>
+
+          <td>{{ row.period_label }}</td>
+
+          <td>{{ row.due_date }}</td>
+
+          <td>{% if row.due_alert %}<span class="erp-badge erp-badge-warning">{{ row.due_alert }}</span>{% else %}—{% endif %}</td>
+
+          <td>{{ row.filing_status }}</td>
+
+          <td>{{ row.filed_date or '—' }}</td>
+
+          <td>
+
+            <form method="post" style="display:flex;gap:0.25rem;">
+
+              <input type="hidden" name="form_action" value="update_filing">
+
+              <input type="hidden" name="period_id" value="{{ row.id }}">
+
+              <select name="filing_status">{% for st in filing_statuses %}<option value="{{ st }}">{{ st }}</option>{% endfor %}</select>
+
+              <input type="date" name="filed_date">
+
+              <button type="submit" class="erp-btn erp-btn-sm">Save</button>
+
+            </form>
+
+          </td>
+
+        </tr>
+
+        {% endfor %}
+
+      </tbody>
+
+    </table>
+
+  </div>
+
+</div>
+
+
+
+<div class="transaction-tabs" data-transaction-tabs>
+
+  <div class="transaction-tab-bar">
+
+    <button type="button" class="transaction-tab active" data-tab="purchase">Purchase Register</button>
+
+    <button type="button" class="transaction-tab" data-tab="sales">Sales Register</button>
+
+  </div>
+
+  <div class="transaction-tab-panel active" data-panel="purchase">
+
+    <div class="erp-table-panel" data-erp-table>
+
+      <div class="erp-table-toolbar"><h3 class="erp-table-title">Purchase / Expense GST</h3></div>
+
+      <div class="erp-table-scroll">
+
+        <table class="erp-table">
+
+          <thead>
+
+            <tr>
+
+              <th>Date</th><th>Invoice</th><th>Vendor</th><th>Head</th><th>Project</th><th>Item</th>
+
+              <th>Taxable</th><th>GST%</th><th>CGST</th><th>SGST</th><th>IGST</th><th>Total</th><th>Status</th>
+
+            </tr>
+
+          </thead>
+
+          <tbody>
+
+            {% for row in purchase_rows %}
+
+            <tr>
+
+              <td>{{ row.entry_date or '—' }}</td>
+
+              <td>{{ row.invoice_number or '—' }}</td>
+
+              <td>{{ row.vendor_name or '—' }}</td>
+
+              <td>{{ row.account_code or '—' }}</td>
+
+              <td>{{ row.project_name or '—' }}</td>
+
+              <td>{{ row.item_name or '—' }}</td>
+
+              <td>{{ '%.2f'|format(row.taxable_value or 0) }}</td>
+
+              <td>{{ row.gst_percent or 0 }}%</td>
+
+              <td>{{ '%.2f'|format(row.cgst or 0) }}</td>
+
+              <td>{{ '%.2f'|format(row.sgst or 0) }}</td>
+
+              <td>{{ '%.2f'|format(row.igst or 0) }}</td>
+
+              <td>{{ '%.2f'|format(row.line_total or 0) }}</td>
+
+              <td>{{ row.approval_status or '—' }}</td>
+
+            </tr>
+
+            {% else %}
+
+            <tr><td colspan="13">No purchase GST lines yet.</td></tr>
+
+            {% endfor %}
+
+          </tbody>
+
+        </table>
+
+      </div>
+
+    </div>
+
+  </div>
+
+  <div class="transaction-tab-panel" data-panel="sales">
+
+    <div class="erp-table-panel" data-erp-table>
+
+      <div class="erp-table-toolbar"><h3 class="erp-table-title">Sales / Receipt GST</h3></div>
+
+      <div class="erp-table-scroll">
+
+        <table class="erp-table">
+
+          <thead>
+
+            <tr>
+
+              <th>Date</th><th>Invoice Ref</th><th>Client</th><th>Head</th><th>Project</th>
+
+              <th>Taxable</th><th>GST%</th><th>CGST</th><th>SGST</th><th>IGST</th><th>Total</th><th>Status</th>
+
+            </tr>
+
+          </thead>
+
+          <tbody>
+
+            {% for row in sales_rows %}
+
+            <tr>
+
+              <td>{{ row.entry_date or '—' }}</td>
+
+              <td>{{ row.invoice_number or '—' }}</td>
+
+              <td>{{ row.vendor_name or '—' }}</td>
+
+              <td>{{ row.account_code or '—' }}</td>
+
+              <td>{{ row.project_name or '—' }}</td>
+
+              <td>{{ '%.2f'|format(row.taxable_value or 0) }}</td>
+
+              <td>{{ row.gst_percent or 0 }}%</td>
+
+              <td>{{ '%.2f'|format(row.cgst or 0) }}</td>
+
+              <td>{{ '%.2f'|format(row.sgst or 0) }}</td>
+
+              <td>{{ '%.2f'|format(row.igst or 0) }}</td>
+
+              <td>{{ '%.2f'|format(row.line_total or 0) }}</td>
+
+              <td>{{ row.approval_status or '—' }}</td>
+
+            </tr>
+
+            {% else %}
+
+            <tr><td colspan="12">No sales register entries yet.</td></tr>
+
+            {% endfor %}
+
+          </tbody>
+
+        </table>
+
+      </div>
+
+    </div>
+
+  </div>
+
+</div>
+
+{% endblock %}
+
+

@@ -62,10 +62,35 @@
 }
 
 .login-tagline {
+  color: #f8fafc;
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  margin-bottom: 8px;
+  max-width: 420px;
+}
+
+.login-tagline-sub {
   color: #94a3b8;
-  font-size: 1.05rem;
+  font-size: 0.95rem;
   margin-bottom: 32px;
   max-width: 420px;
+}
+
+.maxek-logo--login {
+  width: min(280px, 85vw);
+  max-height: 140px;
+  margin-bottom: 12px;
+}
+
+.maxek-logo--card {
+  width: min(180px, 70vw);
+  max-height: 90px;
+  margin: 0 auto 16px;
+}
+
+.login-card-brand {
+  text-align: center;
 }
 
 .login-logo-mark {
@@ -243,15 +268,17 @@
     padding-bottom: 0;
   }
 
+  .maxek-logo--login {
+    margin-left: auto;
+    margin-right: auto;
+  }
+
   .login-brand-inner h1 {
     font-size: 2.25rem;
   }
 
-  .login-logo-mark {
-    margin: 0 auto;
-  }
-
   .login-tagline,
+  .login-tagline-sub,
   .login-features {
     margin-left: auto;
     margin-right: auto;

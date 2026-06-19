@@ -1,0 +1,714 @@
+{% extends 'base_maxek.html' %}
+
+{% from 'macros/erp_ui.html' import role_status_badge, maker_row_actions, rejection_notice, workflow_modals, transaction_view_tabs, erp_pagination %}
+
+{% set page_title = 'Payroll Generation' %}
+
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; HR &gt; Payroll' %}
+
+{% block page_actions %}
+
+<a href="#generate-payroll" class="erp-btn erp-btn-primary"><i class="fa-solid fa-calculator"></i> Generate Payroll</a>
+
+<a href="{{ url_for('payroll_holidays') }}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-calendar-day"></i> Holidays</a>
+
+<a href="{{ url_for('payroll_payments') }}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-money-bill-transfer"></i> Payments</a>
+
+{% endblock %}
+
+{% block content %}
+
+{% if view_run %}
+
+{% set draft_saved = view_run.draft_saved|default(0)|int %}
+
+<div class="erp-form-card" style="margin-bottom: 1rem;">
+
+  {% call transaction_view_tabs(view_run, history, can_reopen, approval_id) %}
+
+  <h3 class="erp-form-title">Payroll Run {{ view_run.run_ref or view_run.id }}</h3>
+
+  {% if view_run.status == 'Draft' and not draft_saved %}
+
+  <p class="erp-form-hint" style="padding: 0.5rem 0.75rem; background: #fff8e6; border-radius: 0.35rem; border: 1px solid #f0d878;">
+
+    <strong>Review required:</strong> This run is not saved yet. Adjust lines if needed, then click <strong>Save Draft</strong> before printing or payment.
+
+  </p>
+
+  {% elif view_run.status == 'Draft' and draft_saved %}
+
+  <p class="erp-form-hint" style="padding: 0.5rem 0.75rem; background: #ecfdf5; border-radius: 0.35rem; border: 1px solid #86efac;">
+
+    <strong>Draft saved.</strong> You can print the register, edit lines, save again, or proceed to payment.
+
+  </p>
+
+  {% endif %}
+
+  <p><strong>Period:</strong> {{ view_run.period_start }} → {{ view_run.period_end }}
+
+    | <strong>Employment:</strong> {% if view_run.employee_type == 'company_staff' %}Company Staff{% elif view_run.employee_type == 'subcontractor' %}Sub Contractor{% else %}{{ view_run.employee_type or 'all' }}{% endif %}
+
+    | <strong>Status:</strong> {{ view_run.status }}{% if view_run.status == 'Draft' %} ({{ 'saved' if draft_saved else 'unsaved' }}){% endif %}</p>
+
+  <p><strong>Employees:</strong> {{ view_run.employee_count or 0 }}
+
+    | <strong>Gross:</strong> ₹ {{ '%.2f'|format(view_run.total_gross or 0) }}
+
+    | <strong>Net:</strong> ₹ {{ '%.2f'|format(view_run.total_net or 0) }}
+
+    {% if view_run.department %}| <strong>Department:</strong> {{ view_run.department }}{% endif %}</p>
+
+  <p><strong>Workflow:</strong> {{ role_status_badge(view_run.approval_status, 'maker') }}</p>
+
+  {{ rejection_notice(history, view_run.approval_status) }}
+
+  <div class="erp-form-actions" style="margin-top: 0.75rem; flex-wrap: wrap; gap: 0.35rem;">
+
+    {% if view_run.status == 'Draft' and not view_run.locked %}
+
+    <form method="post" style="display:inline">
+
+      <input type="hidden" name="form_action" value="save_draft">
+
+      <input type="hidden" name="run_id" value="{{ view_run.id }}">
+
+      <button type="submit" class="erp-btn erp-btn-primary erp-btn-sm"><i class="fa-solid fa-floppy-disk"></i> Save Draft</button>
+
+    </form>
+
+    {% if draft_saved %}
+
+    <a href="{{ url_for('payroll_print_run', run_id=view_run.id, print=1) }}" target="_blank" class="erp-btn erp-btn-ghost erp-btn-sm"><i class="fa-solid fa-print"></i> Print Register</a>
+
+    <form method="post" style="display:inline" onsubmit="return confirm('Mark this payroll ready for payment? You can record payments under Payments.');">
+
+      <input type="hidden" name="form_action" value="proceed_to_payment">
+
+      <input type="hidden" name="run_id" value="{{ view_run.id }}">
+
+      <button type="submit" class="erp-btn erp-btn-primary erp-btn-sm"><i class="fa-solid fa-money-check"></i> Proceed to Payment</button>
+
+    </form>
+
+    {% endif %}
+
+    <form method="post" style="display:inline"><input type="hidden" name="form_action" value="submit_verification"><input type="hidden" name="run_id" value="{{ view_run.id }}"><button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Submit for Verification</button></form>
+
+    <form method="post" style="display:inline"><input type="hidden" name="form_action" value="submit_checker"><input type="hidden" name="run_id" value="{{ view_run.id }}"><button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Submit to Checker</button></form>
+
+    {% endif %}
+
+    {% if view_run.status == 'Approved' %}
+
+    <a href="{{ url_for('payroll_payments') }}" class="erp-btn erp-btn-primary erp-btn-sm"><i class="fa-solid fa-money-bill-transfer"></i> Record Payments</a>
+
+    {% endif %}
+
+    <a href="{{ url_for('payroll_export_register', run_id=view_run.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm"><i class="fa-solid fa-file-excel"></i> Export Register</a>
+
+    {% if can_reopen and view_run.locked %}
+
+    <form method="post" class="erp-inline-form" data-payroll-reopen>
+
+      <input type="hidden" name="form_action" value="reopen_run">
+
+      <input type="hidden" name="run_id" value="{{ view_run.id }}">
+
+      <input type="text" name="reopen_reason" placeholder="Reopen reason" required>
+
+      <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Admin Reopen</button>
+
+    </form>
+
+    {% endif %}
+
+    <a href="{{ url_for('payroll') }}" class="erp-btn erp-btn-ghost erp-btn-sm">Back to List</a>
+
+  </div>
+
+  {% endcall %}
+
+</div>
+
+
+
+<div class="erp-table-panel" data-erp-table>
+
+  <div class="erp-table-toolbar"><h3 class="erp-table-title">Payroll Lines</h3></div>
+
+  <div class="erp-table-scroll">
+
+    <table class="erp-table erp-table-module">
+
+      <thead>
+
+        <tr>
+
+          <th>Staff ID</th><th>Name</th><th>Type</th><th>Present</th><th>OT</th>
+
+          <th>Gross</th><th>Deductions</th><th>Net</th><th>Verify</th><th>Actions</th>
+
+        </tr>
+
+      </thead>
+
+      <tbody>
+
+        {% for line in view_lines %}
+
+        <tr>
+
+          <td>{{ line.employee_code or '—' }}</td>
+
+          <td>{% if line.employee_name %}<a href="{{ url_for('employee_profile', employee_type=line.employee_type, employee_id=line.staff_id or line.worker_id) }}">{{ line.employee_name }}</a>{% else %}—{% endif %}</td>
+
+          <td>{{ line.employee_type }}</td>
+
+          <td>{{ line.present_days }}</td>
+
+          <td>{{ line.ot_hours }} / ₹ {{ '%.2f'|format(line.ot_amount or 0) }}</td>
+
+          <td>₹ {{ '%.2f'|format(line.gross_salary or 0) }}</td>
+
+          <td>₹ {{ '%.2f'|format((line.deductions or 0) + (line.advance_deduction or 0)) }}</td>
+
+          <td>₹ {{ '%.2f'|format(line.net_salary or 0) }}</td>
+
+          <td>{{ line.verification_status or 'Pending' }}</td>
+
+          <td>
+
+            {% if draft_saved or view_run.status != 'Draft' %}
+
+            <a href="{{ url_for('payroll_print_slip', line_id=line.id, print=1) }}" target="_blank" class="erp-btn erp-btn-ghost erp-btn-sm" title="Print payslip"><i class="fa-solid fa-print"></i></a>
+
+            {% endif %}
+
+            {% if view_run.status == 'Draft' and not view_run.locked %}
+
+            <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-payroll-edit-line="{{ line.id }}">Edit</button>
+
+            <form method="post" style="display:inline"><input type="hidden" name="form_action" value="verify_line"><input type="hidden" name="line_id" value="{{ line.id }}"><button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Verify</button></form>
+
+            {% endif %}
+
+          </td>
+
+        </tr>
+
+        {% if view_run.status == 'Draft' and not view_run.locked %}
+
+        <tr data-payroll-edit-panel="{{ line.id }}" hidden>
+
+          <td colspan="10" style="background: #f8fafc;">
+
+            <form method="post" class="erp-form-grid" style="padding: 0.75rem;">
+
+              <input type="hidden" name="form_action" value="update_line">
+
+              <input type="hidden" name="run_id" value="{{ view_run.id }}">
+
+              <input type="hidden" name="line_id" value="{{ line.id }}">
+
+              <div class="erp-field">
+
+                <input name="gross_salary" type="number" step="0.01" value="{{ line.gross_salary or 0 }}" placeholder=" ">
+
+                <label>Gross (₹)</label>
+
+              </div>
+
+              <div class="erp-field">
+
+                <input name="deductions" type="number" step="0.01" value="{{ line.deductions or 0 }}" placeholder=" ">
+
+                <label>Deductions (₹)</label>
+
+              </div>
+
+              <div class="erp-field">
+
+                <input name="advance_deduction" type="number" step="0.01" value="{{ line.advance_deduction or 0 }}" placeholder=" ">
+
+                <label>Advance (₹)</label>
+
+              </div>
+
+              <div class="erp-field span-2">
+
+                <input name="remarks" value="{{ line.remarks or '' }}" placeholder=" ">
+
+                <label>Remarks</label>
+
+              </div>
+
+              <div class="erp-form-actions span-2">
+
+                <button type="submit" class="erp-btn erp-btn-primary erp-btn-sm">Save Line</button>
+
+                <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-payroll-cancel-edit="{{ line.id }}">Cancel</button>
+
+              </div>
+
+            </form>
+
+          </td>
+
+        </tr>
+
+        {% endif %}
+
+        {% else %}
+
+        <tr><td colspan="10">No lines in this run.</td></tr>
+
+        {% endfor %}
+
+      </tbody>
+
+    </table>
+
+  </div>
+
+</div>
+
+{% endif %}
+
+
+
+{% if not view_run %}
+
+<div class="erp-table-panel" id="pending-payroll-dashboard" data-erp-table style="margin-bottom: 1rem;">
+
+  <div class="erp-table-toolbar">
+
+    <h3 class="erp-table-title"><i class="fa-solid fa-clock-rotate-left"></i> Pending Payroll by Month</h3>
+
+    <div class="erp-table-controls" style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+
+      <form method="get" class="erp-inline-form" style="display:flex;gap:0.35rem;align-items:center;margin:0;">
+
+        <input type="month" name="pending_month" value="{{ pending_month_filter or '' }}" title="Filter by month">
+
+        <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Filter</button>
+
+        {% if pending_month_filter %}
+
+        <a href="{{ url_for('payroll') }}" class="erp-btn erp-btn-ghost erp-btn-sm">Clear</a>
+
+        {% endif %}
+
+      </form>
+
+      <div class="erp-table-search"><i class="fa-solid fa-magnifying-glass"></i><input type="search" data-table-search placeholder="Search pending…"></div>
+
+    </div>
+
+  </div>
+
+  {% if pending_month_summary %}
+
+  <div style="display:flex;flex-wrap:wrap;gap:0.5rem;padding:0 0.75rem 0.75rem;">
+
+    {% for bucket in pending_month_summary %}
+
+    <a href="{{ url_for('payroll', pending_month=bucket.year_month) }}#pending-payroll-dashboard"
+
+       class="erp-btn erp-btn-ghost erp-btn-sm{% if pending_month_filter == bucket.year_month %} erp-btn-primary{% endif %}"
+
+       style="border-radius:999px;">
+
+      {{ bucket.month_label }} · {{ bucket.count }}
+
+    </a>
+
+    {% endfor %}
+
+  </div>
+
+  {% endif %}
+
+  <p class="erp-form-hint" style="padding:0 0.75rem 0.5rem;margin:0;">
+
+    Staff or workers with attendance, monthly summary, or timesheet data but payroll not finalized for that month (not generated, draft only, or approved but unpaid).
+
+  </p>
+
+  <div class="erp-table-scroll">
+
+    <table class="erp-table erp-table-module">
+
+      <thead>
+
+        <tr>
+
+          <th>Staff ID</th>
+
+          <th>Name</th>
+
+          <th>Type</th>
+
+          <th>Pending Month</th>
+
+          <th>Data Source</th>
+
+          <th>Status</th>
+
+          <th>Action</th>
+
+        </tr>
+
+      </thead>
+
+      <tbody>
+
+        {% for row in pending_payroll %}
+
+        <tr>
+
+          <td>{{ row.employee_code or '—' }}</td>
+
+          <td>
+
+            <a href="{{ url_for('employee_profile', employee_type=row.employee_type, employee_id=row.employee_id) }}">{{ row.employee_name or '—' }}</a>
+
+          </td>
+
+          <td>{{ row.type_label }}</td>
+
+          <td><strong>{{ row.month_label }}</strong></td>
+
+          <td class="erp-form-hint">{{ row.data_source or '—' }}</td>
+
+          <td>
+
+            {% if row.payroll_status == 'draft' %}
+
+            <span style="color:#b45309;">{{ row.status_label }}</span>
+
+            {% elif row.payroll_status == 'unpaid' %}
+
+            <span style="color:#0369a1;">{{ row.status_label }}</span>
+
+            {% else %}
+
+            {{ row.status_label }}
+
+            {% endif %}
+
+          </td>
+
+          <td style="white-space:nowrap;">
+
+            {% if row.payroll_status == 'draft' and row.run_id %}
+
+            <a href="{{ url_for('payroll', view=row.run_id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Open Draft</a>
+
+            {% else %}
+
+            <button type="button" class="erp-btn erp-btn-primary erp-btn-sm" data-payroll-prefill-generate
+
+                    data-prefill-month="{{ row.month }}"
+
+                    data-prefill-year="{{ row.year }}"
+
+                    data-prefill-category="{{ row.employment_category }}"
+
+                    data-prefill-employee="{{ row.employee_type }}:{{ row.employee_id }}"
+
+                    {% if row.project_id %}data-prefill-project="{{ row.project_id }}"{% endif %}>
+
+              Generate
+
+            </button>
+
+            {% endif %}
+
+          </td>
+
+        </tr>
+
+        {% else %}
+
+        <tr><td colspan="7">No pending payroll months{% if pending_month_filter %} for {{ pending_month_filter }}{% endif %}.</td></tr>
+
+        {% endfor %}
+
+      </tbody>
+
+    </table>
+
+  </div>
+
+</div>
+
+{% endif %}
+
+
+
+<div class="module-layout">
+
+  {% if not view_run %}
+
+  <div class="erp-form-card" id="generate-payroll">
+
+    <h3 class="erp-form-title">Generate Draft Payroll</h3>
+
+    <p class="erp-form-hint">Calculate payroll for selected employees. The run stays editable until you explicitly save the draft.</p>
+
+    <form method="post" class="erp-form-grid" data-payroll-generate-form>
+
+      <input type="hidden" name="form_action" value="generate">
+
+      <div class="erp-field span-2">
+
+        <select name="gen_mode" data-payroll-gen-mode class="has-value">
+
+          <option value="monthly" selected>Monthly (month / year)</option>
+
+          <option value="date_range">Date range</option>
+
+        </select>
+
+        <label>Generation Mode</label>
+
+      </div>
+
+      <div class="erp-field" data-payroll-monthly>
+
+        <select name="month" class="has-value">
+
+          {% for m in range(1, 13) %}
+
+          <option value="{{ m }}"{% if m == current_month %} selected{% endif %}>{{ m }}</option>
+
+          {% endfor %}
+
+        </select>
+
+        <label>Month</label>
+
+      </div>
+
+      <div class="erp-field" data-payroll-monthly>
+
+        <input name="year" type="number" value="{{ current_year }}" placeholder=" ">
+
+        <label>Year</label>
+
+      </div>
+
+      <div class="erp-field" data-payroll-range hidden>
+
+        <input name="period_start" type="date" placeholder=" ">
+
+        <label>From Date</label>
+
+      </div>
+
+      <div class="erp-field" data-payroll-range hidden>
+
+        <input name="period_end" type="date" placeholder=" ">
+
+        <label>To Date</label>
+
+      </div>
+
+      <div class="erp-field">
+
+        <select name="employment_category" data-payroll-employment-type required>
+
+          <option value="">Select employment type</option>
+
+          <option value="company_staff">Company Staff</option>
+
+          <option value="subcontractor">Sub Contractor</option>
+
+        </select>
+
+        <label>Employment Type</label>
+
+      </div>
+
+      <div class="erp-field" data-payroll-project-field hidden>
+
+        <select name="project_id" class="has-value" data-payroll-project-select>
+
+          <option value="">All Projects</option>
+
+          {% for p in projects %}
+
+          <option value="{{ p.id }}">{{ p.project_name }}</option>
+
+          {% endfor %}
+
+        </select>
+
+        <label>Project (sub contractor only)</label>
+
+      </div>
+
+      <div class="erp-field">
+
+        <select name="department" class="has-value">
+
+          <option value="">All Departments</option>
+
+          {% for d in departments %}
+
+          <option value="{{ d }}">{{ d }}</option>
+
+          {% endfor %}
+
+        </select>
+
+        <label>Department</label>
+
+      </div>
+
+      <div class="span-2" data-payroll-staff-panel hidden>
+
+        <div class="erp-table-toolbar" style="margin-bottom: 0.5rem;">
+
+          <h4 class="erp-form-subtitle" style="margin: 0;">Select Employees</h4>
+
+          <div class="erp-form-actions" style="margin: 0;">
+
+            <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-payroll-select-all>Select all shown</button>
+
+            <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-payroll-clear-all>Clear</button>
+
+            <span class="erp-form-hint" data-payroll-selected-count style="margin-left: 0.5rem;">0 selected</span>
+
+          </div>
+
+        </div>
+
+        <p class="erp-form-hint">Only staff with attendance, monthly summary, or timesheet data for the selected period are listed.</p>
+
+        <p class="erp-form-hint" data-payroll-staff-message>Select employment type and period to load staff.</p>
+
+        <div class="erp-table-scroll" style="max-height: 16rem; border: 1px solid var(--erp-border, #e2e8f0); border-radius: 0.5rem; padding: 0.5rem;" data-payroll-staff-list>
+
+        </div>
+
+      </div>
+
+      <div class="erp-form-actions span-2">
+
+        <button type="submit" class="erp-btn erp-btn-primary"><i class="fa-solid fa-calculator"></i> Generate Draft</button>
+
+      </div>
+
+    </form>
+
+  </div>
+
+  {% endif %}
+
+
+
+  <div class="erp-table-panel" data-erp-table>
+
+    <div class="erp-table-toolbar">
+
+      <h3 class="erp-table-title">Payroll Runs</h3>
+
+      <div class="erp-table-controls">
+
+        <div class="erp-table-search"><i class="fa-solid fa-magnifying-glass"></i><input type="search" data-table-search placeholder="Search runs..."></div>
+
+      </div>
+
+    </div>
+
+    <div class="erp-table-scroll">
+
+      <table class="erp-table erp-table-module">
+
+        <thead>
+
+          <tr><th>Ref</th><th>Period</th><th>Employment</th><th>Staff / Name</th><th>Count</th><th>Net</th><th>Status</th><th>Actions</th></tr>
+
+        </thead>
+
+        <tbody>
+
+          {% for run in runs %}
+
+          {% set run_saved = run.draft_saved|default(0)|int %}
+
+          <tr>
+
+            <td>{{ run.run_ref or run.id }}</td>
+
+            <td>{{ run.period_start }} → {{ run.period_end }}</td>
+
+            <td>{% if run.employee_type == 'company_staff' %}Company Staff{% elif run.employee_type == 'subcontractor' %}Sub Contractor{% else %}{{ run.employee_type or 'all' }}{% endif %}</td>
+
+            <td class="erp-form-hint" style="max-width: 14rem; white-space: normal;">{{ run.employee_summary or '—' }}</td>
+
+            <td>{{ run.employee_count or 0 }}</td>
+
+            <td>₹ {{ '%.2f'|format(run.total_net or 0) }}</td>
+
+            <td>{{ run.status }}{% if run.status == 'Draft' %} ({{ 'saved' if run_saved else 'unsaved' }}){% endif %}{% if run.locked %} 🔒{% endif %}</td>
+
+            <td>
+
+              <a href="{{ url_for('payroll', view=run.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">{% if run.status == 'Draft' %}Edit{% else %}View{% endif %}</a>
+
+              {% if run.status == 'Draft' and run_saved %}
+
+              <a href="{{ url_for('payroll_print_run', run_id=run.id, print=1) }}" target="_blank" class="erp-btn erp-btn-ghost erp-btn-sm">Print</a>
+
+              {% endif %}
+
+              <a href="{{ url_for('payroll_export_register', run_id=run.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Export</a>
+
+              {% if run.status == 'Draft' and not run.locked %}
+
+              <form method="post" style="display:inline" onsubmit="return confirm('Delete this draft run?');">
+
+                <input type="hidden" name="form_action" value="delete_run">
+
+                <input type="hidden" name="run_id" value="{{ run.id }}">
+
+                <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Delete</button>
+
+              </form>
+
+              {% endif %}
+
+            </td>
+
+          </tr>
+
+          {% else %}
+
+          <tr><td colspan="8">No payroll runs yet.</td></tr>
+
+          {% endfor %}
+
+        </tbody>
+
+      </table>
+
+    </div>
+
+    {{ erp_pagination(runs|length) }}
+
+  </div>
+
+</div>
+
+{{ workflow_modals() }}
+
+<script src="{{ url_for('static', filename='js/workflow.js') }}"></script>
+
+<script src="{{ url_for('static', filename='js/payroll-forms.js') }}"></script>
+
+{% endblock %}
+

@@ -1,0 +1,276 @@
+{% extends 'base_maxek.html' %}
+{% from 'macros/erp_ui.html' import role_status_badge, rejection_notice, workflow_modals, transaction_view_tabs %}
+{% set page_title = 'Client Bill' if not view_record else view_record.bill_number %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('client_billing_register') ~ '">Client Billing</a> &gt; ' ~ (view_record.bill_number if view_record else 'New Bill') %}
+{% block page_actions %}
+{% if view_record %}
+<a href="{{ url_for('client_billing_print', bill_id=view_record.id) }}" class="erp-btn erp-btn-ghost" target="_blank"><i class="fa-solid fa-print"></i> Print</a>
+{% endif %}
+<a href="{{ url_for('client_billing_register') }}" class="erp-btn erp-btn-ghost">Back to Register</a>
+{% endblock %}
+{% block content %}
+
+{% if view_record and not edit_record %}
+<div class="erp-form-card" style="margin-bottom:1rem;">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:0.5rem;">
+    <div>
+      <h3 class="erp-form-title">{{ view_record.bill_number }}</h3>
+      <p>RA {{ view_record.ra_number or '—' }} · {{ view_record.bill_date }} · {{ view_record.project_code }} {{ view_record.project_name }}</p>
+      <p><strong>Client:</strong> {{ view_record.client_display }} · <strong>Period:</strong> {{ view_record.period_from }} → {{ view_record.period_to }}</p>
+    </div>
+    <div>{{ role_status_badge(view_record.approval_status, wf_ctx.get('edit_role', 'maker')) }}</div>
+  </div>
+  {{ rejection_notice(view_record.approval_status, wf_ctx.get('history')) }}
+  {{ transaction_view_tabs(view_record.approval_status, wf_ctx) }}
+  <p class="num" style="font-size:1.1rem;font-weight:600;margin-top:0.75rem;">Net Payable: {{ '%.2f'|format(view_record.net_payable or 0) }}</p>
+  {% if view_record.approval_status == 'Approved' and view_record.bill_status != 'Paid' %}
+  <form method="post" style="margin-top:0.75rem;display:inline;">
+    <input type="hidden" name="form_action" value="mark_paid">
+    <input type="hidden" name="bill_id" value="{{ view_record.id }}">
+    <button type="submit" class="erp-btn erp-btn-primary erp-btn-sm">Mark as Paid</button>
+  </form>
+  {% endif %}
+  {% if wf_ctx.get('edit_role') %}
+  <a href="{{ url_for('client_billing_form', edit=view_record.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Edit</a>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if show_form %}
+<div class="erp-form-card" id="bill-form">
+  <h3 class="erp-form-title">{% if edit_record %}Edit {{ edit_record.bill_number }}{% else %}New RA Bill{% endif %}</h3>
+  <form method="post" enctype="multipart/form-data" id="client-bill-form">
+    {% if edit_record %}<input type="hidden" name="record_id" value="{{ edit_record.id }}">{% endif %}
+    <div class="erp-form-grid">
+      <div class="erp-field">
+        <select name="project_id" id="cb-project" required>
+          <option value="">Select project *</option>
+          {% for p in projects %}
+          <option value="{{ p.id }}" data-client-id="{{ p.client_id or '' }}"
+            {% if (edit_record and edit_record.project_id == p.id) or (form_defaults.project_id == p.id) %}selected{% endif %}>
+            {{ p.project_code }} — {{ p.project_name }}
+          </option>
+          {% endfor %}
+        </select>
+        <label>Project *</label>
+      </div>
+      <div class="erp-field">
+        <select name="client_id" id="cb-client">
+          <option value="">—</option>
+          {% for c in clients %}
+          <option value="{{ c.id }}" {% if (edit_record and edit_record.client_id == c.id) or (form_defaults.client_id == c.id) %}selected{% endif %}>
+            {{ c.company_name or c.client_name }}
+          </option>
+          {% endfor %}
+        </select>
+        <label>Client</label>
+      </div>
+      <div class="erp-field"><input type="date" name="period_from" id="cb-period-from" required value="{{ edit_record.period_from if edit_record else form_defaults.period_from }}"><label>Period From *</label></div>
+      <div class="erp-field"><input type="date" name="period_to" id="cb-period-to" required value="{{ edit_record.period_to if edit_record else form_defaults.period_to }}"><label>Period To *</label></div>
+      <div class="erp-field"><input type="date" name="bill_date" required value="{{ edit_record.bill_date if edit_record else form_defaults.bill_date }}"><label>Bill Date *</label></div>
+      <div class="erp-field"><input name="ra_number" placeholder=" " value="{{ edit_record.ra_number if edit_record else '' }}"><label>RA Number</label></div>
+    </div>
+
+    <div style="margin:1rem 0;display:flex;gap:0.5rem;flex-wrap:wrap;">
+      <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" id="btn-import-dpr"><i class="fa-solid fa-file-import"></i> Import from DPR</button>
+      <span id="import-status" style="font-size:0.85rem;color:#64748b;"></span>
+    </div>
+
+    <h4>BOQ Measurement Lines</h4>
+    <div class="erp-table-wrap" style="overflow-x:auto;">
+      <table class="erp-table" id="boq-lines-table">
+        <thead>
+          <tr>
+            <th>BOQ No.</th><th>Description</th><th>Unit</th>
+            <th class="num">Prev</th><th class="num">Current</th><th class="num">Cumul.</th><th class="num">Balance</th>
+            <th class="num">Executed *</th><th class="num">Rate</th><th class="num">Amount</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="boq-lines-body">
+          {% set lines = edit_record.lines if edit_record else [] %}
+          {% for line in lines %}
+          <tr class="boq-line-row">
+            <td><input name="line_boq_number[]" value="{{ line.boq_number }}" readonly style="width:70px;border:none;background:transparent;"></td>
+            <td><input name="line_boq_description[]" value="{{ line.boq_description }}" readonly style="min-width:140px;border:none;background:transparent;"></td>
+            <td><input name="line_unit[]" value="{{ line.unit }}" readonly style="width:50px;border:none;background:transparent;"></td>
+            <td><input type="number" step="any" name="line_previous_qty[]" class="num cb-prev" value="{{ line.previous_qty }}" readonly style="width:70px;"></td>
+            <td><input type="number" step="any" name="line_current_qty[]" class="num cb-curr" value="{{ line.current_qty }}" readonly style="width:70px;"></td>
+            <td><input type="number" step="any" name="line_cumulative_qty[]" class="num cb-cumul" value="{{ line.cumulative_qty }}" readonly style="width:70px;"></td>
+            <td><input type="number" step="any" name="line_balance_qty[]" class="num cb-balance" value="{{ line.balance_qty }}" style="width:70px;"></td>
+            <td><input type="number" step="any" name="line_executed_qty[]" class="num cb-exec" value="{{ line.executed_qty }}" required style="width:80px;"></td>
+            <td><input type="number" step="any" name="line_rate[]" class="num cb-rate" value="{{ line.rate }}" style="width:80px;"></td>
+            <td class="num cb-amount">{{ '%.2f'|format(line.amount or 0) }}</td>
+            <td><button type="button" class="erp-btn erp-btn-ghost erp-btn-sm js-remove-line">×</button></td>
+            <input type="hidden" name="line_boq_item_id[]" value="{{ line.boq_item_id or '' }}">
+            <input type="hidden" name="line_contract_qty[]" value="{{ line.boq_contract_qty or 0 }}">
+            <input type="hidden" name="line_dpr_ids[]" value='{{ line.dpr_measurement_ids|tojson }}'>
+            <input type="hidden" name="line_remarks[]" value="{{ line.remarks or '' }}">
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <h4 style="margin-top:1.25rem;">Additional Items</h4>
+    <div class="erp-table-wrap">
+      <table class="erp-table" id="extra-lines-table">
+        <thead><tr><th>Type</th><th>Description</th><th>Unit</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Amount</th><th></th></tr></thead>
+        <tbody id="extra-lines-body">
+          {% for ex in (edit_record.extra_lines if edit_record else []) %}
+          <tr class="extra-line-row">
+            <td><select name="extra_type[]">{% for t in extra_types %}<option value="{{ t }}" {% if ex.line_type == t %}selected{% endif %}>{{ t }}</option>{% endfor %}</select></td>
+            <td><input name="extra_description[]" value="{{ ex.description }}" required></td>
+            <td><input name="extra_unit[]" value="{{ ex.unit }}" style="width:60px;"></td>
+            <td><input type="number" step="any" name="extra_qty[]" class="num ex-qty" value="{{ ex.quantity }}" style="width:80px;"></td>
+            <td><input type="number" step="any" name="extra_rate[]" class="num ex-rate" value="{{ ex.rate }}" style="width:80px;"></td>
+            <td class="num ex-amount">{{ '%.2f'|format(ex.amount or 0) }}</td>
+            <td><button type="button" class="erp-btn erp-btn-ghost erp-btn-sm js-remove-extra">×</button></td>
+            <input type="hidden" name="extra_remarks[]" value="{{ ex.remarks or '' }}">
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" id="btn-add-extra" style="margin:0.5rem 0;"><i class="fa-solid fa-plus"></i> Add Extra / Variation / Non-BOQ</button>
+
+    <h4 style="margin-top:1rem;">Deductions & Tax</h4>
+    <div class="erp-form-grid">
+      <div class="erp-field"><input type="number" step="any" name="retention_percent" id="cb-ret-pct" value="{{ edit_record.retention_percent if edit_record else 0 }}"><label>Retention %</label></div>
+      <div class="erp-field"><input type="number" step="any" name="recovery_amount" value="{{ edit_record.recovery_amount if edit_record else 0 }}"><label>Recovery</label></div>
+      <div class="erp-field"><input type="number" step="any" name="mobilization_recovery" value="{{ edit_record.mobilization_recovery if edit_record else 0 }}"><label>Mobilization Recovery</label></div>
+      <div class="erp-field"><input type="number" step="any" name="water_charges" value="{{ edit_record.water_charges if edit_record else 0 }}"><label>Water</label></div>
+      <div class="erp-field"><input type="number" step="any" name="electricity_charges" value="{{ edit_record.electricity_charges if edit_record else 0 }}"><label>Electricity</label></div>
+      <div class="erp-field"><input type="number" step="any" name="penalty_amount" value="{{ edit_record.penalty_amount if edit_record else 0 }}"><label>Penalties</label></div>
+      <div class="erp-field"><input type="number" step="any" name="other_recovery" value="{{ edit_record.other_recovery if edit_record else 0 }}"><label>Other Recovery</label></div>
+      <div class="erp-field"><input type="number" step="any" name="gst_percent" id="cb-gst-pct" value="{{ edit_record.gst_percent if edit_record else 0 }}"><label>GST %</label></div>
+      <div class="erp-field"><input type="number" step="any" name="tds_percent" id="cb-tds-pct" value="{{ edit_record.tds_percent if edit_record else 0 }}"><label>TDS %</label></div>
+      <div class="erp-field"><input type="number" step="any" name="other_tax_amount" value="{{ edit_record.other_tax_amount if edit_record else 0 }}"><label>Other Tax (amt)</label></div>
+      <div class="erp-field span-2"><textarea name="remarks" placeholder=" ">{{ edit_record.remarks if edit_record else '' }}</textarea><label>Remarks</label></div>
+    </div>
+
+    <h4 style="margin-top:1rem;">Attachments</h4>
+    <div class="erp-form-grid">
+      <div class="erp-field"><select name="attachment_type">{% for t in attachment_types %}<option value="{{ t }}">{{ t }}</option>{% endfor %}</select><label>Type</label></div>
+      <div class="erp-field span-2"><input type="file" name="attachment" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"><label>Upload (PDF/JPG/DOC/XLSX)</label></div>
+    </div>
+    {% if edit_record and edit_record.attachments %}
+    <ul style="font-size:0.9rem;">
+      {% for att in edit_record.attachments %}
+      <li>{{ att.attachment_type }} — <a href="{{ url_for('client_billing_attachment', attachment_id=att.id) }}">{{ att.original_filename or att.stored_filename }}</a></li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+
+    <div style="margin-top:1rem;">
+      <button type="submit" class="erp-btn erp-btn-primary">Save Bill</button>
+    </div>
+  </form>
+</div>
+{% endif %}
+
+{% if view_record and not show_form %}
+<h4>BOQ Lines</h4>
+<div class="erp-table-wrap"><table class="erp-table">
+  <thead><tr><th>BOQ</th><th>Description</th><th class="num">Executed</th><th class="num">Rate</th><th class="num">Amount</th></tr></thead>
+  <tbody>{% for line in view_record.lines %}<tr>
+    <td>{{ line.boq_number }}</td><td>{{ line.boq_description }}</td>
+    <td class="num">{{ line.executed_qty }}</td><td class="num">{{ line.rate }}</td><td class="num">{{ line.amount }}</td>
+  </tr>{% endfor %}</tbody>
+</table></div>
+{% endif %}
+
+{{ workflow_modals() }}
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/workflow.js') }}"></script>
+<script>
+(function() {
+  const extraTypes = {{ extra_types|tojson }};
+  const importUrl = {{ url_for('client_billing_import_dpr')|tojson }};
+  const billId = {{ (edit_record.id if edit_record else 0)|tojson }};
+
+  function recalcRow(row) {
+    const exec = parseFloat(row.querySelector('.cb-exec')?.value) || 0;
+    const rate = parseFloat(row.querySelector('.cb-rate')?.value) || 0;
+    const amtCell = row.querySelector('.cb-amount');
+    if (amtCell) amtCell.textContent = (exec * rate).toFixed(2);
+  }
+
+  function bindLineRow(row) {
+    row.querySelectorAll('.cb-exec, .cb-rate').forEach(el => el.addEventListener('input', () => recalcRow(row)));
+    row.querySelector('.js-remove-line')?.addEventListener('click', () => row.remove());
+  }
+
+  document.querySelectorAll('.boq-line-row').forEach(bindLineRow);
+
+  function addBoqLine(line) {
+    const tbody = document.getElementById('boq-lines-body');
+    const tr = document.createElement('tr');
+    tr.className = 'boq-line-row';
+    tr.innerHTML = `
+      <td><input name="line_boq_number[]" value="${line.boq_number||''}" readonly style="width:70px;border:none;background:transparent;"></td>
+      <td><input name="line_boq_description[]" value="${(line.boq_description||'').replace(/"/g,'&quot;')}" readonly style="min-width:140px;border:none;background:transparent;"></td>
+      <td><input name="line_unit[]" value="${line.unit||''}" readonly style="width:50px;border:none;background:transparent;"></td>
+      <td><input type="number" step="any" name="line_previous_qty[]" class="num cb-prev" value="${line.previous_qty||0}" readonly style="width:70px;"></td>
+      <td><input type="number" step="any" name="line_current_qty[]" class="num cb-curr" value="${line.current_qty||0}" readonly style="width:70px;"></td>
+      <td><input type="number" step="any" name="line_cumulative_qty[]" class="num cb-cumul" value="${line.cumulative_qty||0}" readonly style="width:70px;"></td>
+      <td><input type="number" step="any" name="line_balance_qty[]" class="num cb-balance" value="${line.balance_qty||0}" style="width:70px;"></td>
+      <td><input type="number" step="any" name="line_executed_qty[]" class="num cb-exec" value="${line.executed_qty||0}" required style="width:80px;"></td>
+      <td><input type="number" step="any" name="line_rate[]" class="num cb-rate" value="${line.rate||0}" style="width:80px;"></td>
+      <td class="num cb-amount">${(line.amount||0).toFixed(2)}</td>
+      <td><button type="button" class="erp-btn erp-btn-ghost erp-btn-sm js-remove-line">×</button></td>
+      <input type="hidden" name="line_boq_item_id[]" value="${line.boq_item_id||''}">
+      <input type="hidden" name="line_contract_qty[]" value="${line.boq_contract_qty||0}">
+      <input type="hidden" name="line_dpr_ids[]" value='${JSON.stringify(line.dpr_measurement_ids||[])}'>
+      <input type="hidden" name="line_remarks[]" value="">`;
+    tbody.appendChild(tr);
+    bindLineRow(tr);
+  }
+
+  document.getElementById('btn-import-dpr')?.addEventListener('click', async () => {
+    const projectId = document.getElementById('cb-project')?.value;
+    const from = document.getElementById('cb-period-from')?.value;
+    const to = document.getElementById('cb-period-to')?.value;
+    const status = document.getElementById('import-status');
+    if (!projectId || !from || !to) { status.textContent = 'Select project and period first.'; return; }
+    status.textContent = 'Importing…';
+    try {
+      const res = await fetch(importUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project_id: projectId, period_from: from, period_to: to, bill_id: billId || null })
+      });
+      const data = await res.json();
+      if (!data.ok) { status.textContent = data.error || 'Import failed.'; return; }
+      document.getElementById('boq-lines-body').innerHTML = '';
+      (data.lines || []).forEach(addBoqLine);
+      status.textContent = `Imported ${data.lines.length} BOQ line(s) from DPR.`;
+    } catch (e) { status.textContent = 'Import error.'; }
+  });
+
+  document.getElementById('btn-add-extra')?.addEventListener('click', () => {
+    const tbody = document.getElementById('extra-lines-body');
+    const opts = extraTypes.map(t => `<option value="${t}">${t}</option>`).join('');
+    const tr = document.createElement('tr');
+    tr.className = 'extra-line-row';
+    tr.innerHTML = `
+      <td><select name="extra_type[]">${opts}</select></td>
+      <td><input name="extra_description[]" required></td>
+      <td><input name="extra_unit[]" style="width:60px;"></td>
+      <td><input type="number" step="any" name="extra_qty[]" class="num ex-qty" value="0" style="width:80px;"></td>
+      <td><input type="number" step="any" name="extra_rate[]" class="num ex-rate" value="0" style="width:80px;"></td>
+      <td class="num ex-amount">0.00</td>
+      <td><button type="button" class="erp-btn erp-btn-ghost erp-btn-sm js-remove-extra">×</button></td>
+      <input type="hidden" name="extra_remarks[]" value="">`;
+    tbody.appendChild(tr);
+    tr.querySelector('.js-remove-extra').addEventListener('click', () => tr.remove());
+  });
+
+  document.getElementById('cb-project')?.addEventListener('change', function() {
+    const opt = this.selectedOptions[0];
+    const cid = opt?.dataset?.clientId;
+    if (cid) document.getElementById('cb-client').value = cid;
+  });
+})();
+</script>
+{% endblock %}

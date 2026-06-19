@@ -1,0 +1,81 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Asphalt Production' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('plant_dashboard') ~ '">Plant</a> &gt; Asphalt Production' %}
+{% block page_actions %}
+<a href="{{ url_for('plant_asphalt_production', new=1) }}#record-form" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> New Entry</a>
+{% endblock %}
+{% block content %}
+{% if view_record %}
+<div class="erp-form-card" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">Batch {{ view_record.batch_number }}</h3>
+  <p><strong>Date:</strong> {{ view_record.production_date }} | <strong>Plant:</strong> {{ view_record.plant_name }} ({{ view_record.plant_code }})</p>
+  <p><strong>Mix:</strong> {{ view_record.mix_type }} | <strong>Qty:</strong> {{ '%.2f'|format(view_record.qty_ton or 0) }} Ton | <strong>Shift:</strong> {{ view_record.shift or '—' }}</p>
+  <p><strong>Operator:</strong> {{ view_record.operator or '—' }} | <strong>Project:</strong> {{ view_record.project_name or '—' }}</p>
+  {% if view_record.consumption %}
+  <p><strong>Raw material consumption:</strong>
+    {% for c in view_record.consumption %}{{ c.material }}: {{ c.qty }} {{ c.unit }}{% if not loop.last %} · {% endif %}{% endfor %}
+  </p>
+  {% endif %}
+  <a href="{{ url_for('plant_asphalt_production', edit=view_record.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Edit</a>
+</div>
+{% endif %}
+
+{% if show_form %}
+<div class="erp-form-card" id="record-form" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">{% if edit_record %}Edit Production{% else %}Daily Asphalt Production{% endif %}</h3>
+  <form method="post">
+    {% if edit_record %}<input type="hidden" name="record_id" value="{{ edit_record.id }}">{% endif %}
+    <div class="erp-form-grid">
+      <div class="erp-field"><input type="date" name="production_date" required value="{{ edit_record.production_date if edit_record else default_date }}"><label>Date *</label></div>
+      <div class="erp-field"><select name="plant_id" required><option value="">Select Plant</option>{% for pl in plants %}<option value="{{ pl.id }}" {% if edit_record and edit_record.plant_id == pl.id %}selected{% endif %}>{{ pl.plant_name }} ({{ pl.plant_id }})</option>{% endfor %}</select><label>Plant *</label></div>
+      <div class="erp-field"><select name="project_id"><option value="">—</option>{% for p in projects %}<option value="{{ p.id }}" {% if edit_record and edit_record.project_id == p.id %}selected{% endif %}>{{ p.project_name }}</option>{% endfor %}</select><label>Project</label></div>
+      <div class="erp-field"><select name="mix_type">{% for m in mix_types %}<option value="{{ m }}" {% if edit_record and edit_record.mix_type == m %}selected{% endif %}>{{ m }}</option>{% endfor %}</select><label>Mix Type</label></div>
+      <div class="erp-field"><input name="batch_number" placeholder="Auto if blank" value="{{ edit_record.batch_number if edit_record else '' }}"><label>Batch Number</label></div>
+      <div class="erp-field"><input type="number" step="0.01" name="qty_ton" required placeholder=" " value="{{ edit_record.qty_ton if edit_record else '' }}"><label>Qty (Ton) *</label></div>
+      <div class="erp-field"><select name="shift">{% for s in shifts %}<option value="{{ s }}" {% if edit_record and edit_record.shift == s %}selected{% elif not edit_record and s == 'Day' %}selected{% endif %}>{{ s }}</option>{% endfor %}</select><label>Shift</label></div>
+      <div class="erp-field"><input name="operator" placeholder=" " value="{{ edit_record.operator if edit_record else '' }}"><label>Operator</label></div>
+    </div>
+    <h4 style="margin:1rem 0 0.5rem;font-size:0.9rem;">Raw Material Consumption</h4>
+    <div class="erp-form-grid">
+      <div class="erp-field"><input type="number" step="0.01" name="consumption_aggregate" placeholder=" " value="{{ consumption_values.aggregate if consumption_values else '' }}"><label>Aggregate (Ton)</label></div>
+      <div class="erp-field"><input type="number" step="0.01" name="consumption_bitumen" placeholder=" " value="{{ consumption_values.bitumen if consumption_values else '' }}"><label>Bitumen (Ton)</label></div>
+      <div class="erp-field"><input type="number" step="0.01" name="consumption_filler" placeholder=" " value="{{ consumption_values.filler if consumption_values else '' }}"><label>Filler (Ton)</label></div>
+      <div class="erp-field"><input type="number" step="0.01" name="consumption_diesel" placeholder=" " value="{{ consumption_values.diesel if consumption_values else '' }}"><label>Diesel (L)</label></div>
+      <div class="erp-field span-2"><textarea name="remarks" placeholder=" ">{{ edit_record.remarks if edit_record else '' }}</textarea><label>Remarks</label></div>
+    </div>
+    <button type="submit" class="erp-btn erp-btn-primary">Save Production</button>
+    {% if edit_record %}
+    <button type="submit" name="form_action" value="delete" class="erp-btn erp-btn-ghost" onclick="return confirm('Delete this production entry? Stock will be adjusted.');">Delete</button>
+    {% endif %}
+  </form>
+</div>
+{% endif %}
+
+<form method="get" style="margin-bottom:0.75rem;display:flex;gap:0.5rem;flex-wrap:wrap;">
+  <input name="q" value="{{ search }}" placeholder="Search batch / mix…" style="max-width:200px;">
+  <select name="plant_id" onchange="this.form.submit()"><option value="">All plants</option>{% for pl in plants %}<option value="{{ pl.id }}" {% if plant_filter == pl.id %}selected{% endif %}>{{ pl.plant_name }}</option>{% endfor %}</select>
+  <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Filter</button>
+</form>
+<div class="erp-table-panel" data-erp-table>
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead><tr><th>Date</th><th>Plant</th><th>Batch</th><th>Mix</th><th>Qty (T)</th><th>Shift</th><th></th></tr></thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>{{ row.production_date or '—' }}</td>
+          <td>{{ row.plant_name }}</td>
+          <td>{{ row.batch_number or '—' }}</td>
+          <td>{{ row.mix_type or '—' }}</td>
+          <td>{{ '%.2f'|format(row.qty_ton or 0) }}</td>
+          <td>{{ row.shift or '—' }}</td>
+          <td><a href="{{ url_for('plant_asphalt_production', view=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">View</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7">No production entries yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
