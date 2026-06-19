@@ -1,0 +1,26 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Overdraft Management' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('treasury_hub') ~ '">Treasury</a> &gt; OD Management' %}
+{% block content %}
+<div class="erp-table-panel" data-erp-table>
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead><tr><th>Bank Account</th><th>OD Limit</th><th>Utilized</th><th>Available</th><th>Interest %</th><th>Balance</th></tr></thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>{{ row.bank_name }} — {{ row.account_number }}</td>
+          <td>₹{{ '{:,.2f}'.format(row.od_limit or 0) }}</td>
+          <td>₹{{ '{:,.2f}'.format(row.utilized or 0) }}</td>
+          <td>₹{{ '{:,.2f}'.format((row.od_limit or 0) - (row.utilized or 0)) }}</td>
+          <td>{{ row.interest_rate or 0 }}%</td>
+          <td>₹{{ '{:,.2f}'.format(row.current_balance or 0) }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6">No overdraft facilities configured.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

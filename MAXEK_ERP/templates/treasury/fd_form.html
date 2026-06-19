@@ -1,0 +1,59 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Renew FD' if renew_from else ('New FD' if not edit_record or not edit_record.id else 'Edit FD #' ~ edit_record.fd_number) %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('treasury_hub') ~ '">Treasury</a> &gt; <a href="' ~ url_for('treasury_fixed_deposits') ~ '">Fixed Deposits</a> &gt; ' ~ ('Renew' if renew_from else ('Edit' if edit_record and edit_record.id else 'New')) %}
+{% block content %}
+{% if renew_from %}
+<div class="erp-alert erp-alert-warning" style="margin-bottom:1rem;padding:0.75rem 1rem;border-radius:0.5rem;background:#eff6ff;border:1px solid #3b82f6;">
+  <strong>Renewing FD #{{ renew_from.fd_number }}</strong>
+  — principal ₹{{ '{:,.2f}'.format(renew_from.amount or 0) }} + accrued interest ₹{{ '{:,.2f}'.format(renew_from.accrued_interest_calc or 0) }}
+</div>
+{% endif %}
+<div class="erp-form-card" id="record-form">
+  <h3 class="erp-form-title">
+    {% if renew_from %}Renew Fixed Deposit{% elif edit_record and edit_record.id %}Edit FD #{{ edit_record.fd_number }}{% else %}New Fixed Deposit{% endif %}
+  </h3>
+  <form method="post" action="{% if renew_from %}{{ url_for('treasury_fd_renew', fd_id=renew_from.id) }}{% elif edit_record and edit_record.id %}{{ url_for('treasury_fd_detail', fd_id=edit_record.id) }}{% else %}{{ url_for('treasury_fd_new') }}{% endif %}">
+    <div class="erp-form-grid">
+      <div class="erp-field">
+        <select name="bank_account_id" required>
+          <option value="">—</option>
+          {% for a in accounts %}
+          <option value="{{ a.id }}" {% if edit_record and edit_record.bank_account_id == a.id %}selected{% endif %}>{{ a.bank_name }} — {{ a.account_number }}</option>
+          {% endfor %}
+        </select>
+        <label>Bank Account *</label>
+      </div>
+      <div class="erp-field">
+        <input name="fd_number" required placeholder=" " value="{{ edit_record.fd_number if edit_record else '' }}">
+        <label>FD Number *</label>
+      </div>
+      <div class="erp-field">
+        <input type="number" step="0.01" name="amount" required placeholder=" " value="{{ edit_record.amount if edit_record else '' }}">
+        <label>Amount *</label>
+      </div>
+      <div class="erp-field">
+        <input type="number" step="0.01" name="interest_rate" required placeholder=" " value="{{ edit_record.interest_rate if edit_record else '' }}">
+        <label>Interest Rate (%) *</label>
+      </div>
+      <div class="erp-field">
+        <input type="date" name="start_date" required value="{{ edit_record.start_date if edit_record else default_date }}">
+        <label>Start Date *</label>
+      </div>
+      <div class="erp-field">
+        <input type="date" name="maturity_date" required value="{{ edit_record.maturity_date if edit_record else '' }}">
+        <label>Maturity Date *</label>
+      </div>
+      <div class="erp-field span-2">
+        <textarea name="remarks" placeholder=" ">{{ edit_record.remarks if edit_record else '' }}</textarea>
+        <label>Remarks</label>
+      </div>
+    </div>
+    <div style="display:flex;gap:0.5rem;margin-top:1rem;">
+      <button type="submit" class="erp-btn erp-btn-primary">
+        {% if renew_from %}Confirm Renewal{% elif edit_record and edit_record.id %}Save Changes{% else %}Create FD{% endif %}
+      </button>
+      <a href="{% if renew_from or (edit_record and edit_record.id) %}{{ url_for('treasury_fd_detail', fd_id=renew_from.id if renew_from else edit_record.id) }}{% else %}{{ url_for('treasury_fixed_deposits') }}{% endif %}" class="erp-btn erp-btn-ghost">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

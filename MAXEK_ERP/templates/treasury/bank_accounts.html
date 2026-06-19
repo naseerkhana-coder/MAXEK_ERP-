@@ -1,0 +1,68 @@
+{% extends 'base_maxek.html' %}
+{% from 'macros/erp_ui.html' import approval_badge, maker_row_actions, transaction_view_tabs %}
+{% set page_title = 'Bank Master' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('treasury_hub') ~ '">Treasury</a> &gt; Bank Master' %}
+{% block page_actions %}
+<a href="{{ url_for('treasury_bank_accounts', new=1) }}#record-form" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> Add Account</a>
+{% endblock %}
+{% block content %}
+{% if view_record %}
+<div class="erp-form-card" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">{{ view_record.bank_name }} — {{ view_record.account_number }}</h3>
+  <p><strong>Branch:</strong> {{ view_record.branch or '—' }} | <strong>IFSC:</strong> {{ view_record.ifsc_swift or '—' }}</p>
+  <p><strong>Type:</strong> {{ view_record.account_type }} | <strong>Currency:</strong> {{ view_record.currency }}</p>
+  <p><strong>Balance:</strong> ₹{{ '{:,.2f}'.format(view_record.current_balance or 0) }} | <strong>OD Limit:</strong> ₹{{ '{:,.2f}'.format(view_record.od_limit or 0) }}</p>
+  <p><strong>Signatory:</strong> {{ view_record.authorized_signatory or '—' }}</p>
+  <a href="{{ url_for('treasury_account_dashboard', account_id=view_record.id) }}" class="erp-btn erp-btn-primary erp-btn-sm">Dashboard</a>
+  <a href="{{ url_for('treasury_account_360', account_id=view_record.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">360° View</a>
+  <a href="{{ url_for('treasury_bank_accounts', edit=view_record.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Edit</a>
+</div>
+{% endif %}
+{% if show_form %}
+<div class="erp-form-card" id="record-form" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">{% if edit_record %}Edit Bank Account{% else %}New Bank Account{% endif %}</h3>
+  <form method="post">
+    {% if edit_record %}<input type="hidden" name="record_id" value="{{ edit_record.id }}">{% endif %}
+    <div class="erp-form-grid">
+      <div class="erp-field"><input name="bank_name" required placeholder=" " value="{{ edit_record.bank_name if edit_record else '' }}"><label>Bank Name *</label></div>
+      <div class="erp-field"><input name="branch" placeholder=" " value="{{ edit_record.branch if edit_record else '' }}"><label>Branch</label></div>
+      <div class="erp-field"><input name="account_number" required placeholder=" " value="{{ edit_record.account_number if edit_record else '' }}"><label>Account Number *</label></div>
+      <div class="erp-field"><input name="ifsc_swift" placeholder=" " value="{{ edit_record.ifsc_swift if edit_record else '' }}"><label>IFSC / SWIFT</label></div>
+      <div class="erp-field"><select name="account_type">{% for t in account_types %}<option value="{{ t }}" {% if edit_record and edit_record.account_type == t %}selected{% endif %}>{{ t }}</option>{% endfor %}</select><label>Account Type</label></div>
+      <div class="erp-field"><input name="currency" placeholder=" " value="{{ edit_record.currency if edit_record else 'INR' }}"><label>Currency</label></div>
+      <div class="erp-field"><input type="number" step="0.01" name="opening_balance" placeholder=" " value="{{ edit_record.opening_balance if edit_record else '0' }}"><label>Opening Balance</label></div>
+      <div class="erp-field"><input name="authorized_signatory" placeholder=" " value="{{ edit_record.authorized_signatory if edit_record else '' }}"><label>Authorized Signatory</label></div>
+      <div class="erp-field"><input type="number" step="0.01" name="od_limit" placeholder=" " value="{{ edit_record.od_limit if edit_record else '0' }}"><label>OD Limit</label></div>
+      <div class="erp-field"><input type="number" step="0.01" name="interest_rate" placeholder=" " value="{{ edit_record.interest_rate if edit_record else '0' }}"><label>Interest Rate %</label></div>
+      <div class="erp-field"><label style="position:static;"><input type="checkbox" name="is_active" value="1" {% if not edit_record or edit_record.is_active %}checked{% endif %}> Active</label></div>
+    </div>
+    <button type="submit" class="erp-btn erp-btn-primary">Save</button>
+  </form>
+</div>
+{% endif %}
+<div class="erp-table-panel" data-erp-table>
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead><tr><th>Bank</th><th>Account</th><th>Type</th><th>Balance</th><th>OD Limit</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>{{ row.bank_name }}</td>
+          <td>{{ row.account_number }}</td>
+          <td>{{ row.account_type }}</td>
+          <td>₹{{ '{:,.2f}'.format(row.current_balance or 0) }}</td>
+          <td>₹{{ '{:,.2f}'.format(row.od_limit or 0) }}</td>
+          <td>{% if row.is_active %}Active{% else %}Inactive{% endif %}</td>
+          <td>
+            <a href="{{ url_for('treasury_bank_accounts', view=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">View</a>
+            <a href="{{ url_for('treasury_account_dashboard', account_id=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Dashboard</a>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7">No bank accounts yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,139 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Cash Flow Forecast' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('treasury_hub') ~ '">Treasury</a> &gt; Cash Flow Forecast' %}
+{% block content %}
+<p style="color:#64748b;margin-top:0;">
+  Forecast horizon: <strong>{{ forecast.period_start }}</strong> → <strong>{{ forecast.period_end }}</strong>
+  {% if forecast.project_name %} · Project: {{ forecast.project_name }}{% endif %}
+</p>
+
+<nav class="erp-table-toolbar" style="margin-bottom:1rem;display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+  {% for key, meta in periods.items() %}
+  <a href="{{ url_for('treasury_cash_flow_forecast', period=key, project_id=filter_project_id) }}"
+     class="erp-btn erp-btn-sm {% if period == key %}erp-btn-primary{% else %}erp-btn-ghost{% endif %}">
+    {{ meta.label }}
+  </a>
+  {% endfor %}
+  {% if forecast.projects %}
+  <form method="get" style="display:flex;gap:0.35rem;align-items:center;margin-left:auto;">
+    <input type="hidden" name="period" value="{{ period }}">
+    <select name="project_id" onchange="this.form.submit()">
+      <option value="">All projects</option>
+      {% for p in forecast.projects %}
+      <option value="{{ p.id }}" {% if filter_project_id == p.id %}selected{% endif %}>{{ p.project_name }} ({{ p.end_date }})</option>
+      {% endfor %}
+    </select>
+  </form>
+  {% endif %}
+</nav>
+
+<div class="erp-summary-grid" style="margin-bottom:1.5rem;">
+  <div class="erp-stat-card"><span>Opening Balance</span><strong>₹{{ '{:,.2f}'.format(forecast.opening_balance) }}</strong></div>
+  <div class="erp-stat-card"><span>Expected Inflows</span><strong style="color:#059669;">₹{{ '{:,.2f}'.format(forecast.expected_inflows) }}</strong></div>
+  <div class="erp-stat-card"><span>Expected Outflows</span><strong style="color:#dc2626;">₹{{ '{:,.2f}'.format(forecast.expected_outflows) }}</strong></div>
+  <div class="erp-stat-card"><span>Net Cash Position</span><strong>₹{{ '{:,.2f}'.format(forecast.net_cash_position) }}</strong></div>
+</div>
+
+{% if forecast.buckets %}
+<h3>Period Trend</h3>
+<div class="erp-table-panel" style="margin-bottom:1.5rem;">
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead>
+        <tr><th>Bucket</th><th>Inflows</th><th>Outflows</th><th>Net</th></tr>
+      </thead>
+      <tbody>
+        {% for b in forecast.buckets %}
+        <tr>
+          <td>{{ b.label }}</td>
+          <td>
+            <div style="display:flex;align-items:center;gap:0.5rem;">
+              <div style="flex:1;background:#ecfdf5;border-radius:4px;height:8px;max-width:140px;">
+                <div style="width:{{ b.inflow_pct }}%;background:#059669;height:8px;border-radius:4px;"></div>
+              </div>
+              <span>₹{{ '{:,.2f}'.format(b.inflows) }}</span>
+            </div>
+          </td>
+          <td>
+            <div style="display:flex;align-items:center;gap:0.5rem;">
+              <div style="flex:1;background:#fef2f2;border-radius:4px;height:8px;max-width:140px;">
+                <div style="width:{{ b.outflow_pct }}%;background:#dc2626;height:8px;border-radius:4px;"></div>
+              </div>
+              <span>₹{{ '{:,.2f}'.format(b.outflows) }}</span>
+            </div>
+          </td>
+          <td>₹{{ '{:,.2f}'.format(b.net) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:1rem;">
+  <div class="erp-table-panel">
+    <h3 style="margin-top:0;">Expected Receipts</h3>
+    <div class="erp-table-scroll">
+      <table class="erp-table">
+        <thead>
+          <tr><th>Date</th><th>Category</th><th>Party</th><th>Amount</th><th>Status</th></tr>
+        </thead>
+        <tbody>
+          {% for row in forecast.inflow_items %}
+          <tr>
+            <td>{{ row.expected_date or '—' }}</td>
+            <td>{{ row.category }}</td>
+            <td>{{ row.party }}</td>
+            <td>₹{{ '{:,.2f}'.format(row.amount) }}</td>
+            <td><span class="approval-badge approval-{{ (row.approval_status or row.status or 'pending')|lower|replace(' ', '-') }}">{{ row.approval_status or row.status }}</span></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5">No expected receipts in this period.</td></tr>
+          {% endfor %}
+        </tbody>
+        {% if forecast.inflow_items %}
+        <tfoot>
+          <tr><th colspan="3">Total Expected Receipts</th><th colspan="2">₹{{ '{:,.2f}'.format(forecast.expected_inflows) }}</th></tr>
+        </tfoot>
+        {% endif %}
+      </table>
+    </div>
+  </div>
+
+  <div class="erp-table-panel">
+    <h3 style="margin-top:0;">Expected Payments</h3>
+    <div class="erp-table-scroll">
+      <table class="erp-table">
+        <thead>
+          <tr><th>Date</th><th>Category</th><th>Party</th><th>Amount</th><th>Status</th></tr>
+        </thead>
+        <tbody>
+          {% for row in forecast.outflow_items %}
+          <tr>
+            <td>{{ row.expected_date or '—' }}</td>
+            <td>{{ row.category }}</td>
+            <td>{{ row.party }}</td>
+            <td>₹{{ '{:,.2f}'.format(row.amount) }}</td>
+            <td><span class="approval-badge approval-{{ (row.approval_status or row.status or 'pending')|lower|replace(' ', '-') }}">{{ row.approval_status or row.status }}</span></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5">No expected payments in this period.</td></tr>
+          {% endfor %}
+        </tbody>
+        {% if forecast.outflow_items %}
+        <tfoot>
+          <tr><th colspan="3">Total Expected Payments</th><th colspan="2">₹{{ '{:,.2f}'.format(forecast.expected_outflows) }}</th></tr>
+        </tfoot>
+        {% endif %}
+      </table>
+    </div>
+  </div>
+</div>
+
+<p style="margin-top:1.25rem;font-size:0.85rem;color:#64748b;">
+  Includes pending workflow receipts/payments, approved-but-not-cleared items, active PDCs, FD maturities
+  {% if forecast.projects %}and estimated project collections{% endif %}.
+  Opening balance reflects current active bank account balances.
+</p>
+{% endblock %}

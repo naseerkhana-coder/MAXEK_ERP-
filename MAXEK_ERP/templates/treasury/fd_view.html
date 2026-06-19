@@ -1,0 +1,87 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'FD #' ~ fd.fd_number %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('treasury_hub') ~ '">Treasury</a> &gt; <a href="' ~ url_for('treasury_fixed_deposits') ~ '">Fixed Deposits</a> &gt; #' ~ fd.fd_number %}
+{% block page_actions %}
+{% if fd.status == 'Active' %}
+<a href="{{ url_for('treasury_fd_detail', fd_id=fd.id, edit=1) }}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-pen"></i> Edit</a>
+<a href="{{ url_for('treasury_fd_renew', fd_id=fd.id) }}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-rotate"></i> Renew</a>
+{% endif %}
+<a href="{{ url_for('treasury_fixed_deposits') }}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-list"></i> Back to List</a>
+{% endblock %}
+{% block content %}
+{% if fd.status == 'Active' and fd.days_to_maturity is not none and fd.days_to_maturity >= 0 and fd.days_to_maturity <= 30 %}
+<div class="erp-alert erp-alert-warning" style="margin-bottom:1rem;padding:0.75rem 1rem;border-radius:0.5rem;background:#fef3c7;border:1px solid #f59e0b;">
+  <strong><i class="fa-solid fa-bell"></i> Maturity alert:</strong>
+  This FD matures on {{ fd.maturity_date }} — {{ fd.days_to_maturity }} day{% if fd.days_to_maturity != 1 %}s{% endif %} remaining.
+  {% if fd.days_to_maturity <= 7 %}<span class="approval-badge approval-bounced">Urgent (≤7 days)</span>{% endif %}
+</div>
+{% endif %}
+<div class="erp-form-card" style="margin-bottom:1rem;">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:1rem;">
+    <div>
+      <h3 style="margin:0 0 0.5rem;">FD #{{ fd.fd_number }}</h3>
+      <p style="margin:0;color:#64748b;">{{ fd.start_date or '—' }} → {{ fd.maturity_date or '—' }}</p>
+    </div>
+    <span class="approval-badge approval-{{ (fd.status or 'Active')|lower|replace(' ', '-') }}" style="font-size:1rem;padding:0.35rem 0.75rem;">{{ fd.status or 'Active' }}</span>
+  </div>
+  <div class="erp-form-grid" style="margin-top:1rem;">
+    <div><strong>Bank</strong><br>{{ fd.bank_name or '—' }} — {{ fd.account_number or '—' }}</div>
+    <div><strong>Principal Amount</strong><br>₹{{ '{:,.2f}'.format(fd.amount or 0) }}</div>
+    <div><strong>Interest Rate</strong><br>{{ '{:.2f}'.format(fd.interest_rate or 0) }}% p.a.</div>
+    <div><strong>Accrued Interest (simple)</strong><br>₹{{ '{:,.2f}'.format(fd.accrued_interest_calc or 0) }}</div>
+    <div><strong>Maturity Value (est.)</strong><br>₹{{ '{:,.2f}'.format((fd.amount or 0) + (fd.accrued_interest_calc or 0)) }}</div>
+    {% if renewed_from %}
+    <div><strong>Renewed From</strong><br><a href="{{ url_for('treasury_fd_detail', fd_id=renewed_from.id) }}">#{{ renewed_from.fd_number }}</a></div>
+    {% endif %}
+    <div><strong>Created By</strong><br>{{ fd.created_by or '—' }} {% if fd.created_at %}<small>({{ fd.created_at }})</small>{% endif %}</div>
+    {% if fd.last_interest_posted_at %}
+    <div><strong>Last Interest Posting</strong><br>{{ fd.last_interest_posted_at }} <small>(stub)</small></div>
+    {% endif %}
+    {% if fd.remarks %}
+    <div class="span-2"><strong>Remarks</strong><br>{{ fd.remarks }}</div>
+    {% endif %}
+  </div>
+</div>
+
+{% if fd.status == 'Active' %}
+<div class="erp-form-card" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">Close Fixed Deposit</h3>
+  <p style="font-size:0.9rem;color:#64748b;margin:0 0 1rem;">
+    Close on maturity or early withdrawal. Accrued interest ₹{{ '{:,.2f}'.format(fd.accrued_interest_calc or 0) }} will be posted via accounts stub.
+  </p>
+  <form method="post" action="{{ url_for('treasury_fd_close', fd_id=fd.id) }}">
+    <div class="erp-form-grid">
+      <div class="erp-field span-2">
+        <textarea name="remarks" placeholder=" ">{{ fd.remarks or '' }}</textarea>
+        <label>Closing Remarks</label>
+      </div>
+    </div>
+    <button type="submit" class="erp-btn erp-btn-primary" style="margin-top:0.75rem;background:#dc2626;border-color:#dc2626;"
+      onclick="return confirm('Close FD #{{ fd.fd_number }}? Principal ₹{{ '{:,.2f}'.format(fd.amount or 0) }} + interest will be marked closed.');">
+      Close FD
+    </button>
+  </form>
+</div>
+{% endif %}
+
+{% if audit_rows %}
+<div class="erp-table-panel" data-erp-table>
+  <h3 style="padding:0.75rem 1rem;margin:0;font-size:1rem;">Audit Trail</h3>
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead><tr><th>When</th><th>Action</th><th>Actor</th><th>Details</th></tr></thead>
+      <tbody>
+        {% for row in audit_rows %}
+        <tr>
+          <td>{{ row.created_at or '—' }}</td>
+          <td>{{ row.action }}</td>
+          <td>{{ row.actor or '—' }}</td>
+          <td>{{ row.details or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,77 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Project Budget — ' ~ project.project_name %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('treasury_hub') ~ '">Treasury</a> &gt; <a href="' ~ url_for('treasury_budget_control') ~ '">Budget Control</a> &gt; ' ~ project.project_name %}
+{% block page_actions %}
+<a href="{{ url_for('treasury_budget_control_edit', project_id=project.id) }}" class="erp-btn erp-btn-primary"><i class="fa-solid fa-pen"></i> Edit Budget</a>
+<a href="{{ url_for('treasury_budget_control') }}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-arrow-left"></i> All Projects</a>
+{% endblock %}
+{% block content %}
+{% if summary.has_alert %}
+<div class="erp-alert erp-alert-warning" style="margin-bottom:1rem;padding:0.75rem 1rem;border-radius:0.5rem;background:#fef2f2;border:1px solid #ef4444;">
+  <strong><i class="fa-solid fa-triangle-exclamation"></i> Budget alert</strong>
+  {% if 'budget_exceeded' in summary.alerts %} — Total committed + actual exceeds approved budget.{% endif %}
+  {% if 'cost_overrun' in summary.alerts %} — Actual cost exceeds approved budget.{% endif %}
+</div>
+{% endif %}
+
+<div class="erp-summary-grid" style="margin-bottom:1.5rem;">
+  <div class="erp-stat-card"><span>Approved Budget</span><strong>₹{{ '{:,.2f}'.format(summary.budget_amount) }}</strong></div>
+  <div class="erp-stat-card"><span>Committed Cost</span><strong>₹{{ '{:,.2f}'.format(summary.committed_cost) }}</strong></div>
+  <div class="erp-stat-card"><span>Actual Cost</span><strong>₹{{ '{:,.2f}'.format(summary.actual_cost) }}</strong></div>
+  <div class="erp-stat-card"><span>Balance Budget</span><strong>₹{{ '{:,.2f}'.format(summary.balance) }}</strong></div>
+  <div class="erp-stat-card"><span>Utilization</span><strong>{{ summary.pct_used }}%</strong></div>
+</div>
+
+<p style="color:#64748b;margin-top:0;">
+  Project master budget: ₹{{ '{:,.2f}'.format(project.budget or 0) }}
+  {% if project.status %} · Status: {{ project.status }}{% endif %}
+  {% if fiscal_year %} · Fiscal year: {{ fiscal_year }}{% endif %}
+</p>
+
+<div class="erp-table-panel">
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead>
+        <tr>
+          <th>Category</th>
+          <th>Budget Amount</th>
+          <th>Committed Cost</th>
+          <th>Actual Cost</th>
+          <th>Balance Budget</th>
+          <th>Used %</th>
+          <th>Alert</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for line in lines %}
+        <tr{% if line.has_alert and line.category != 'Total' %} style="background:#fff7ed;"{% elif line.category == 'Total' %} style="font-weight:600;background:#f8fafc;"{% endif %}>
+          <td>{{ line.category }}</td>
+          <td>₹{{ '{:,.2f}'.format(line.budget_amount) }}</td>
+          <td>₹{{ '{:,.2f}'.format(line.committed_cost) }}</td>
+          <td>₹{{ '{:,.2f}'.format(line.actual_cost) }}</td>
+          <td>₹{{ '{:,.2f}'.format(line.balance) }}</td>
+          <td>{{ line.pct_used }}%</td>
+          <td>
+            {% if line.has_alert %}
+              {% if 'budget_exceeded' in line.alerts %}<span class="approval-badge approval-bounced">Exceeded</span>{% endif %}
+              {% if 'cost_overrun' in line.alerts %}<span class="approval-badge approval-bounced">Overrun</span>{% endif %}
+            {% else %}—{% endif %}
+          </td>
+          <td>{{ line.notes or '—' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8">No budget lines yet. <a href="{{ url_for('treasury_budget_control_edit', project_id=project.id) }}">Set budget amounts</a>.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if audit_rows %}
+<h3 style="margin-top:1.5rem;">Recent Audit</h3>
+<div class="erp-table-panel"><div class="erp-table-scroll"><table class="erp-table"><thead><tr><th>Time</th><th>Action</th><th>Actor</th><th>Details</th></tr></thead><tbody>
+{% for log in audit_rows %}<tr><td>{{ log.created_at }}</td><td>{{ log.action }}</td><td>{{ log.actor or '—' }}</td><td>{{ log.details or '—' }}</td></tr>{% endfor %}
+</tbody></table></div></div>
+{% endif %}
+{% endblock %}

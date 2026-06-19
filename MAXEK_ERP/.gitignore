@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+.venv/
+venv/
+env/
+
+# Secrets & local config
+.env
+.env.local
+*.pem
+
+# Database (production data stays on VPS)
+database/*.db
+database/*.db-journal
+database/*.db-wal
+database/*.db-shm
+
+# User uploads & media (server-only)
+static/uploads/
+uploads/
+static/photos/
+
+# Backups (VPS-local)
+backups/
+
+# IDE / tooling
+.cursor/
+.vscode/
+*.swp
+.DS_Store
+
+# Build / deploy artifacts
+deploy/dist/
+*.zip
+
+#Ignore cursor AI rules
+.cursor\rules\codacy.mdc

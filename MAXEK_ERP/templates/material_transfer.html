@@ -1,0 +1,178 @@
+{% extends 'base_maxek.html' %}
+{% from 'macros/erp_ui.html' import role_status_badge, maker_row_actions, rejection_notice, workflow_modals, transaction_view_tabs %}
+{% set page_title = 'Material Transfer' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('store') ~ '">Store</a> &gt; Material Transfer' %}
+{% block page_actions %}
+<a href="{{ url_for('material_transfer', new=1) }}#transfer-form" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> New Transfer</a>
+{% endblock %}
+{% block content %}
+<div class="erp-validation" style="margin-bottom:1rem;">
+  Transfer stock between central store, stores, and sites. Stock posts on final approval (out from source, in to destination).
+</div>
+
+{% if view_record %}
+<div class="erp-form-card" style="margin-bottom:1rem;">
+  {% call transaction_view_tabs(view_record, history, can_reopen, approval_id) %}
+  <h3 class="erp-form-title">{{ view_record.transfer_number or ('Transfer #' ~ view_record.id) }}</h3>
+  <p><strong>Type:</strong> {{ view_record.transfer_type_label or view_record.transfer_type }} |
+     <strong>Date:</strong> {{ view_record.transfer_date or '—' }}</p>
+  <p><strong>From:</strong> {{ view_record.source_project_name or 'Central Store' }} →
+     <strong>To:</strong> {{ view_record.dest_project_name or '—' }}</p>
+  <table class="erp-table" style="margin-top:0.75rem;">
+    <thead><tr><th>Material</th><th>Qty</th><th>Unit</th><th>Remarks</th></tr></thead>
+    <tbody>
+      {% for line in view_record.lines %}
+      <tr>
+        <td>{{ line.material_code or '—' }} — {{ line.material_name or '—' }}</td>
+        <td>{{ line.quantity }}</td>
+        <td>{{ line.unit or '—' }}</td>
+        <td>{{ line.remarks or '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p><strong>Status:</strong> {{ role_status_badge(view_record.approval_status, 'maker') }}
+    {% if view_record.stock_posted %}<span class="erp-badge">Stock Posted</span>{% endif %}
+  </p>
+  {{ rejection_notice(history, view_record.approval_status) }}
+  {% endcall %}
+</div>
+{% endif %}
+
+{% if show_form %}
+<div class="erp-form-card" id="transfer-form" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">{% if edit_record %}Edit Transfer{% else %}New Material Transfer{% endif %}</h3>
+  <form method="post" data-store-lines-form data-transfer-form>
+    {% if edit_record %}<input type="hidden" name="record_id" value="{{ edit_record.id }}">{% endif %}
+    <div class="erp-form-grid">
+      <div class="erp-field">
+        <select name="transfer_type" id="transfer_type" required>
+          {% for val, label in transfer_types %}
+          <option value="{{ val }}" {% if edit_record and edit_record.transfer_type == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+        <label>Transfer Type *</label>
+      </div>
+      <div class="erp-field">
+        <input type="date" name="transfer_date" required value="{{ edit_record.transfer_date if edit_record else default_date }}">
+        <label>Transfer Date *</label>
+      </div>
+      <div class="erp-field" id="source-field">
+        <select name="source_project_id" id="source_project_id">
+          <option value="">Central Store</option>
+          {% for p in projects %}
+          <option value="{{ p.id }}" {% if edit_record and edit_record.source_project_id == p.id %}selected{% endif %}>{{ p.project_name }}</option>
+          {% endfor %}
+        </select>
+        <label>Source</label>
+      </div>
+      <div class="erp-field" id="dest-field">
+        <select name="dest_project_id" id="dest_project_id" required>
+          <option value="">Select destination</option>
+          {% for p in projects %}
+          <option value="{{ p.id }}" {% if edit_record and edit_record.dest_project_id == p.id %}selected{% endif %}>{{ p.project_name }}</option>
+          {% endfor %}
+        </select>
+        <label>Destination *</label>
+      </div>
+      <div class="erp-field span-2">
+        <textarea name="remarks" placeholder=" ">{{ edit_record.remarks if edit_record else '' }}</textarea>
+        <label>Remarks</label>
+      </div>
+    </div>
+    <div class="erp-table-panel" style="margin-top:1rem;">
+      <div class="erp-table-toolbar">
+        <h3 class="erp-table-title">Transfer Lines</h3>
+        <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-add-line>Add Line</button>
+      </div>
+      <div class="erp-table-scroll">
+        <table class="erp-table" data-lines-table>
+          <thead><tr><th>Material *</th><th>Qty</th><th>Unit</th><th>Remarks</th><th></th></tr></thead>
+          <tbody>
+            {% set lines = edit_record.lines if edit_record else [{'material_id':'','quantity':1,'unit':'Nos','remarks':''}] %}
+            {% for line in lines %}
+            <tr data-line-row>
+              <td>
+                <select name="material_id[]" required>
+                  <option value="">Select</option>
+                  {% for m in materials %}
+                  <option value="{{ m.id }}" data-unit="{{ m.unit }}" {% if line.material_id == m.id %}selected{% endif %}>{{ m.code }} — {{ m.name }}</option>
+                  {% endfor %}
+                </select>
+              </td>
+              <td><input type="number" step="0.01" name="quantity[]" value="{{ line.quantity or '' }}" required></td>
+              <td><input name="unit[]" value="{{ line.unit or '' }}"></td>
+              <td><input name="line_remarks[]" value="{{ line.remarks or '' }}"></td>
+              <td><button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-remove-line><i class="fa-solid fa-trash"></i></button></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div style="margin-top:1rem;display:flex;gap:0.75rem;">
+      <button type="submit" class="erp-btn erp-btn-primary">Save Transfer</button>
+      <a href="{{ url_for('material_transfer') }}" class="erp-btn erp-btn-ghost">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endif %}
+
+<div class="erp-table-panel" data-erp-table>
+  <div class="erp-table-toolbar"><h3 class="erp-table-title">Transfer Register</h3></div>
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead><tr><th>Number</th><th>Type</th><th>Date</th><th>From</th><th>To</th><th>Status</th><th>Actions</th></tr></thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>{{ row.transfer_number or ('#' ~ row.id) }}</td>
+          <td>{{ row.transfer_type_label or row.transfer_type }}</td>
+          <td>{{ row.transfer_date or '—' }}</td>
+          <td>{{ row.source_project_name or 'Central Store' }}</td>
+          <td>{{ row.dest_project_name or '—' }}</td>
+          <td>{{ role_status_badge(row.approval_status, 'maker') }}</td>
+          <td>
+            <a href="{{ url_for('material_transfer', view=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">View</a>
+            {% if row.approval_status in ['Pending Checker', 'Rejected by Checker', 'Rejected by Approver'] and not row.stock_posted %}
+            <a href="{{ url_for('material_transfer', edit=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Edit</a>
+            {% endif %}
+            {{ maker_row_actions('material_transfer', 'material_transfers', row.id, row.approval_status, 'material_transfer') }}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7">No transfers yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{ workflow_modals() }}
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/store-forms.js') }}"></script>
+<script>
+(function () {
+  var typeSel = document.getElementById('transfer_type');
+  var sourceSel = document.getElementById('source_project_id');
+  var sourceField = document.getElementById('source-field');
+  if (!typeSel) return;
+  function syncTransferType() {
+    var t = typeSel.value;
+    if (t === 'store_to_site') {
+      sourceSel.value = '';
+      sourceSel.disabled = true;
+      if (sourceField) sourceField.style.opacity = '0.6';
+    } else {
+      sourceSel.disabled = false;
+      if (sourceField) sourceField.style.opacity = '1';
+    }
+    if (t === 'store_to_store') {
+      sourceSel.querySelector('option[value=""]').textContent = 'Central Store';
+    }
+  }
+  typeSel.addEventListener('change', syncTransferType);
+  syncTransferType();
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,25 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Daily Treasury Dashboard' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('treasury_hub') ~ '">Treasury</a> &gt; Daily Dashboard' %}
+{% block content %}
+<p style="color:#64748b;margin-top:0;">As of {{ cash_flow.today }}</p>
+<div class="erp-summary-grid" style="margin-bottom:1.5rem;">
+  <div class="erp-stat-card"><span>Total Bank Balance</span><strong>₹{{ '{:,.2f}'.format(stats.total_balance) }}</strong></div>
+  <div class="erp-stat-card"><span>MTD Inflows</span><strong>₹{{ '{:,.2f}'.format(cash_flow.inflows_mtd) }}</strong></div>
+  <div class="erp-stat-card"><span>MTD Outflows</span><strong>₹{{ '{:,.2f}'.format(cash_flow.outflows_mtd) }}</strong></div>
+  <div class="erp-stat-card"><span>MTD Net</span><strong>₹{{ '{:,.2f}'.format(cash_flow.net_mtd) }}</strong></div>
+  <div class="erp-stat-card"><span>Pending Payments</span><strong>{{ stats.pending_payments }}</strong></div>
+  <div class="erp-stat-card"><span>Pending Receipts</span><strong>{{ stats.pending_receipts }}</strong></div>
+  <div class="erp-stat-card"><span>BG Alerts</span><strong>{{ stats.bg_alerts }}</strong></div>
+</div>
+{% if alerts %}
+<h3>BG Expiry Alerts</h3>
+<div class="erp-table-panel" style="margin-bottom:1.5rem;"><div class="erp-table-scroll"><table class="erp-table"><thead><tr><th>BG</th><th>Beneficiary</th><th>Amount</th><th>Expiry</th><th>Days Left</th></tr></thead><tbody>
+{% for a in alerts %}<tr><td>{{ a.bg_number }}</td><td>{{ a.beneficiary }}</td><td>₹{{ '{:,.2f}'.format(a.amount) }}</td><td>{{ a.expiry_date }}</td><td>{{ a.days_left }}</td></tr>{% endfor %}
+</tbody></table></div></div>
+{% endif %}
+<h3>Account Balances</h3>
+<div class="erp-table-panel"><div class="erp-table-scroll"><table class="erp-table"><thead><tr><th>Bank</th><th>Account</th><th>Balance</th><th>OD Utilized</th></tr></thead><tbody>
+{% for a in accounts %}<tr><td>{{ a.bank_name }}</td><td>{{ a.account_number }}</td><td>₹{{ '{:,.2f}'.format(a.current_balance or 0) }}</td><td>₹{{ '{:,.2f}'.format(a.od_utilized or 0) }}</td></tr>{% endfor %}
+</tbody></table></div></div>
+{% endblock %}

@@ -1,0 +1,57 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = doc.original_filename or 'Document' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('treasury_hub') ~ '">Treasury</a> &gt; <a href="' ~ url_for('treasury_document_vault') ~ '">Document Vault</a> &gt; View' %}
+{% block page_actions %}
+{% if doc.has_file %}
+<a href="{{ url_for('treasury_document_vault_download', doc_id=doc.id) }}" class="erp-btn erp-btn-primary"><i class="fa-solid fa-download"></i> Download</a>
+{% endif %}
+<a href="{{ url_for('treasury_document_vault') }}" class="erp-btn erp-btn-ghost">Back to Vault</a>
+{% endblock %}
+{% block content %}
+<div class="erp-form-card" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">{{ doc.document_type or 'Treasury Document' }}</h3>
+  <div class="erp-form-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));">
+    <div><span style="color:#64748b;">File</span><br><strong>{{ doc.original_filename or '—' }}</strong></div>
+    <div><span style="color:#64748b;">Size</span><br><strong>{{ doc.file_size_display }}</strong></div>
+    <div><span style="color:#64748b;">Uploaded</span><br><strong>{{ doc.uploaded_at or '—' }}</strong></div>
+    <div><span style="color:#64748b;">Uploaded By</span><br><strong>{{ doc.uploaded_by or '—' }}</strong></div>
+    <div><span style="color:#64748b;">Linked Entity</span><br><strong>{{ doc.entity_type_label }}</strong></div>
+    <div><span style="color:#64748b;">Record</span><br><strong>{{ doc.entity_label }}</strong></div>
+  </div>
+  {% if doc.notes %}
+  <p style="margin:1rem 0 0;"><strong>Notes:</strong> {{ doc.notes }}</p>
+  {% endif %}
+  {% if not doc.has_file %}
+  <div class="erp-alert erp-alert-warning" style="margin-top:1rem;padding:0.75rem 1rem;border-radius:0.5rem;background:#fef3c7;border:1px solid #f59e0b;">
+    This is a demo placeholder record. Upload a real file via
+    <a href="{{ url_for('treasury_document_vault_upload') }}">Upload Document</a>
+    to attach the scanned copy.
+  </div>
+  {% endif %}
+</div>
+
+<form method="post" action="{{ url_for('treasury_document_vault_delete', doc_id=doc.id) }}" onsubmit="return confirm('Archive this document?');" style="margin-bottom:1.5rem;">
+  <button type="submit" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-box-archive"></i> Archive Document</button>
+</form>
+
+{% if doc.audit_rows %}
+<h3>Audit Trail</h3>
+<div class="erp-table-panel">
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead><tr><th>When</th><th>Action</th><th>By</th><th>Details</th></tr></thead>
+      <tbody>
+        {% for row in doc.audit_rows %}
+        <tr>
+          <td>{{ row.created_at }}</td>
+          <td>{{ row.action }}</td>
+          <td>{{ row.actor or '—' }}</td>
+          <td>{{ row.details or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

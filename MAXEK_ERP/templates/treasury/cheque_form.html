@@ -1,0 +1,45 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'New Cheque' if not edit_record else 'Edit Cheque #' ~ edit_record.cheque_number %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('treasury_hub') ~ '">Treasury</a> &gt; <a href="' ~ url_for('treasury_cheques') ~ '">Cheques</a> &gt; ' ~ ('Edit' if edit_record else 'New') %}
+{% block content %}
+<div class="erp-form-card" id="record-form">
+  <h3 class="erp-form-title">{% if edit_record %}Edit Cheque #{{ edit_record.cheque_number }}{% else %}New Cheque{% endif %}</h3>
+  <form method="post" action="{% if edit_record %}{{ url_for('treasury_cheque_detail', cheque_id=edit_record.id) }}{% else %}{{ url_for('treasury_cheque_new') }}{% endif %}">
+    <div class="erp-form-grid">
+      <div class="erp-field">
+        <select name="bank_account_id" required>
+          <option value="">—</option>
+          {% for a in accounts %}
+          <option value="{{ a.id }}" {% if edit_record and edit_record.bank_account_id == a.id %}selected{% endif %}>{{ a.bank_name }} — {{ a.account_number }}</option>
+          {% endfor %}
+        </select>
+        <label>Bank Account *</label>
+      </div>
+      <div class="erp-field">
+        <input name="cheque_number" required placeholder=" " value="{{ edit_record.cheque_number if edit_record else '' }}">
+        <label>Cheque Number *</label>
+      </div>
+      <div class="erp-field">
+        <input type="date" name="issue_date" required value="{{ edit_record.issue_date if edit_record else default_date }}">
+        <label>Issue Date *</label>
+      </div>
+      <div class="erp-field">
+        <input name="beneficiary" required placeholder=" " value="{{ edit_record.beneficiary if edit_record else '' }}">
+        <label>Beneficiary *</label>
+      </div>
+      <div class="erp-field">
+        <input type="number" step="0.01" name="amount" required placeholder=" " value="{{ edit_record.amount if edit_record else '' }}">
+        <label>Amount *</label>
+      </div>
+      <div class="erp-field span-2">
+        <textarea name="remarks" placeholder=" ">{{ edit_record.remarks if edit_record else '' }}</textarea>
+        <label>Remarks</label>
+      </div>
+    </div>
+    <div style="display:flex;gap:0.5rem;margin-top:1rem;">
+      <button type="submit" class="erp-btn erp-btn-primary">{% if edit_record %}Save Changes{% else %}Create Cheque{% endif %}</button>
+      <a href="{% if edit_record %}{{ url_for('treasury_cheque_detail', cheque_id=edit_record.id) }}{% else %}{{ url_for('treasury_cheques') }}{% endif %}" class="erp-btn erp-btn-ghost">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

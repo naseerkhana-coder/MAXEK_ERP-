@@ -3,7 +3,6 @@
 {% set page_title = 'Project Creation' %}
 {% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; Projects' %}
 {% block page_actions %}
-<a href="{{ url_for('clients') }}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-building"></i> Clients</a>
 <a href="{{ url_for('cost_planning') }}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-coins"></i> Cost Planning</a>
 <a href="#add-project" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> New Project</a>
 {% endblock %}
@@ -143,7 +142,7 @@
   </div>
   {% endif %}
 
-  <div class="erp-table-panel" data-erp-table>
+  <div class="erp-table-panel" data-erp-table id="project-list">
     <div class="erp-table-toolbar">
       <h3 class="erp-table-title">Project List</h3>
       <div class="erp-table-controls">

@@ -200,6 +200,32 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   });
 
+  document.querySelectorAll('.rail-subbtn[data-module-anchor]').forEach(function (link) {
+    link.addEventListener('click', function (event) {
+      const anchorId = link.getAttribute('data-module-anchor');
+      if (!anchorId) return;
+      let linkUrl;
+      try {
+        linkUrl = new URL(link.href, window.location.origin);
+      } catch (err) {
+        return;
+      }
+      if (linkUrl.pathname !== window.location.pathname) {
+        return;
+      }
+      const target = document.getElementById(anchorId);
+      if (!target) {
+        return;
+      }
+      event.preventDefault();
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      history.replaceState(null, '', linkUrl.pathname + linkUrl.search + '#' + anchorId);
+      link.closest('.rail-subnav')?.querySelectorAll('.rail-subbtn').forEach(function (item) {
+        item.classList.toggle('active', item === link);
+      });
+    });
+  });
+
   document.querySelectorAll('[data-table-search]').forEach(function (input) {
     const panel = input.closest('[data-erp-table]');
     const table = panel?.querySelector('table');

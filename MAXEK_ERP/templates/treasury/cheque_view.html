@@ -1,0 +1,91 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Cheque #' ~ cheque.cheque_number %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('treasury_hub') ~ '">Treasury</a> &gt; <a href="' ~ url_for('treasury_cheques') ~ '">Cheques</a> &gt; #' ~ cheque.cheque_number %}
+{% block page_actions %}
+{% if cheque.status not in ['Cleared', 'Cancelled', 'Bounced'] %}
+<a href="{{ url_for('treasury_cheque_detail', cheque_id=cheque.id, edit=1) }}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-pen"></i> Edit</a>
+{% endif %}
+<a href="{{ url_for('treasury_cheques') }}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-list"></i> Back to List</a>
+{% endblock %}
+{% block content %}
+<div class="erp-form-card" style="margin-bottom:1rem;">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:1rem;">
+    <div>
+      <h3 style="margin:0 0 0.5rem;">Cheque #{{ cheque.cheque_number }}</h3>
+      <p style="margin:0;color:#64748b;">Issued {{ cheque.issue_date or '—' }}</p>
+    </div>
+    <span class="approval-badge approval-{{ (cheque.status or 'Issued')|lower|replace(' ', '-') }}" style="font-size:1rem;padding:0.35rem 0.75rem;">{{ cheque.status or 'Issued' }}</span>
+  </div>
+  <div class="erp-form-grid" style="margin-top:1rem;">
+    <div><strong>Bank Account</strong><br>{{ cheque.bank_name or '—' }} — {{ cheque.account_number or '—' }}</div>
+    <div><strong>Beneficiary</strong><br>{{ cheque.beneficiary or '—' }}</div>
+    <div><strong>Amount</strong><br>₹{{ '{:,.2f}'.format(cheque.amount or 0) }}</div>
+    <div><strong>Created By</strong><br>{{ cheque.created_by or '—' }} {% if cheque.created_at %}<small>({{ cheque.created_at }})</small>{% endif %}</div>
+    {% if cheque.remarks %}
+    <div class="span-2"><strong>Remarks</strong><br>{{ cheque.remarks }}</div>
+    {% endif %}
+  </div>
+</div>
+
+{% if allowed_transitions %}
+<div class="erp-form-card" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">Update Status</h3>
+  <p style="font-size:0.9rem;color:#64748b;margin:0 0 1rem;">
+    Current: <strong>{{ cheque.status }}</strong>.
+    Allowed: {{ allowed_transitions|join(', ') }}.
+  </p>
+  <form method="post" action="{{ url_for('treasury_cheque_status', cheque_id=cheque.id) }}">
+    <div class="erp-form-grid">
+      <div class="erp-field">
+        <select name="status" required>
+          {% for st in allowed_transitions %}
+          <option value="{{ st }}">{{ st }}</option>
+          {% endfor %}
+        </select>
+        <label>New Status *</label>
+      </div>
+      <div class="erp-field span-2">
+        <textarea name="remarks" placeholder=" ">{{ cheque.remarks or '' }}</textarea>
+        <label>Remarks</label>
+      </div>
+    </div>
+    <button type="submit" class="erp-btn erp-btn-primary" style="margin-top:0.75rem;"
+      onclick="return confirm('Update cheque status to ' + this.form.status.value + '?');">
+      Update Status
+    </button>
+  </form>
+  <div style="display:flex;flex-wrap:wrap;gap:0.5rem;margin-top:1rem;">
+    {% for st in allowed_transitions %}
+    <form method="post" action="{{ url_for('treasury_cheque_status', cheque_id=cheque.id) }}" style="display:inline;">
+      <input type="hidden" name="status" value="{{ st }}">
+      <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm"
+        {% if st in ['Cancelled', 'Bounced'] %}onclick="return confirm('Mark as {{ st }}?');"{% endif %}>
+        Quick: {{ st }}
+      </button>
+    </form>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if audit_rows %}
+<div class="erp-table-panel" data-erp-table>
+  <h3 style="padding:0.75rem 1rem;margin:0;font-size:1rem;">Audit Trail</h3>
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead><tr><th>When</th><th>Action</th><th>Actor</th><th>Details</th></tr></thead>
+      <tbody>
+        {% for row in audit_rows %}
+        <tr>
+          <td>{{ row.created_at or '—' }}</td>
+          <td>{{ row.action }}</td>
+          <td>{{ row.actor or '—' }}</td>
+          <td>{{ row.details or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,83 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Upload Treasury Document' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('treasury_hub') ~ '">Treasury</a> &gt; <a href="' ~ url_for('treasury_document_vault') ~ '">Document Vault</a> &gt; Upload' %}
+{% block page_actions %}
+<a href="{{ url_for('treasury_document_vault') }}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-arrow-left"></i> Back</a>
+{% endblock %}
+{% block content %}
+<div class="erp-form-card" style="max-width:720px;">
+  <h3 class="erp-form-title">Upload Document</h3>
+  <p style="color:#64748b;margin-top:0;">PDF, JPG, PNG, XLS, XLSX — max 10 MB per file.</p>
+  <form method="post" enctype="multipart/form-data" id="treasury-doc-upload-form">
+    <div class="erp-form-grid">
+      <div class="erp-field">
+        <select name="document_type" id="document_type" required>
+          <option value="">Select type</option>
+          {% for t in document_types %}
+          <option value="{{ t }}">{{ t }}</option>
+          {% endfor %}
+        </select>
+        <label>Document Type *</label>
+      </div>
+      <div class="erp-field">
+        <select name="entity_type" id="entity_type" required>
+          <option value="">Select entity type</option>
+          {% for t in entity_types %}
+          <option value="{{ t }}">{{ t.replace('_', ' ')|title }}</option>
+          {% endfor %}
+        </select>
+        <label>Link To *</label>
+      </div>
+      <div class="erp-field span-2">
+        <select name="entity_id" id="entity_id" required>
+          <option value="">Select linked record</option>
+          {% for entity_key, items in entity_options.items() %}
+            {% for item in items %}
+            <option value="{{ item.id }}" data-entity-type="{{ entity_key }}">{{ item.label }}</option>
+            {% endfor %}
+          {% endfor %}
+        </select>
+        <label>Linked Record *</label>
+      </div>
+      <div class="erp-field span-2">
+        <input type="file" name="document_file" accept=".pdf,.jpg,.jpeg,.png,.xls,.xlsx" required>
+        <label>File * ({{ allowed_extensions }})</label>
+      </div>
+      <div class="erp-field span-2">
+        <textarea name="notes" placeholder=" "></textarea>
+        <label>Notes (optional)</label>
+      </div>
+    </div>
+    <button type="submit" class="erp-btn erp-btn-primary"><i class="fa-solid fa-upload"></i> Upload</button>
+  </form>
+</div>
+<script>
+(function () {
+  var defaultMap = {{ default_entity_map|tojson }};
+  var docType = document.getElementById('document_type');
+  var entityType = document.getElementById('entity_type');
+  var entityId = document.getElementById('entity_id');
+
+  function filterEntityOptions() {
+    var selectedType = entityType.value;
+    Array.prototype.forEach.call(entityId.options, function (opt) {
+      if (!opt.value) return;
+      var match = !selectedType || opt.getAttribute('data-entity-type') === selectedType;
+      opt.hidden = !match;
+      if (!match && opt.selected) opt.selected = false;
+    });
+  }
+
+  docType.addEventListener('change', function () {
+    var suggested = defaultMap[docType.value];
+    if (suggested) {
+      entityType.value = suggested;
+      filterEntityOptions();
+    }
+  });
+
+  entityType.addEventListener('change', filterEntityOptions);
+  filterEntityOptions();
+})();
+</script>
+{% endblock %}

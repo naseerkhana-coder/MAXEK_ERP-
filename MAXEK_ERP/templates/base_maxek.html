@@ -36,7 +36,7 @@
       </div>
 
       <div class="rail-nav-scroll">
-        <h3 class="action-heading">Departments</h3>
+        <h3 class="action-heading">Modules</h3>
         {% for group in nav_groups %}
           {% set children = group.get('items') or [] %}
           {% set group_active = namespace(value=false) %}
@@ -51,10 +51,40 @@
           {% if request.endpoint == 'department_hub' and request.view_args.get('slug') == group.slug %}
             {% set group_active.value = true %}
           {% endif %}
-          <a class="rail-btn department-btn{% if group_active.value %} active{% endif %}" href="{{ url_for('department_hub', slug=group.slug) }}">
-            <i class="fa-solid {{ group.icon }}"></i>
-            <span>{{ group.label }}</span>
-          </a>
+          {% if not children and group.get('endpoint') %}
+            <a class="rail-btn department-btn{% if group_active.value %} active{% endif %}" href="{{ safe_url_for(group.endpoint) }}">
+              <i class="fa-solid {{ group.icon }}"></i>
+              <span>{{ group.label }}</span>
+            </a>
+          {% else %}
+          <details class="rail-group"{% if group_active.value %} open{% endif %}>
+            <summary class="rail-group-summary{% if group_active.value %} active{% endif %}">
+              <span><i class="fa-solid {{ group.icon }}"></i> {{ group.label }}</span>
+              <i class="fa-solid fa-chevron-down rail-group-chevron" aria-hidden="true"></i>
+            </summary>
+            <div class="rail-subnav">
+              {% for item in children %}
+                {% set item_href = safe_url_for(item.endpoint, **(item.get('query') or {})) %}
+                {% if item.get('anchor') %}{% set item_href = item_href ~ '#' ~ item.anchor %}{% endif %}
+                {% set item_active = namespace(value=false) %}
+                {% if request.endpoint in item.active_endpoints %}
+                  {% if item.get('query') %}
+                    {% if item.query.get('module') and item.query.get('module') == request.args.get('module') %}
+                      {% set item_active.value = true %}
+                    {% elif item.query.get('nav') and item.query.get('nav') == request.args.get('nav') %}
+                      {% set item_active.value = true %}
+                    {% endif %}
+                  {% elif not item.get('anchor') %}
+                    {% set item_active.value = true %}
+                  {% endif %}
+                {% endif %}
+                <a class="rail-subbtn{% if item_active.value %} active{% endif %}" href="{{ item_href }}"{% if item.get('anchor') %} data-module-anchor="{{ item.anchor }}"{% endif %}>
+                  {{ item.label }}
+                </a>
+              {% endfor %}
+            </div>
+          </details>
+          {% endif %}
         {% endfor %}
       </div>
     </nav>
@@ -131,7 +161,19 @@
           {% for item in current_nav_group.get('items') %}
           {% set item_href = safe_url_for(item.endpoint, **(item.get('query') or {})) %}
           {% if item.get('anchor') %}{% set item_href = item_href ~ '#' ~ item.anchor %}{% endif %}
-          <a class="department-subbar-link{% if request.endpoint in item.active_endpoints and not item.get('anchor') %} active{% endif %}" href="{{ item_href }}"{% if item.get('anchor') and current_nav_group.slug == 'dashboard' %} data-dash-subbar-anchor="{{ item.anchor }}"{% elif item.get('anchor') %} data-module-anchor="{{ item.anchor }}"{% endif %}>
+          {% set item_active = namespace(value=false) %}
+          {% if request.endpoint in item.active_endpoints %}
+            {% if item.get('query') %}
+              {% if item.query.get('module') and item.query.get('module') == request.args.get('module') %}
+                {% set item_active.value = true %}
+              {% elif item.query.get('nav') and item.query.get('nav') == request.args.get('nav') %}
+                {% set item_active.value = true %}
+              {% endif %}
+            {% elif not item.get('anchor') %}
+              {% set item_active.value = true %}
+            {% endif %}
+          {% endif %}
+          <a class="department-subbar-link{% if item_active.value %} active{% endif %}" href="{{ item_href }}"{% if item.get('anchor') and current_nav_group.slug == 'dashboard' %} data-dash-subbar-anchor="{{ item.anchor }}"{% elif item.get('anchor') %} data-module-anchor="{{ item.anchor }}"{% endif %}>
             {{ item.label }}
           </a>
           {% endfor %}

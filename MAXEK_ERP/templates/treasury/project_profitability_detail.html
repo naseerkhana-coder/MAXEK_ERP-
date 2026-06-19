@@ -1,0 +1,135 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Project P&L — ' ~ pnl.project_name %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('treasury_hub') ~ '">Treasury</a> &gt; <a href="' ~ url_for('treasury_project_profitability') ~ '">Project Profitability</a> &gt; ' ~ pnl.project_name %}
+{% block page_actions %}
+<a href="{{ url_for('treasury_budget_control_project', project_id=pnl.project_id) }}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-chart-pie"></i> Budget Control</a>
+<a href="{{ url_for('treasury_project_profitability') }}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-arrow-left"></i> All Projects</a>
+{% endblock %}
+{% block content %}
+<p style="color:#64748b;margin-top:0;">
+  {% if pnl.client_name %}Client: {{ pnl.client_name }} · {% endif %}
+  Contract value from {{ pnl.contract_value_source|lower }}
+  {% if pnl.status %} · Status: {{ pnl.status }}{% endif %}
+  {% if fiscal_year %} · Fiscal year: {{ fiscal_year }}{% endif %}
+</p>
+
+<div class="erp-summary-grid" style="margin-bottom:1.5rem;">
+  <div class="erp-stat-card"><span>Contract Value</span><strong>₹{{ '{:,.2f}'.format(pnl.contract_value) }}</strong></div>
+  <div class="erp-stat-card"><span>Client Billing</span><strong>₹{{ '{:,.2f}'.format(pnl.client_billing) }}</strong></div>
+  <div class="erp-stat-card"><span>Receipts</span><strong>₹{{ '{:,.2f}'.format(pnl.receipts) }}</strong></div>
+  <div class="erp-stat-card"><span>Gross Profit</span><strong>₹{{ '{:,.2f}'.format(pnl.gross_profit) }}</strong></div>
+  <div class="erp-stat-card"><span>Net Profit</span><strong>₹{{ '{:,.2f}'.format(pnl.net_profit) }}</strong></div>
+  <div class="erp-stat-card"><span>Profit % (on contract)</span><strong>{{ pnl.profit_pct }}%</strong></div>
+</div>
+
+<h3 style="margin-top:0;">Cost Breakdown</h3>
+<div class="erp-table-panel" style="margin-bottom:1.5rem;">
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead>
+        <tr>
+          <th>Category</th>
+          <th>Amount (Actual)</th>
+          <th>P&amp;L Role</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Material Cost</td>
+          <td>₹{{ '{:,.2f}'.format(pnl.material_cost) }}</td>
+          <td>Direct cost</td>
+        </tr>
+        <tr>
+          <td>Labour Cost</td>
+          <td>₹{{ '{:,.2f}'.format(pnl.labour_cost) }}</td>
+          <td>Direct cost</td>
+        </tr>
+        <tr>
+          <td>Equipment Cost</td>
+          <td>₹{{ '{:,.2f}'.format(pnl.equipment_cost) }}</td>
+          <td>Direct cost</td>
+        </tr>
+        <tr>
+          <td>Subcontract Cost</td>
+          <td>₹{{ '{:,.2f}'.format(pnl.subcontract_cost) }}</td>
+          <td>Direct cost</td>
+        </tr>
+        <tr style="font-weight:600;background:#f8fafc;">
+          <td>Total Direct Costs</td>
+          <td>₹{{ '{:,.2f}'.format(pnl.direct_costs) }}</td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td>Overheads</td>
+          <td>₹{{ '{:,.2f}'.format(pnl.overheads) }}</td>
+          <td>Indirect</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<h3>P&amp;L Summary</h3>
+<div class="erp-table-panel" style="margin-bottom:1.5rem;">
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <tbody>
+        <tr><td>Revenue (client billing{% if not pnl.client_billing %}, receipts used{% endif %})</td><td style="text-align:right;">₹{{ '{:,.2f}'.format(pnl.revenue_base) }}</td></tr>
+        <tr><td>Less: Direct costs</td><td style="text-align:right;">(₹{{ '{:,.2f}'.format(pnl.direct_costs) }})</td></tr>
+        <tr style="font-weight:600;background:#f8fafc;"><td>Gross Profit</td><td style="text-align:right;">₹{{ '{:,.2f}'.format(pnl.gross_profit) }}</td></tr>
+        <tr><td>Less: Overheads</td><td style="text-align:right;">(₹{{ '{:,.2f}'.format(pnl.overheads) }})</td></tr>
+        <tr style="font-weight:600;background:#ecfdf5;"><td>Net Profit</td><td style="text-align:right;">₹{{ '{:,.2f}'.format(pnl.net_profit) }}</td></tr>
+        <tr><td>Profit % on contract value</td><td style="text-align:right;">{{ pnl.profit_pct }}%</td></tr>
+        {% if pnl.client_billing > 0 %}
+        <tr><td>Margin on billing</td><td style="text-align:right;">{{ pnl.margin_on_billing }}%</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if pnl.billing_rows %}
+<h3>Client Billing (recent)</h3>
+<div class="erp-table-panel" style="margin-bottom:1.5rem;">
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead><tr><th>Bill No.</th><th>RA</th><th>Date</th><th>Net Payable</th><th>Status</th><th>Workflow</th></tr></thead>
+      <tbody>
+        {% for b in pnl.billing_rows %}
+        <tr>
+          <td>{{ b.bill_number }}</td>
+          <td>{{ b.ra_number or '—' }}</td>
+          <td>{{ b.bill_date or '—' }}</td>
+          <td>₹{{ '{:,.2f}'.format(b.net_payable or 0) }}</td>
+          <td>{{ b.bill_status or '—' }}</td>
+          <td>{{ b.approval_status or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% if pnl.receipt_rows %}
+<h3>Bank Receipts (linked)</h3>
+<div class="erp-table-panel">
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead><tr><th>Date</th><th>Client</th><th>Amount</th><th>UTR</th><th>Status</th></tr></thead>
+      <tbody>
+        {% for r in pnl.receipt_rows %}
+        <tr>
+          <td>{{ r.receipt_date or '—' }}</td>
+          <td>{{ r.client or '—' }}</td>
+          <td>₹{{ '{:,.2f}'.format(r.amount or 0) }}</td>
+          <td>{{ r.utr_number or '—' }}</td>
+          <td>{{ r.approval_status or r.status or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

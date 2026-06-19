@@ -1,0 +1,48 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Security Deposits' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('treasury_hub') ~ '">Treasury</a> &gt; Security Deposits' %}
+{% block page_actions %}
+<a href="{{ url_for('treasury_security_deposits', new=1) }}#record-form" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> New Deposit</a>
+{% endblock %}
+{% block content %}
+{% if show_form %}
+<div class="erp-form-card" id="record-form" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">{% if edit_record %}Edit Security Deposit{% else %}New Security Deposit{% endif %}</h3>
+  <form method="post">
+    {% if edit_record %}<input type="hidden" name="record_id" value="{{ edit_record.id }}">{% endif %}
+    <div class="erp-form-grid">
+      <div class="erp-field"><select name="project_id"><option value="">—</option>{% for p in projects %}<option value="{{ p.id }}" {% if edit_record and edit_record.project_id == p.id %}selected{% endif %}>{{ p.project_name }}</option>{% endfor %}</select><label>Project</label></div>
+      <div class="erp-field"><select name="bank_account_id"><option value="">—</option>{% for a in accounts %}<option value="{{ a.id }}" {% if edit_record and edit_record.bank_account_id == a.id %}selected{% endif %}>{{ a.bank_name }} — {{ a.account_number }}</option>{% endfor %}</select><label>Bank Account</label></div>
+      <div class="erp-field"><select name="deposit_type">{% for t in deposit_types %}<option value="{{ t }}" {% if edit_record and edit_record.deposit_type == t %}selected{% endif %}>{{ t }}</option>{% endfor %}</select><label>Deposit Type</label></div>
+      <div class="erp-field"><input type="number" step="0.01" name="amount" placeholder=" " value="{{ edit_record.amount if edit_record else '' }}"><label>Amount</label></div>
+      <div class="erp-field"><select name="status">{% for s in deposit_statuses %}<option value="{{ s }}" {% if edit_record and edit_record.status == s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select><label>Status</label></div>
+      <div class="erp-field"><input type="date" name="deposit_date" value="{{ edit_record.deposit_date if edit_record else '' }}"><label>Deposit Date</label></div>
+      <div class="erp-field"><input type="date" name="maturity_date" value="{{ edit_record.maturity_date if edit_record else '' }}"><label>Maturity Date</label></div>
+      <div class="erp-field span-2"><textarea name="remarks" placeholder=" ">{{ edit_record.remarks if edit_record else '' }}</textarea><label>Remarks</label></div>
+    </div>
+    <button type="submit" class="erp-btn erp-btn-primary">Save</button>
+  </form>
+</div>
+{% endif %}
+<div class="erp-table-panel" data-erp-table>
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead><tr><th>Project</th><th>Bank</th><th>Type</th><th>Amount</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>{{ row.project_name or '—' }}</td>
+          <td>{{ row.bank_name or '—' }}</td>
+          <td>{{ row.deposit_type }}</td>
+          <td>₹{{ '{:,.2f}'.format(row.amount) }}</td>
+          <td>{{ row.status }}</td>
+          <td><a href="{{ url_for('treasury_security_deposits', edit=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Edit</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6">No security deposits yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

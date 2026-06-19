@@ -1,0 +1,49 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Treasury Reports' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('treasury_hub') ~ '">Treasury</a> &gt; Reports' %}
+{% block content %}
+<form method="get" class="erp-table-toolbar" style="margin-bottom:1rem;">
+  <label>Report:
+    <select name="report" onchange="this.form.submit()">
+      {% for key, label in report_types.items() %}
+      <option value="{{ key }}" {% if report == key %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  {% if report == 'bank_book' %}
+  <select name="account_id" onchange="this.form.submit()">
+    <option value="">All Accounts</option>
+    {% for a in accounts %}<option value="{{ a.id }}" {% if filter_account_id == a.id %}selected{% endif %}>{{ a.bank_name }} — {{ a.account_number }}</option>{% endfor %}
+  </select>
+  {% endif %}
+</form>
+
+{% if report == 'bank_book' %}
+<h3>Bank Book</h3>
+<div class="erp-table-panel"><div class="erp-table-scroll"><table class="erp-table"><thead><tr><th>Date</th><th>Type</th><th>Party</th><th>Debit</th><th>Credit</th><th>Balance</th><th>UTR</th></tr></thead><tbody>
+{% for r in bank_book %}<tr><td>{{ r.txn_date }}</td><td>{{ r.txn_type }}</td><td>{{ r.party }}</td><td>{% if r.debit %}₹{{ '{:,.2f}'.format(r.debit) }}{% else %}—{% endif %}</td><td>{% if r.credit %}₹{{ '{:,.2f}'.format(r.credit) }}{% else %}—{% endif %}</td><td>₹{{ '{:,.2f}'.format(r.balance) }}</td><td>{{ r.utr_number or '—' }}</td></tr>{% else %}<tr><td colspan="7">No approved transactions.</td></tr>{% endfor %}
+</tbody></table></div></div>
+
+{% elif report == 'bg_register' %}
+<h3>BG Register</h3>
+<div class="erp-table-panel"><div class="erp-table-scroll"><table class="erp-table"><thead><tr><th>BG No</th><th>Type</th><th>Project</th><th>Beneficiary</th><th>Amount</th><th>Expiry</th><th>Status</th></tr></thead><tbody>
+{% for r in bg_rows %}<tr><td>{{ r.bg_number }}</td><td>{{ r.bg_type }}</td><td>{{ r.project_name or '—' }}</td><td>{{ r.beneficiary }}</td><td>₹{{ '{:,.2f}'.format(r.amount) }}</td><td>{{ r.expiry_date }}</td><td>{{ r.status }}</td></tr>{% endfor %}
+</tbody></table></div></div>
+
+{% elif report == 'od_register' %}
+<h3>OD Register</h3>
+<div class="erp-table-panel"><div class="erp-table-scroll"><table class="erp-table"><thead><tr><th>Account</th><th>OD Limit</th><th>Utilized</th><th>Available</th><th>Rate %</th></tr></thead><tbody>
+{% for r in od_rows %}<tr><td>{{ r.bank_name }} {{ r.account_number }}</td><td>₹{{ '{:,.2f}'.format(r.od_limit) }}</td><td>₹{{ '{:,.2f}'.format(r.utilized) }}</td><td>₹{{ '{:,.2f}'.format((r.od_limit or 0) - (r.utilized or 0)) }}</td><td>{{ r.interest_rate }}</td></tr>{% endfor %}
+</tbody></table></div></div>
+
+{% elif report == 'cash_flow' %}
+<h3>Cash Flow Summary (MTD)</h3>
+<div class="erp-summary-grid">
+  <div class="erp-stat-card"><span>Period</span><strong>{{ cash_flow.month_start }} → {{ cash_flow.today }}</strong></div>
+  <div class="erp-stat-card"><span>Inflows</span><strong>₹{{ '{:,.2f}'.format(cash_flow.inflows_mtd) }}</strong></div>
+  <div class="erp-stat-card"><span>Outflows</span><strong>₹{{ '{:,.2f}'.format(cash_flow.outflows_mtd) }}</strong></div>
+  <div class="erp-stat-card"><span>Net</span><strong>₹{{ '{:,.2f}'.format(cash_flow.net_mtd) }}</strong></div>
+  <div class="erp-stat-card"><span>Closing Balance</span><strong>₹{{ '{:,.2f}'.format(cash_flow.total_balance) }}</strong></div>
+</div>
+{% endif %}
+{% endblock %}

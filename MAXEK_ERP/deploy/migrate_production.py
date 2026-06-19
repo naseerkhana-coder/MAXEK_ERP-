@@ -22,6 +22,10 @@ from corporate_dms_service import ensure_corporate_dms_schema
 from qc_service import ensure_qc_schema
 from precast_service import ensure_precast_schema
 from helpdesk_service import ensure_helpdesk_schema
+from subcontract_payment_service import ensure_subcontract_payment_schema
+from store_service import ensure_store_schema
+from treasury_service import ensure_treasury_schema
+from budget_service import ensure_budget_schema
 
 
 def main():
@@ -37,6 +41,10 @@ def main():
         ensure_staff_monthly_attendance_schema(db)
         ensure_bbs_schema(db)
         ensure_subcontractor_billing_schema(db)
+        ensure_subcontract_payment_schema(db)
+        ensure_store_schema(db)
+        ensure_treasury_schema(db)
+        ensure_budget_schema(db)
         ensure_corporate_dms_schema(db)
         ensure_qc_schema(db)
         ensure_precast_schema(db)

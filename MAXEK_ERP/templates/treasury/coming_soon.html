@@ -1,0 +1,11 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = page_title or 'Coming Soon' %}
+{% set breadcrumbs = breadcrumbs or ('<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; Treasury') %}
+{% block content %}
+<div class="erp-form-card" style="text-align:center;padding:3rem;">
+  <i class="fa-solid fa-hourglass-half" style="font-size:3rem;color:#94a3b8;margin-bottom:1rem;"></i>
+  <h2>{{ feature_name }}</h2>
+  <p style="color:#64748b;max-width:480px;margin:0 auto 1.5rem;">{{ message or 'This feature is planned for Phase 2 and will be available in a future release.' }}</p>
+  <a href="{{ url_for('treasury_hub') }}" class="erp-btn erp-btn-primary">Back to Treasury Hub</a>
+</div>
+{% endblock %}

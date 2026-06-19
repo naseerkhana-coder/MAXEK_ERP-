@@ -1,0 +1,44 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Bank Reconciliation' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('treasury_hub') ~ '">Treasury</a> &gt; Reconciliation' %}
+{% block content %}
+<div class="erp-form-card" style="margin-bottom:1rem;padding:1rem;">
+  <p><i class="fa-solid fa-file-csv"></i> <strong>CSV Import:</strong> Bank statement import will be available in Phase 2. Use manual reconciliation entries below.</p>
+</div>
+<form method="get" class="erp-table-toolbar" style="margin-bottom:0.75rem;display:flex;gap:0.5rem;flex-wrap:wrap;">
+  <select name="account_id" onchange="this.form.submit()">
+    <option value="">All Accounts</option>
+    {% for a in accounts %}<option value="{{ a.id }}" {% if filter_account_id == a.id %}selected{% endif %}>{{ a.bank_name }} — {{ a.account_number }}</option>{% endfor %}
+  </select>
+  <select name="status" onchange="this.form.submit()">
+    <option value="">All Status</option>
+    {% for s in recon_statuses %}<option value="{{ s }}" {% if filter_status == s %}selected{% endif %}>{{ s|title }}</option>{% endfor %}
+  </select>
+</form>
+<div class="erp-summary-grid" style="margin-bottom:1rem;">
+  <div class="erp-stat-card"><span>Matched</span><strong>{{ counts.matched }}</strong></div>
+  <div class="erp-stat-card"><span>Unmatched</span><strong>{{ counts.unmatched }}</strong></div>
+  <div class="erp-stat-card"><span>Pending</span><strong>{{ counts.pending }}</strong></div>
+</div>
+<div class="erp-table-panel" data-erp-table>
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead><tr><th>Date</th><th>Account</th><th>Stmt Ref</th><th>ERP Txn</th><th>Amount</th><th>Status</th></tr></thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>{{ row.txn_date or '—' }}</td>
+          <td>{{ row.bank_name }} {{ row.account_number }}</td>
+          <td>{{ row.bank_stmt_ref or '—' }}</td>
+          <td>{% if row.erp_txn_type %}{{ row.erp_txn_type }} #{{ row.erp_txn_id }}{% else %}—{% endif %}</td>
+          <td>₹{{ '{:,.2f}'.format(row.amount) }}</td>
+          <td><span class="approval-badge approval-{{ row.status }}">{{ row.status|title }}</span></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6">No reconciliation items.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

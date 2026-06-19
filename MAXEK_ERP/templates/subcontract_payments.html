@@ -1,0 +1,223 @@
+{% extends 'base_maxek.html' %}
+{% from 'macros/erp_ui.html' import role_status_badge, maker_row_actions, rejection_notice, workflow_modals, transaction_view_tabs %}
+{% set page_title = 'Subcontract Payments' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; Subcontract &gt; Payments Ledger' %}
+{% block page_actions %}
+<a href="{{ url_for('subcontract_payments', new_wo=1) }}#wo-form" class="erp-btn erp-btn-primary"><i class="fa-solid fa-file-contract"></i> New Work Order</a>
+<a href="{{ url_for('subcontract_payments', new_pay=1) }}#pay-form" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-money-bill-transfer"></i> Record Payment</a>
+{% endblock %}
+{% block content %}
+<div class="erp-stats-grid" style="margin-bottom:1rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:0.75rem;">
+  <div class="erp-stat-card"><span class="erp-stat-label">WO Value</span><strong>{{ '%.2f'|format(summary.total_wo_value) }}</strong></div>
+  <div class="erp-stat-card"><span class="erp-stat-label">Certified</span><strong>{{ '%.2f'|format(summary.total_certified) }}</strong></div>
+  <div class="erp-stat-card"><span class="erp-stat-label">Paid</span><strong>{{ '%.2f'|format(summary.total_paid) }}</strong></div>
+  <div class="erp-stat-card"><span class="erp-stat-label">Retention</span><strong>{{ '%.2f'|format(summary.total_retention) }}</strong></div>
+  <div class="erp-stat-card"><span class="erp-stat-label">TDS</span><strong>{{ '%.2f'|format(summary.total_tds) }}</strong></div>
+  <div class="erp-stat-card"><span class="erp-stat-label">Balance</span><strong>{{ '%.2f'|format(summary.total_balance) }}</strong></div>
+</div>
+
+{% if view_record %}
+<div class="erp-form-card" style="margin-bottom:1rem;">
+  {% call transaction_view_tabs(view_record, history, can_reopen, approval_id) %}
+  <h3 class="erp-form-title">Work Order {{ view_record.work_order_no }}</h3>
+  <div class="erp-form-grid">
+    <p><strong>Subcontractor:</strong> {{ view_record.subcontractor_name or '—' }}</p>
+    <p><strong>Project:</strong> {{ view_record.project_name or '—' }}</p>
+    <p><strong>Description:</strong> {{ view_record.work_description or '—' }}</p>
+    <p><strong>WO Value:</strong> {{ '%.2f'|format(view_record.work_order_value or 0) }}</p>
+    <p><strong>Certified Value:</strong> {{ '%.2f'|format(view_record.certified_value or 0) }}</p>
+    <p><strong>Paid Amount:</strong> {{ '%.2f'|format(view_record.paid_amount or 0) }}</p>
+    <p><strong>Retention:</strong> {{ '%.2f'|format(view_record.retention_amount or 0) }} ({{ view_record.retention_percent or 0 }}%)</p>
+    <p><strong>TDS:</strong> {{ '%.2f'|format(view_record.tds_amount or 0) }} ({{ view_record.tds_percent or 0 }}%)</p>
+    <p><strong>Balance:</strong> {{ '%.2f'|format(view_record.balance_amount or 0) }}</p>
+    <p><strong>Status:</strong> {{ role_status_badge(view_record.approval_status, 'maker') }}</p>
+  </div>
+  {% if view_record.payments %}
+  <h4 style="margin-top:1rem;">Payment History</h4>
+  <table class="erp-table">
+    <thead><tr><th>Date</th><th>Amount</th><th>TDS</th><th>Retention</th><th>Net Paid</th><th>Mode</th><th>Ref</th><th>Status</th></tr></thead>
+    <tbody>
+      {% for pay in view_record.payments %}
+      <tr>
+        <td>{{ pay.payment_date or '—' }}</td>
+        <td>{{ '%.2f'|format(pay.payment_amount or 0) }}</td>
+        <td>{{ '%.2f'|format(pay.tds_deducted or 0) }}</td>
+        <td>{{ '%.2f'|format(pay.retention_held or 0) }}</td>
+        <td>{{ '%.2f'|format(pay.net_paid or 0) }}</td>
+        <td>{{ pay.payment_mode or '—' }}</td>
+        <td>{{ pay.reference_no or '—' }}</td>
+        <td>{{ role_status_badge(pay.approval_status, 'maker') }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+  {{ rejection_notice(history, view_record.approval_status) }}
+  {% endcall %}
+</div>
+{% endif %}
+
+{% if show_wo_form %}
+<div class="erp-form-card" id="wo-form" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">{% if edit_wo %}Edit Work Order{% else %}New Subcontract Work Order{% endif %}</h3>
+  <form method="post">
+    <input type="hidden" name="form_action" value="save_work_order">
+    {% if edit_wo %}<input type="hidden" name="record_id" value="{{ edit_wo.id }}"><input type="hidden" name="work_order_id" value="{{ edit_wo.id }}">{% endif %}
+    <div class="erp-form-grid">
+      <div class="erp-field">
+        <select name="subcontractor_id" required>
+          <option value="">Select subcontractor</option>
+          {% for s in subcontractors %}
+          <option value="{{ s.id }}" {% if edit_wo and edit_wo.subcontractor_id == s.id %}selected{% endif %}>{{ s.subcontractor_name }}</option>
+          {% endfor %}
+        </select>
+        <label>Subcontractor *</label>
+      </div>
+      <div class="erp-field">
+        <select name="project_id">
+          <option value="">—</option>
+          {% for p in projects %}
+          <option value="{{ p.id }}" {% if edit_wo and edit_wo.project_id == p.id %}selected{% endif %}>{{ p.project_name }}</option>
+          {% endfor %}
+        </select>
+        <label>Project</label>
+      </div>
+      <div class="erp-field span-2">
+        <input name="work_description" required placeholder=" " value="{{ edit_wo.work_description if edit_wo else '' }}">
+        <label>Work Description *</label>
+      </div>
+      <div class="erp-field">
+        <input type="number" step="0.01" name="work_order_value" value="{{ edit_wo.work_order_value if edit_wo else '' }}">
+        <label>Work Order Value</label>
+      </div>
+      <div class="erp-field">
+        <input type="number" step="0.01" name="certified_value" value="{{ edit_wo.certified_value if edit_wo else '' }}">
+        <label>Certified Value</label>
+      </div>
+      <div class="erp-field">
+        <input type="number" step="0.01" name="retention_percent" value="{{ edit_wo.retention_percent if edit_wo else '0' }}">
+        <label>Retention %</label>
+      </div>
+      <div class="erp-field">
+        <input type="number" step="0.01" name="tds_percent" value="{{ edit_wo.tds_percent if edit_wo else '1' }}">
+        <label>TDS %</label>
+      </div>
+      <div class="erp-field">
+        <input type="date" name="start_date" value="{{ edit_wo.start_date if edit_wo else default_date }}">
+        <label>Start Date</label>
+      </div>
+      <div class="erp-field span-2">
+        <textarea name="remarks" placeholder=" ">{{ edit_wo.remarks if edit_wo else '' }}</textarea>
+        <label>Remarks</label>
+      </div>
+    </div>
+    <div style="margin-top:1rem;display:flex;gap:0.75rem;">
+      <button type="submit" class="erp-btn erp-btn-primary">Save Work Order</button>
+      <a href="{{ url_for('subcontract_payments') }}" class="erp-btn erp-btn-ghost">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endif %}
+
+{% if show_pay_form %}
+<div class="erp-form-card" id="pay-form" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">Record Subcontract Payment</h3>
+  <form method="post">
+    <input type="hidden" name="form_action" value="save_payment">
+    <div class="erp-form-grid">
+      <div class="erp-field span-2">
+        <select name="work_order_id" required id="pay_work_order_id">
+          <option value="">Select work order</option>
+          {% for wo in ledger_rows %}
+          <option value="{{ wo.id }}" data-balance="{{ wo.balance_amount or 0 }}"
+            {% if prefill_wo_id == wo.id %}selected{% endif %}>
+            {{ wo.work_order_no }} — {{ wo.subcontractor_name }} (Bal: {{ '%.2f'|format(wo.balance_amount or 0) }})
+          </option>
+          {% endfor %}
+        </select>
+        <label>Work Order *</label>
+      </div>
+      <div class="erp-field">
+        <input type="date" name="payment_date" required value="{{ default_date }}">
+        <label>Payment Date *</label>
+      </div>
+      <div class="erp-field">
+        <input type="number" step="0.01" name="payment_amount" required placeholder="0">
+        <label>Payment Amount *</label>
+      </div>
+      <div class="erp-field">
+        <input type="number" step="0.01" name="tds_deducted" placeholder="0">
+        <label>TDS Deducted</label>
+      </div>
+      <div class="erp-field">
+        <input type="number" step="0.01" name="retention_held" placeholder="0">
+        <label>Retention Held</label>
+      </div>
+      <div class="erp-field">
+        <input name="payment_mode" placeholder="NEFT / Cheque / Cash">
+        <label>Payment Mode</label>
+      </div>
+      <div class="erp-field">
+        <input name="reference_no" placeholder="UTR / Cheque No">
+        <label>Reference No</label>
+      </div>
+      <div class="erp-field span-2">
+        <textarea name="remarks" placeholder=" "></textarea>
+        <label>Remarks</label>
+      </div>
+    </div>
+    <div style="margin-top:1rem;display:flex;gap:0.75rem;">
+      <button type="submit" class="erp-btn erp-btn-primary">Save Payment</button>
+      <a href="{{ url_for('subcontract_payments') }}" class="erp-btn erp-btn-ghost">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endif %}
+
+<div class="erp-table-panel" data-erp-table>
+  <div class="erp-table-toolbar">
+    <h3 class="erp-table-title">Subcontract Ledger</h3>
+    <form method="get" class="erp-table-search" style="display:flex;gap:0.5rem;">
+      <input type="search" name="q" value="{{ search }}" placeholder="Search work orders...">
+      <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Search</button>
+    </form>
+  </div>
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead>
+        <tr>
+          <th>WO No</th><th>Subcontractor</th><th>Project</th><th>WO Value</th>
+          <th>Certified</th><th>Paid</th><th>Retention</th><th>TDS</th><th>Balance</th><th>Status</th><th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in ledger_rows %}
+        <tr>
+          <td>{{ row.work_order_no }}</td>
+          <td>{{ row.subcontractor_name or '—' }}</td>
+          <td>{{ row.project_name or '—' }}</td>
+          <td>{{ '%.2f'|format(row.work_order_value or 0) }}</td>
+          <td>{{ '%.2f'|format(row.certified_value or 0) }}</td>
+          <td>{{ '%.2f'|format(row.paid_amount or 0) }}</td>
+          <td>{{ '%.2f'|format(row.retention_amount or 0) }}</td>
+          <td>{{ '%.2f'|format(row.tds_amount or 0) }}</td>
+          <td>{{ '%.2f'|format(row.balance_amount or 0) }}</td>
+          <td>{{ role_status_badge(row.approval_status, 'maker') }}</td>
+          <td>
+            <a href="{{ url_for('subcontract_payments', view=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">View</a>
+            {% if row.approval_status in ['Pending Checker', 'Rejected by Checker', 'Rejected by Approver'] %}
+            <a href="{{ url_for('subcontract_payments', edit_wo=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Edit</a>
+            {% endif %}
+            <a href="{{ url_for('subcontract_payments', new_pay=1, wo_id=row.id) }}#pay-form" class="erp-btn erp-btn-ghost erp-btn-sm">Pay</a>
+            {{ maker_row_actions('subcontract_payments', 'subcontract_work_orders', row.id, row.approval_status, 'subcontract_payments') }}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="11">No work orders yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{ workflow_modals() }}
+{% endblock %}

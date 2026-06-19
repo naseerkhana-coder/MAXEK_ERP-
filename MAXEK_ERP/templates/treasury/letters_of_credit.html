@@ -1,0 +1,50 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Letters of Credit' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('treasury_hub') ~ '">Treasury</a> &gt; LC Management' %}
+{% block page_actions %}
+<a href="{{ url_for('treasury_letters_of_credit', new=1) }}#record-form" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> New LC</a>
+{% endblock %}
+{% block content %}
+{% if show_form %}
+<div class="erp-form-card" id="record-form" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">{% if edit_record %}Edit LC{% else %}New Letter of Credit{% endif %}</h3>
+  <form method="post">
+    {% if edit_record %}<input type="hidden" name="record_id" value="{{ edit_record.id }}">{% endif %}
+    <div class="erp-form-grid">
+      <div class="erp-field"><input name="lc_number" required placeholder=" " value="{{ edit_record.lc_number if edit_record else '' }}"><label>LC Number *</label></div>
+      <div class="erp-field"><select name="bank_account_id"><option value="">—</option>{% for a in accounts %}<option value="{{ a.id }}" {% if edit_record and edit_record.bank_account_id == a.id %}selected{% endif %}>{{ a.bank_name }} — {{ a.account_number }}</option>{% endfor %}</select><label>Bank Account</label></div>
+      <div class="erp-field"><input name="vendor" placeholder=" " value="{{ edit_record.vendor if edit_record else '' }}"><label>Vendor</label></div>
+      <div class="erp-field"><input type="number" step="0.01" name="amount" placeholder=" " value="{{ edit_record.amount if edit_record else '' }}"><label>Amount</label></div>
+      <div class="erp-field"><input type="date" name="issue_date" value="{{ edit_record.issue_date if edit_record else '' }}"><label>Issue Date</label></div>
+      <div class="erp-field"><input type="date" name="expiry_date" value="{{ edit_record.expiry_date if edit_record else '' }}"><label>Expiry Date</label></div>
+      <div class="erp-field"><input type="number" step="0.01" name="utilized_amount" placeholder=" " value="{{ edit_record.utilized_amount if edit_record else '0' }}"><label>Utilized Amount</label></div>
+      <div class="erp-field span-2"><textarea name="remarks" placeholder=" ">{{ edit_record.remarks if edit_record else '' }}</textarea><label>Remarks</label></div>
+    </div>
+    <button type="submit" class="erp-btn erp-btn-primary">Save</button>
+  </form>
+</div>
+{% endif %}
+<div class="erp-table-panel" data-erp-table>
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead><tr><th>LC No</th><th>Bank</th><th>Vendor</th><th>Amount</th><th>Utilized</th><th>Expiry</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>{{ row.lc_number }}</td>
+          <td>{{ row.bank_name or '—' }}</td>
+          <td>{{ row.vendor }}</td>
+          <td>₹{{ '{:,.2f}'.format(row.amount) }}</td>
+          <td>₹{{ '{:,.2f}'.format(row.utilized_amount or 0) }}</td>
+          <td>{{ row.expiry_date or '—' }}</td>
+          <td>{{ row.status }}</td>
+          <td><a href="{{ url_for('treasury_letters_of_credit', edit=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Edit</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8">No letters of credit yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

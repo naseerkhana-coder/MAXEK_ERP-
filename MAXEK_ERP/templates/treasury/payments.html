@@ -1,0 +1,59 @@
+{% extends 'base_maxek.html' %}
+{% from 'macros/erp_ui.html' import approval_badge, maker_row_actions, transaction_view_tabs %}
+{% set page_title = 'Bank Payments' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('treasury_hub') ~ '">Treasury</a> &gt; Payments' %}
+{% block page_actions %}
+<a href="{{ url_for('treasury_payments', new=1, account_id=filter_account_id) }}#record-form" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> New Payment</a>
+{% endblock %}
+{% block content %}
+{% if view_record %}
+{% call transaction_view_tabs(view_record, history, can_reopen, approval_id) %}
+<p><strong>Date:</strong> {{ view_record.payment_date }} | <strong>Account:</strong> {{ view_record.bank_name }} {{ view_record.account_number }}</p>
+<p><strong>Type:</strong> {{ view_record.payment_type }} | <strong>Beneficiary:</strong> {{ view_record.beneficiary }}</p>
+<p><strong>Amount:</strong> ₹{{ '{:,.2f}'.format(view_record.amount) }} | <strong>UTR:</strong> {{ view_record.utr_number or '—' }}</p>
+<p><strong>Approver Tier:</strong> {{ view_record.approver_tier or '—' }} | {{ approval_badge(view_record.approval_status) }}</p>
+<p>{{ view_record.remarks or '' }}</p>
+{% endcall %}
+{% endif %}
+{% if show_form %}
+<div class="erp-form-card" id="record-form" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">{% if edit_record %}Edit Payment #{{ edit_record.id }}{% else %}New Bank Payment{% endif %}</h3>
+  <form method="post">
+    {% if edit_record %}<input type="hidden" name="record_id" value="{{ edit_record.id }}">{% endif %}
+    <div class="erp-form-grid">
+      <div class="erp-field"><input type="date" name="payment_date" required value="{{ edit_record.payment_date if edit_record else default_date }}"><label>Payment Date *</label></div>
+      <div class="erp-field"><select name="bank_account_id" required><option value="">—</option>{% for a in accounts %}<option value="{{ a.id }}" {% if (edit_record and edit_record.bank_account_id == a.id) or (filter_account_id == a.id) %}selected{% endif %}>{{ a.bank_name }} — {{ a.account_number }}</option>{% endfor %}</select><label>Bank Account *</label></div>
+      <div class="erp-field"><select name="payment_type">{% for t in payment_types %}<option value="{{ t }}" {% if edit_record and edit_record.payment_type == t %}selected{% endif %}>{{ t }}</option>{% endfor %}</select><label>Payment Type</label></div>
+      <div class="erp-field"><input name="beneficiary" required placeholder=" " value="{{ edit_record.beneficiary if edit_record else '' }}"><label>Beneficiary *</label></div>
+      <div class="erp-field"><input type="number" step="0.01" name="amount" required placeholder=" " value="{{ edit_record.amount if edit_record else '' }}"><label>Amount *</label></div>
+      <div class="erp-field"><input name="utr_number" placeholder=" " value="{{ edit_record.utr_number if edit_record else '' }}"><label>UTR Number</label></div>
+      <div class="erp-field span-2"><textarea name="remarks" placeholder=" ">{{ edit_record.remarks if edit_record else '' }}</textarea><label>Remarks</label></div>
+    </div>
+    <button type="submit" class="erp-btn erp-btn-primary">{% if edit_record %}Save{% else %}Submit for Approval{% endif %}</button>
+  </form>
+</div>
+{% endif %}
+<div class="erp-table-panel" data-erp-table>
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead><tr><th>Date</th><th>Account</th><th>Beneficiary</th><th>Type</th><th>Amount</th><th>Tier</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>{{ row.payment_date }}</td>
+          <td>{{ row.bank_name }}</td>
+          <td>{{ row.beneficiary }}</td>
+          <td>{{ row.payment_type }}</td>
+          <td>₹{{ '{:,.2f}'.format(row.amount) }}</td>
+          <td>{{ row.approver_tier or '—' }}</td>
+          <td>{{ approval_badge(row.approval_status) }}</td>
+          <td>{{ maker_row_actions('treasury_payments', 'bank_payments', row.id, row.approval_status, module_id, 'treasury_payments') }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8">No payments yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

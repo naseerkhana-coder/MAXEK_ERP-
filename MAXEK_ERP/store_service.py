@@ -24,6 +24,14 @@ VENDOR_DOC_TYPES = ("GST Certificate", "PAN Card", "MSME", "Agreement", "Other")
 MOVEMENT_GRN_IN = "GRN_IN"
 MOVEMENT_ISSUE_OUT = "ISSUE_OUT"
 MOVEMENT_ADJUSTMENT = "ADJUSTMENT"
+MOVEMENT_TRANSFER_OUT = "TRANSFER_OUT"
+MOVEMENT_TRANSFER_IN = "TRANSFER_IN"
+
+MATERIAL_TRANSFER_TYPES = (
+    ("store_to_store", "Store-to-Store"),
+    ("store_to_site", "Store-to-Site"),
+    ("site_to_site", "Site-to-Site"),
+)
 
 MATERIAL_IMPORT_COLUMNS = [
     "code",
@@ -340,6 +348,53 @@ def ensure_store_schema(db) -> None:
             rate REAL DEFAULT 0,
             remarks TEXT,
             FOREIGN KEY(store_receipt_id) REFERENCES store_receipts(id),
+            FOREIGN KEY(material_id) REFERENCES materials(id)
+        )
+    """)
+
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS material_transfers(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            transfer_number TEXT UNIQUE,
+            transfer_type TEXT NOT NULL,
+            transfer_date TEXT,
+            source_project_id INTEGER,
+            dest_project_id INTEGER,
+            remarks TEXT,
+            created_by TEXT,
+            approval_status TEXT DEFAULT 'Pending Checker',
+            stock_posted INTEGER DEFAULT 0,
+            created_at TEXT,
+            modified_at TEXT,
+            FOREIGN KEY(source_project_id) REFERENCES projects(id),
+            FOREIGN KEY(dest_project_id) REFERENCES projects(id)
+        )
+    """)
+    for column, col_type in (
+        ("transfer_number", "TEXT"),
+        ("transfer_type", "TEXT"),
+        ("transfer_date", "TEXT"),
+        ("source_project_id", "INTEGER"),
+        ("dest_project_id", "INTEGER"),
+        ("remarks", "TEXT"),
+        ("created_by", "TEXT"),
+        ("approval_status", "TEXT DEFAULT 'Pending Checker'"),
+        ("stock_posted", "INTEGER DEFAULT 0"),
+        ("created_at", "TEXT"),
+        ("modified_at", "TEXT"),
+    ):
+        _ensure_column(db, "material_transfers", column, col_type)
+
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS material_transfer_lines(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            transfer_id INTEGER NOT NULL,
+            line_no INTEGER DEFAULT 1,
+            material_id INTEGER,
+            quantity REAL DEFAULT 0,
+            unit TEXT,
+            remarks TEXT,
+            FOREIGN KEY(transfer_id) REFERENCES material_transfers(id) ON DELETE CASCADE,
             FOREIGN KEY(material_id) REFERENCES materials(id)
         )
     """)
@@ -1216,6 +1271,11 @@ def void_stock_for_reference(db, reference_table: str, reference_id: int) -> Non
             "UPDATE store_issues SET stock_posted=0 WHERE id=?",
             (reference_id,),
         )
+    elif reference_table == "material_transfers":
+        db.execute(
+            "UPDATE material_transfers SET stock_posted=0 WHERE id=?",
+            (reference_id,),
+        )
 
 
 def post_stock_on_approval(db, reference_table: str, reference_id: int, username: str) -> None:
@@ -1290,6 +1350,65 @@ def post_stock_on_approval(db, reference_table: str, reference_id: int, username
             "UPDATE store_issues SET stock_posted=1 WHERE id=?",
             (reference_id,),
         )
+    elif reference_table == "material_transfers":
+        transfer = load_material_transfer(db, reference_id)
+        if not transfer or transfer.get("stock_posted"):
+            return
+        void_stock_for_reference(db, reference_table, reference_id)
+        source_pid = transfer.get("source_project_id")
+        dest_pid = transfer.get("dest_project_id")
+        for line in transfer.get("lines") or []:
+            mat_id = line.get("material_id")
+            qty = float(line.get("quantity") or 0)
+            if not mat_id or qty <= 0:
+                continue
+            err = validate_issue_stock(
+                db, mat_id, qty, int(source_pid) if source_pid else None
+            )
+            if err:
+                raise ValueError(err)
+            db.execute(
+                "INSERT INTO stock_ledger(material_id, project_id, movement_date, movement_type, "
+                "quantity, unit, reference_table, reference_id, reference_line_id, remarks, "
+                "created_by, created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    mat_id,
+                    source_pid,
+                    transfer.get("transfer_date"),
+                    MOVEMENT_TRANSFER_OUT,
+                    -qty,
+                    line.get("unit") or "",
+                    reference_table,
+                    reference_id,
+                    line.get("id"),
+                    transfer.get("remarks") or "",
+                    username,
+                    now,
+                ),
+            )
+            db.execute(
+                "INSERT INTO stock_ledger(material_id, project_id, movement_date, movement_type, "
+                "quantity, unit, reference_table, reference_id, reference_line_id, remarks, "
+                "created_by, created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    mat_id,
+                    dest_pid,
+                    transfer.get("transfer_date"),
+                    MOVEMENT_TRANSFER_IN,
+                    qty,
+                    line.get("unit") or "",
+                    reference_table,
+                    reference_id,
+                    line.get("id"),
+                    transfer.get("remarks") or "",
+                    username,
+                    now,
+                ),
+            )
+        db.execute(
+            "UPDATE material_transfers SET stock_posted=1 WHERE id=?",
+            (reference_id,),
+        )
 
 
 def list_inventory_stock(db) -> list[dict]:
@@ -1362,3 +1481,160 @@ def store_dashboard_stats(db) -> dict[str, Any]:
         }
     except Exception:
         return _empty_store_dashboard_stats()
+
+
+def _parse_transfer_lines(form) -> list[dict]:
+    material_ids = form.getlist("material_id[]")
+    quantities = form.getlist("quantity[]")
+    units = form.getlist("unit[]")
+    remarks_list = form.getlist("line_remarks[]")
+    lines = []
+    row_count = max(len(material_ids), len(quantities), len(units))
+    for idx in range(row_count):
+        mat_raw = material_ids[idx] if idx < len(material_ids) else ""
+        qty_raw = quantities[idx] if idx < len(quantities) else ""
+        if not str(mat_raw).strip():
+            continue
+        try:
+            mat_id = int(mat_raw)
+            qty = _safe_float(qty_raw)
+        except (ValueError, TypeError):
+            raise ValueError("Enter valid material and quantity on each transfer line.")
+        if qty <= 0:
+            raise ValueError("Transfer quantity must be greater than zero.")
+        unit = (units[idx] if idx < len(units) else "").strip()
+        line_remarks = (remarks_list[idx] if idx < len(remarks_list) else "").strip()
+        lines.append({
+            "line_no": len(lines) + 1,
+            "material_id": mat_id,
+            "quantity": qty,
+            "unit": unit,
+            "remarks": line_remarks,
+        })
+    return lines
+
+
+def _validate_transfer_type(transfer_type: str, source_id, dest_id) -> None:
+    valid_types = {t[0] for t in MATERIAL_TRANSFER_TYPES}
+    if transfer_type not in valid_types:
+        raise ValueError("Select a valid transfer type.")
+    if transfer_type == "store_to_store":
+        if source_id == dest_id and source_id is not None:
+            raise ValueError("Source and destination must differ for Store-to-Store transfer.")
+        if dest_id is None:
+            raise ValueError("Select a destination store for Store-to-Store transfer.")
+    elif transfer_type == "store_to_site":
+        if source_id is not None:
+            raise ValueError("Store-to-Site transfers must originate from Central Store.")
+        if dest_id is None:
+            raise ValueError("Select a destination site (project) for Store-to-Site transfer.")
+    elif transfer_type == "site_to_site":
+        if source_id is None or dest_id is None:
+            raise ValueError("Select both source and destination sites for Site-to-Site transfer.")
+        if int(source_id) == int(dest_id):
+            raise ValueError("Source and destination sites must differ.")
+
+
+def save_material_transfer(db, form, username: str, transfer_id: int | None = None) -> int:
+    transfer_type = (form.get("transfer_type") or "").strip()
+    transfer_date = (form.get("transfer_date") or "").strip()
+    source_raw = (form.get("source_project_id") or "").strip()
+    dest_raw = (form.get("dest_project_id") or "").strip()
+    source_id = int(source_raw) if source_raw else None
+    dest_id = int(dest_raw) if dest_raw else None
+    remarks = (form.get("remarks") or "").strip()
+    _validate_transfer_type(transfer_type, source_id, dest_id)
+    lines = _parse_transfer_lines(form)
+    if not lines:
+        raise ValueError("Add at least one material line to transfer.")
+    for line in lines:
+        mat = get_material(db, line["material_id"])
+        if not mat:
+            raise ValueError("Invalid material on transfer line.")
+        if not line["unit"]:
+            line["unit"] = mat.get("unit") or "Nos"
+        err = validate_issue_stock(db, line["material_id"], line["quantity"], source_id)
+        if err and not transfer_id:
+            raise ValueError(err)
+    now = _now_ts()
+    if transfer_id:
+        existing = db.execute(
+            "SELECT approval_status, stock_posted FROM material_transfers WHERE id=?",
+            (transfer_id,),
+        ).fetchone()
+        if existing and existing["stock_posted"]:
+            raise ValueError("Cannot edit transfer after stock has been posted.")
+        for line in lines:
+            err = validate_issue_stock(db, line["material_id"], line["quantity"], source_id)
+            if err:
+                raise ValueError(err)
+        db.execute(
+            "UPDATE material_transfers SET transfer_type=?, transfer_date=?, source_project_id=?, "
+            "dest_project_id=?, remarks=?, modified_at=? WHERE id=?",
+            (transfer_type, transfer_date, source_id, dest_id, remarks, now, transfer_id),
+        )
+        db.execute("DELETE FROM material_transfer_lines WHERE transfer_id=?", (transfer_id,))
+        for line in lines:
+            db.execute(
+                "INSERT INTO material_transfer_lines(transfer_id, line_no, material_id, quantity, unit, remarks) "
+                "VALUES(?,?,?,?,?,?)",
+                (transfer_id, line["line_no"], line["material_id"], line["quantity"], line["unit"], line["remarks"]),
+            )
+        return transfer_id
+    transfer_number = _next_doc_number(db, "MT", "material_transfers", "transfer_number")
+    db.execute(
+        "INSERT INTO material_transfers(transfer_number, transfer_type, transfer_date, source_project_id, "
+        "dest_project_id, remarks, created_by, approval_status, stock_posted, created_at, modified_at) "
+        "VALUES(?,?,?,?,?,?,?,'Pending Checker',0,?,?)",
+        (transfer_number, transfer_type, transfer_date, source_id, dest_id, remarks, username, now, now),
+    )
+    new_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+    for line in lines:
+        db.execute(
+            "INSERT INTO material_transfer_lines(transfer_id, line_no, material_id, quantity, unit, remarks) "
+            "VALUES(?,?,?,?,?,?)",
+            (new_id, line["line_no"], line["material_id"], line["quantity"], line["unit"], line["remarks"]),
+        )
+    return new_id
+
+
+def load_material_transfer(db, transfer_id: int) -> dict | None:
+    row = db.execute(
+        "SELECT t.*, sp.project_name AS source_project_name, dp.project_name AS dest_project_name "
+        "FROM material_transfers t "
+        "LEFT JOIN projects sp ON t.source_project_id = sp.id "
+        "LEFT JOIN projects dp ON t.dest_project_id = dp.id "
+        "WHERE t.id=?",
+        (transfer_id,),
+    ).fetchone()
+    if not row:
+        return None
+    result = dict(row)
+    line_rows = db.execute(
+        "SELECT l.*, m.code AS material_code, m.name AS material_name "
+        "FROM material_transfer_lines l "
+        "LEFT JOIN materials m ON l.material_id = m.id "
+        "WHERE l.transfer_id=? ORDER BY l.line_no, l.id",
+        (transfer_id,),
+    ).fetchall()
+    result["lines"] = [dict(r) for r in line_rows]
+    type_labels = dict(MATERIAL_TRANSFER_TYPES)
+    result["transfer_type_label"] = type_labels.get(result.get("transfer_type"), result.get("transfer_type"))
+    return result
+
+
+def list_material_transfers(db) -> list[dict]:
+    rows = db.execute(
+        "SELECT t.*, sp.project_name AS source_project_name, dp.project_name AS dest_project_name "
+        "FROM material_transfers t "
+        "LEFT JOIN projects sp ON t.source_project_id = sp.id "
+        "LEFT JOIN projects dp ON t.dest_project_id = dp.id "
+        "ORDER BY t.transfer_date DESC, t.id DESC"
+    ).fetchall()
+    type_labels = dict(MATERIAL_TRANSFER_TYPES)
+    result = []
+    for row in rows:
+        item = dict(row)
+        item["transfer_type_label"] = type_labels.get(item.get("transfer_type"), item.get("transfer_type"))
+        result.append(item)
+    return result

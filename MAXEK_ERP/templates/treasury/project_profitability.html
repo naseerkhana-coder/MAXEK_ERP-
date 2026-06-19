@@ -1,0 +1,74 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Project Profitability' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('treasury_hub') ~ '">Treasury</a> &gt; Project Profitability' %}
+{% block content %}
+<p style="color:#64748b;margin-top:0;">
+  Contract value, client billing, and receipts vs direct costs and overheads — project-wise P&amp;L from budget actuals and billing modules.
+</p>
+
+<form method="get" class="erp-table-toolbar" style="margin-bottom:1rem;display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
+  <input name="fiscal_year" value="{{ fiscal_year or '' }}" placeholder="Fiscal year (optional)" style="max-width:160px;">
+  <label style="display:flex;align-items:center;gap:0.35rem;font-size:0.9rem;">
+    <input type="checkbox" name="all_projects" value="1" {% if show_all %}checked{% endif %} onchange="this.form.submit()">
+    Include non-active projects
+  </label>
+  <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Filter</button>
+  <a href="{{ url_for('treasury_project_profitability') }}" class="erp-btn erp-btn-ghost erp-btn-sm">Reset</a>
+</form>
+
+{% if summary %}
+<div class="erp-summary-grid" style="margin-bottom:1.5rem;">
+  <div class="erp-stat-card"><span>Projects</span><strong>{{ summary.project_count }}</strong></div>
+  <div class="erp-stat-card"><span>Total Contract Value</span><strong>₹{{ '{:,.2f}'.format(summary.total_contract) }}</strong></div>
+  <div class="erp-stat-card"><span>Client Billing</span><strong>₹{{ '{:,.2f}'.format(summary.total_billing) }}</strong></div>
+  <div class="erp-stat-card"><span>Receipts</span><strong>₹{{ '{:,.2f}'.format(summary.total_receipts) }}</strong></div>
+  <div class="erp-stat-card"><span>Net Profit</span><strong>₹{{ '{:,.2f}'.format(summary.total_net_profit) }}</strong></div>
+</div>
+{% endif %}
+
+<div class="erp-table-panel" data-erp-table>
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead>
+        <tr>
+          <th>Project</th>
+          <th>Status</th>
+          <th>Contract Value</th>
+          <th>Client Billing</th>
+          <th>Receipts</th>
+          <th>Direct Costs</th>
+          <th>Overheads</th>
+          <th>Gross Profit</th>
+          <th>Net Profit</th>
+          <th>Profit %</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr{% if row.net_profit < 0 %} style="background:#fff7ed;"{% endif %}>
+          <td>
+            <strong>{{ row.project_name }}</strong>
+            {% if row.location %}<br><span style="font-size:0.85rem;color:#64748b;">{{ row.location }}</span>{% endif %}
+          </td>
+          <td>{{ row.status or '—' }}</td>
+          <td>₹{{ '{:,.2f}'.format(row.contract_value) }}</td>
+          <td>₹{{ '{:,.2f}'.format(row.client_billing) }}</td>
+          <td>₹{{ '{:,.2f}'.format(row.receipts) }}</td>
+          <td>₹{{ '{:,.2f}'.format(row.direct_costs) }}</td>
+          <td>₹{{ '{:,.2f}'.format(row.overheads) }}</td>
+          <td>₹{{ '{:,.2f}'.format(row.gross_profit) }}</td>
+          <td>₹{{ '{:,.2f}'.format(row.net_profit) }}</td>
+          <td>{{ row.profit_pct }}%</td>
+          <td>
+            <a href="{{ url_for('treasury_project_profitability_detail', project_id=row.project_id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">View P&amp;L</a>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="11">No projects found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

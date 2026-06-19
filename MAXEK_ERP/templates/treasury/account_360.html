@@ -1,0 +1,32 @@
+{% extends 'base_maxek.html' %}
+{% from 'macros/erp_ui.html' import approval_badge %}
+{% set page_title = '360° Bank View' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('treasury_hub') ~ '">Treasury</a> &gt; 360° View' %}
+{% block content %}
+{% if not data.account %}
+<p>Account not found.</p>
+{% else %}
+<h2 style="margin-top:0;">{{ data.account.bank_name }} — {{ data.account.account_number }}</h2>
+<p><strong>Balance:</strong> ₹{{ '{:,.2f}'.format(data.account.current_balance or 0) }} | <strong>Type:</strong> {{ data.account.account_type }}</p>
+
+<h3>Recent Payments</h3>
+<div class="erp-table-panel" style="margin-bottom:1rem;"><div class="erp-table-scroll"><table class="erp-table"><thead><tr><th>Date</th><th>Beneficiary</th><th>Amount</th><th>Status</th></tr></thead><tbody>
+{% for r in data.payments[:10] %}<tr><td>{{ r.payment_date }}</td><td>{{ r.beneficiary }}</td><td>₹{{ '{:,.2f}'.format(r.amount) }}</td><td>{{ approval_badge(r.approval_status) }}</td></tr>{% else %}<tr><td colspan="4">No payments.</td></tr>{% endfor %}
+</tbody></table></div></div>
+
+<h3>Recent Receipts</h3>
+<div class="erp-table-panel" style="margin-bottom:1rem;"><div class="erp-table-scroll"><table class="erp-table"><thead><tr><th>Date</th><th>Client</th><th>Amount</th><th>Status</th></tr></thead><tbody>
+{% for r in data.receipts[:10] %}<tr><td>{{ r.receipt_date }}</td><td>{{ r.client }}</td><td>₹{{ '{:,.2f}'.format(r.amount) }}</td><td>{{ approval_badge(r.approval_status) }}</td></tr>{% else %}<tr><td colspan="4">No receipts.</td></tr>{% endfor %}
+</tbody></table></div></div>
+
+<h3>Bank Guarantees</h3>
+<div class="erp-table-panel" style="margin-bottom:1rem;"><div class="erp-table-scroll"><table class="erp-table"><thead><tr><th>BG No</th><th>Type</th><th>Amount</th><th>Expiry</th></tr></thead><tbody>
+{% for r in data.guarantees %}<tr><td>{{ r.bg_number }}</td><td>{{ r.bg_type }}</td><td>₹{{ '{:,.2f}'.format(r.amount) }}</td><td>{{ r.expiry_date }}</td></tr>{% else %}<tr><td colspan="4">No BGs.</td></tr>{% endfor %}
+</tbody></table></div></div>
+
+<h3>Letters of Credit</h3>
+<div class="erp-table-panel" style="margin-bottom:1rem;"><div class="erp-table-scroll"><table class="erp-table"><thead><tr><th>LC No</th><th>Vendor</th><th>Amount</th><th>Utilized</th></tr></thead><tbody>
+{% for r in data.letters_of_credit %}<tr><td>{{ r.lc_number }}</td><td>{{ r.vendor }}</td><td>₹{{ '{:,.2f}'.format(r.amount) }}</td><td>₹{{ '{:,.2f}'.format(r.utilized_amount) }}</td></tr>{% else %}<tr><td colspan="4">No LCs.</td></tr>{% endfor %}
+</tbody></table></div></div>
+{% endif %}
+{% endblock %}

@@ -262,6 +262,46 @@ DEFAULT_MODULES = [
         "checker": "Store Manager",
         "approver": "Managing Director",
     },
+    {
+        "module_id": "material_transfer",
+        "module_name": "Material Transfer",
+        "workflow_role_mapping": "Store Keeper → Store Manager → Managing Director",
+        "maker": "Store Keeper",
+        "checker": "Store Manager",
+        "approver": "Managing Director",
+    },
+    {
+        "module_id": "subcontract_payments",
+        "module_name": "Subcontract Payments",
+        "workflow_role_mapping": "Project Staff → Accounts Manager → Managing Director",
+        "maker": "Project Staff",
+        "checker": "Accounts Manager",
+        "approver": "Managing Director",
+    },
+    {
+        "module_id": "bank_payment",
+        "module_name": "Bank Payment",
+        "workflow_role_mapping": "Accounts Staff → Accounts Manager → Managing Director",
+        "maker": "Accounts Staff",
+        "checker": "Accounts Manager",
+        "approver": "Managing Director",
+    },
+    {
+        "module_id": "bank_receipt",
+        "module_name": "Bank Receipt",
+        "workflow_role_mapping": "Accounts Staff → Accounts Manager → Managing Director",
+        "maker": "Accounts Staff",
+        "checker": "Accounts Manager",
+        "approver": "Managing Director",
+    },
+    {
+        "module_id": "bank_guarantee",
+        "module_name": "Bank Guarantee",
+        "workflow_role_mapping": "Accounts Staff → Accounts Manager → Managing Director",
+        "maker": "Accounts Staff",
+        "checker": "Accounts Manager",
+        "approver": "Managing Director",
+    },
 ]
 
 ALLOWED_RECORD_TABLES = {
@@ -294,10 +334,26 @@ ALLOWED_RECORD_TABLES = {
     "staff_monthly_attendance",
     "store_issues",
     "store_receipts",
+    "material_transfers",
+    "subcontract_work_orders",
+    "subcontract_payment_entries",
     "purchase_orders",
     "materials",
     "vendors",
     "client_bills",
+    "bank_accounts",
+    "bank_payments",
+    "bank_receipts",
+    "bank_guarantees",
+    "bank_overdrafts",
+    "bank_reconciliation",
+    "bank_cheques",
+    "fixed_deposits",
+    "letters_of_credit",
+    "treasury_security_deposits",
+    "bank_documents",
+    "payment_approval_matrix",
+    "treasury_audit_log",
 }
 
 
@@ -1994,6 +2050,13 @@ def seed_demo_sample_data(db):
                     ") VALUES(?,?,?,?,?,?,?)",
                     (worker["id"], project_id, attendance_date, "08:00", "17:00", 8.0, "Present"),
                 )
+
+    try:
+        from treasury_service import ensure_treasury_schema, seed_treasury_demo_data
+        ensure_treasury_schema(db)
+        seed_treasury_demo_data(db)
+    except Exception:
+        pass
 
 
 def _table_exists(db, table):

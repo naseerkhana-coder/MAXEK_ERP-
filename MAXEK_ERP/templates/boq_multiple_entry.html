@@ -1,0 +1,141 @@
+{% extends 'base_maxek.html' %}
+{% from 'macros/erp_ui.html' import role_status_badge %}
+{% set page_title = 'BOQ Multiple Item Entry' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; Projects &gt; BOQ Multiple Item Entry' %}
+{% block page_actions %}
+<a href="{{ url_for('boq_management') }}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-list"></i> BOQ Management</a>
+<a href="{{ url_for('boq_multiple_entry') }}" class="erp-btn erp-btn-primary"><i class="fa-solid fa-table"></i> New Bulk Entry</a>
+{% endblock %}
+{% block content %}
+<div class="erp-validation" style="margin-bottom:1rem;">
+  Bulk BOQ line entry for a project — add up to {{ max_boq_lines }} items in one save. Uses the same BOQ data model and approval workflow as BOQ Management (not BBS).
+</div>
+
+{% if saved_boq_number %}
+<div class="erp-form-card" style="margin-bottom:1rem;border-left:4px solid var(--erp-primary, #2563eb);">
+  <p><strong>BOQ {{ saved_boq_number }}</strong> saved with {{ saved_line_count }} line item(s). Total: {{ '%.2f'|format(saved_total or 0) }}</p>
+  <div style="display:flex;gap:0.75rem;margin-top:0.5rem;">
+    <a href="{{ url_for('boq_management', view=saved_boq_id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">View in BOQ Management</a>
+    <a href="{{ url_for('boq_multiple_entry', project_id=continue_project_id) }}" class="erp-btn erp-btn-primary erp-btn-sm">Add More Items</a>
+  </div>
+</div>
+{% endif %}
+
+<div class="erp-form-card" id="boq-bulk-form">
+  <h3 class="erp-form-title">BOQ Multiple Item Entry</h3>
+  <form method="post" class="erp-form-grid" data-boq-form data-max-lines="{{ max_boq_lines }}">
+    <div class="erp-field span-2">
+      <select name="project_id" required class="has-value" data-boq-project-select>
+        <option value="">Select project (ID — Name)</option>
+        {% for p in projects %}
+        <option value="{{ p.id }}"{% if boq_form_project_id == p.id %} selected{% endif %}>{{ p.project_code or p.id }} — {{ p.project_name }}</option>
+        {% endfor %}
+      </select>
+      <label>Project *</label>
+    </div>
+    <div class="erp-field erp-field-auto-number">
+      <span class="erp-auto-number" id="boq_number_display" data-boq-number-display>{{ next_boq_number }}</span>
+      <label>BOQ Number (Auto)</label>
+    </div>
+
+    <div class="span-2">
+      <h4 class="erp-form-subtitle">Line Items (max {{ max_boq_lines }})</h4>
+      <div class="erp-table-scroll">
+        <table class="erp-table erp-table-module boq-lines-table">
+          <thead>
+            <tr>
+              <th class="boq-col-no">Item No.</th>
+              <th class="boq-col-desc">Description</th>
+              <th class="boq-col-qty">Qty</th>
+              <th class="boq-col-unit">Unit</th>
+              <th class="boq-col-rate">Rate</th>
+              <th class="boq-col-amount">Amount</th>
+              <th class="boq-col-actions"></th>
+            </tr>
+          </thead>
+          <tbody data-boq-rows>
+            {% for n in range(default_row_count) %}
+            <tr data-boq-row>
+              <td class="boq-line-no">BOQ{{ loop.index }}</td>
+              <td class="boq-col-desc"><textarea name="item_description[]" class="boq-input boq-desc" rows="2" placeholder="Item description"></textarea></td>
+              <td class="boq-col-qty"><input type="number" name="quantity[]" class="boq-input boq-qty" step="0.01" min="0" placeholder="0"></td>
+              <td>
+                <select name="unit[]" class="boq-input boq-unit">
+                  <option value="">Unit</option>
+                  {% for u in boq_units %}
+                  <option value="{{ u }}">{{ u }}</option>
+                  {% endfor %}
+                </select>
+              </td>
+              <td class="boq-col-rate"><input type="number" name="rate[]" class="boq-input boq-rate" step="0.01" min="0" placeholder="0"></td>
+              <td><input type="text" class="boq-input boq-amount" readonly tabindex="-1" value="0.00"></td>
+              <td><button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-boq-remove title="Remove row"><i class="fa-solid fa-trash"></i></button></td>
+            </tr>
+            {% endfor %}
+            <tr data-boq-row-template hidden>
+              <td class="boq-line-no">0</td>
+              <td class="boq-col-desc"><textarea name="item_description[]" class="boq-input boq-desc" rows="2" placeholder="Item description"></textarea></td>
+              <td class="boq-col-qty"><input type="number" name="quantity[]" class="boq-input boq-qty" step="0.01" min="0" placeholder="0"></td>
+              <td>
+                <select name="unit[]" class="boq-input boq-unit">
+                  <option value="">Unit</option>
+                  {% for u in boq_units %}
+                  <option value="{{ u }}">{{ u }}</option>
+                  {% endfor %}
+                </select>
+              </td>
+              <td class="boq-col-rate"><input type="number" name="rate[]" class="boq-input boq-rate" step="0.01" min="0" placeholder="0"></td>
+              <td><input type="text" class="boq-input boq-amount" readonly tabindex="-1" value="0.00"></td>
+              <td><button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-boq-remove title="Remove row"><i class="fa-solid fa-trash"></i></button></td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="5" style="text-align:right;font-weight:600;">Grand Total</td>
+              <td colspan="2"><strong data-boq-grand-total>0.00</strong></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-boq-add style="margin-top:0.75rem;">
+        <i class="fa-solid fa-plus"></i> Add more rows
+      </button>
+    </div>
+
+    <div class="erp-form-actions span-2">
+      <button class="erp-btn erp-btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Save BOQ Items</button>
+    </div>
+  </form>
+</div>
+
+<div class="erp-table-panel" data-erp-table style="margin-top:1.5rem;">
+  <div class="erp-table-toolbar">
+    <h3 class="erp-table-title">Recent BOQ Records</h3>
+    <div class="erp-table-search"><i class="fa-solid fa-magnifying-glass"></i><input type="search" data-table-search placeholder="Search..."></div>
+  </div>
+  <div class="erp-table-scroll">
+    <table class="erp-table erp-table-module">
+      <thead>
+        <tr><th>BOQ No</th><th>Project</th><th>Items</th><th>Total</th><th>Status</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for row in recent_rows %}
+        <tr>
+          <td>{{ row.boq_number }}</td>
+          <td>{{ row.project_name or '—' }}</td>
+          <td>{{ row.line_count or 0 }}</td>
+          <td>{{ '%.2f'|format(row.total_amount or 0) }}</td>
+          <td>{{ role_status_badge(row.approval_status, 'maker') }}</td>
+          <td><a href="{{ url_for('boq_management', view=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Open</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6">No BOQ records yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/boq-forms.js') }}"></script>
+{% endblock %}

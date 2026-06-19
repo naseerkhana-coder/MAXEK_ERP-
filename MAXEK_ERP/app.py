@@ -121,6 +121,16 @@ from accounts_service import (
     get_chart_account_by_code,
 )
 
+from treasury_service import (
+    ensure_treasury_schema,
+    post_treasury_on_approval,
+    void_treasury_on_reversal,
+    seed_treasury_demo_data,
+)
+from budget_service import ensure_budget_schema, seed_budget_demo_data
+from profitability_service import ensure_profitability_schema, seed_profitability_demo_data
+from treasury_routes import register_treasury_routes
+
 from office_fleet_service import (
     INWARD_MODES,
     OUTWARD_MODES,
@@ -384,6 +394,21 @@ from subcontractor_billing_service import (
     delete_subcontractor_bill,
 )
 
+from subcontract_payment_service import (
+    MODULE_ID as SUB_PAYMENT_MODULE_ID,
+    WORK_ORDER_TABLE as SUB_PAYMENT_WO_TABLE,
+    PAYMENT_TABLE as SUB_PAYMENT_ENTRY_TABLE,
+    ensure_subcontract_payment_schema,
+    save_work_order,
+    save_payment_entry,
+    apply_payment_on_approval,
+    get_work_order,
+    list_work_order_ledger,
+    list_subcontractors_for_payments,
+    ledger_summary,
+    refresh_work_order_paid_totals,
+)
+
 from project_photos_service import (
     PHOTO_CATEGORIES,
     REPORT_TYPES as PHOTO_REPORT_TYPES,
@@ -442,6 +467,10 @@ from store_service import (
     save_store_issue,
     load_store_issue,
     list_store_issues,
+    save_material_transfer,
+    load_material_transfer,
+    list_material_transfers,
+    MATERIAL_TRANSFER_TYPES,
     get_stock_balance,
     post_stock_on_approval,
     void_stock_for_reference,
@@ -618,6 +647,7 @@ PETTY_CASH_DOCS_DIR = os.path.join(UPLOADS_DIR, "petty_cash")
 ACCOUNTS_DOCS_DIR = os.path.join(UPLOADS_DIR, "accounts")
 STORE_DOCS_DIR = os.path.join(UPLOADS_DIR, "store")
 SECURITIES_DOCS_DIR = os.path.join(UPLOADS_DIR, "securities")
+TREASURY_DOCS_DIR = os.path.join(UPLOADS_DIR, "treasury")
 OFFICE_DOCS_DIR = os.path.join(UPLOADS_DIR, "office")
 FLEET_DOCS_DIR = os.path.join(UPLOADS_DIR, "fleet")
 COMPANY_DOCS_DIR = os.path.join(UPLOADS_DIR, "company")
@@ -690,12 +720,14 @@ os.makedirs(BILLING_DOCS_DIR, exist_ok=True)
 os.makedirs(PROJECT_PHOTOS_DIR, exist_ok=True)
 os.makedirs(CORPORATE_DMS_DIR, exist_ok=True)
 os.makedirs(SECURITIES_DOCS_DIR, exist_ok=True)
+os.makedirs(TREASURY_DOCS_DIR, exist_ok=True)
 
 GOV_DEPARTMENTS = ["PWD", "NH", "KIIFB", "Kerala PWD", "NHAI", "Other"]
 GUARANTEE_TYPES = ["Performance Guarantee", "Bank Guarantee", "Both"]
 MAX_MAKER_ASSIGNMENTS = 15
 BOQ_UNITS = ["Nos", "Sqm", "Sqft", "Rmt", "Kg", "MT", "Ltr", "Cum", "Hour", "Day", "LS", "Set", "Bag"]
 MAX_BOQ_LINES = 25
+MAX_BOQ_BULK_LINES = 100
 STEEL_DIAMETERS_MM = [8, 10, 12, 16, 20, 25, 32, 40]
 VOLUME_UNITS = {"Cum", "cum", "m3", "M3", "CUM"}
 AREA_UNITS = {"Sqm", "sqm", "m2", "M2", "SQM", "Sqft"}
@@ -3233,6 +3265,13 @@ def _prepare_sub_billing_db(db):
         app.logger.exception("Subcontractor billing schema ensure failed")
 
 
+def _prepare_subcontract_payments_db(db):
+    try:
+        ensure_subcontract_payment_schema(db)
+    except Exception:
+        app.logger.exception("Subcontract payment schema ensure failed")
+
+
 def _prepare_project_photos_db(db):
     try:
         ensure_project_photos_schema(db)
@@ -3308,7 +3347,7 @@ def _sync_store_after_workflow(db, approval_id):
     if not req:
         return
     req = dict(req)
-    if req["record_table"] not in ("store_receipts", "store_issues"):
+    if req["record_table"] not in ("store_receipts", "store_issues", "material_transfers"):
         return
     if req["workflow_status"] != STATUS_APPROVED:
         void_stock_for_reference(db, req["record_table"], req["record_id"])
@@ -3323,6 +3362,29 @@ def _sync_store_after_workflow(db, approval_id):
         )
     except ValueError as exc:
         flash(str(exc), "warning")
+
+
+def _sync_subcontract_payments_after_workflow(db, approval_id):
+    """Recalculate paid totals when subcontract payment entries are approved."""
+    req = db.execute(
+        "SELECT module_id, record_id, record_table, workflow_status FROM approval_requests WHERE id=?",
+        (approval_id,),
+    ).fetchone()
+    if not req:
+        return
+    req = dict(req)
+    if req["record_table"] != SUB_PAYMENT_ENTRY_TABLE:
+        return
+    ensure_subcontract_payment_schema(db)
+    if req["workflow_status"] == STATUS_APPROVED:
+        apply_payment_on_approval(db, req["record_id"])
+    else:
+        row = db.execute(
+            "SELECT work_order_id FROM subcontract_payment_entries WHERE id=?",
+            (req["record_id"],),
+        ).fetchone()
+        if row:
+            refresh_work_order_paid_totals(db, row["work_order_id"])
 
 
 def _sync_accounts_after_workflow(db, approval_id):
@@ -3342,6 +3404,31 @@ def _sync_accounts_after_workflow(db, approval_id):
         return
     ensure_accounts_schema(db)
     post_journal_on_approval(
+        db,
+        req["record_table"],
+        req["record_id"],
+        session.get("username", "system"),
+    )
+
+
+def _sync_treasury_after_workflow(db, approval_id):
+    """Update bank balances when treasury payments/receipts are approved."""
+    req = db.execute(
+        "SELECT module_id, record_id, record_table, workflow_status FROM approval_requests WHERE id=?",
+        (approval_id,),
+    ).fetchone()
+    if not req:
+        return
+    req = dict(req)
+    treasury_tables = ("bank_payments", "bank_receipts", "bank_guarantees")
+    if req["record_table"] not in treasury_tables:
+        return
+    ensure_treasury_schema(db)
+    if req["workflow_status"] != STATUS_APPROVED:
+        if req["record_table"] in ("bank_payments", "bank_receipts"):
+            void_treasury_on_reversal(db, req["record_table"], req["record_id"], session.get("username", "system"))
+        return
+    post_treasury_on_approval(
         db,
         req["record_table"],
         req["record_id"],
@@ -4056,14 +4143,16 @@ ATTENDANCE_MASTER_JOIN_SQL = (
 )
 
 
-def _parse_boq_line_items():
+def _parse_boq_line_items(max_lines=None):
+    if max_lines is None:
+        max_lines = MAX_BOQ_LINES
     descriptions = request.form.getlist("item_description[]")
     quantities = request.form.getlist("quantity[]")
     units = request.form.getlist("unit[]")
     rates = request.form.getlist("rate[]")
     lines = []
     row_count = max(len(descriptions), len(quantities), len(units), len(rates))
-    for idx in range(min(row_count, MAX_BOQ_LINES)):
+    for idx in range(min(row_count, max_lines)):
         desc = (descriptions[idx] if idx < len(descriptions) else "").strip()
         qty_raw = quantities[idx] if idx < len(quantities) else ""
         rate_raw = rates[idx] if idx < len(rates) else ""
@@ -4339,6 +4428,10 @@ def ensure_runtime_schema(db=None, force=False):
     except Exception:
         app.logger.exception("Subcontractor billing schema bootstrap failed")
     try:
+        ensure_subcontract_payment_schema(db)
+    except Exception:
+        app.logger.exception("Subcontract payment schema bootstrap failed")
+    try:
         ensure_corporate_dms_schema(db)
     except Exception:
         app.logger.exception("Corporate DMS schema bootstrap failed")
@@ -4353,6 +4446,8 @@ def ensure_runtime_schema(db=None, force=False):
         _ensure_column(db, table, "approval_status", "TEXT DEFAULT 'Pending Checker'")
     ensure_petty_cash_tables(db)
     ensure_security_guarantees_tables(db)
+    ensure_treasury_schema(db)
+    ensure_budget_schema(db)
     ensure_cost_planning_tables(db)
     ensure_payroll_tables(db)
     ensure_attendance_master_schema(db)
@@ -4824,6 +4919,9 @@ def init_db():
     ensure_petty_cash_tables(db)
     ensure_accounts_schema(db)
     ensure_security_guarantees_tables(db)
+    ensure_treasury_schema(db)
+    ensure_budget_schema(db)
+    ensure_profitability_schema(db)
     ensure_cost_planning_tables(db)
     ensure_staff_hr_tables(db)
     ensure_staff_bonus_table(db)
@@ -4860,6 +4958,10 @@ def init_db():
     if not os.environ.get("MAXEK_SKIP_DEMO_SEED"):
         seed_demo_users(db)
         seed_demo_sample_data(db)
+        ensure_treasury_schema(db)
+        seed_treasury_demo_data(db)
+        seed_budget_demo_data(db)
+        seed_profitability_demo_data(db)
         db.commit()
 
 
@@ -4893,9 +4995,9 @@ def is_admin_user():
 
 
 GUEST_NAV_SLUGS = frozenset(
-    {"dashboard", "projects", "hr-payroll", "store-procurement", "help-support", "approvals"}
+    {"dashboard", "projects", "workforce", "store-procurement", "approvals"}
 )
-HR_NAV_SLUGS = frozenset({"dashboard", "hr-payroll", "approvals", "help-support"})
+HR_NAV_SLUGS = frozenset({"dashboard", "workforce", "approvals"})
 
 
 def is_guest_user():
@@ -4948,7 +5050,9 @@ MODULE_ROUTES = {
     "project_expenses": "project_expenses",
     "head_office_expenses": "head_office_expenses",
     "subcontract": "subcontract_request",
+    "subcontract_payments": "subcontract_payments",
     "boq": "boq_management",
+    "boq_bulk": "boq_multiple_entry",
     "dpr": "dpr_entry",
     "project_creation": "projects",
     "manager_tool": "manager_tool",
@@ -4961,8 +5065,12 @@ MODULE_ROUTES = {
     "account_tds": "account_tds",
     "leave_request": "leave_request",
     "store_issue": "store_issue",
+    "material_transfer": "material_transfer",
     "store_receipt": "store_receipt",
     "client_billing": "client_billing_form",
+    "bank_payment": "treasury_payments",
+    "bank_receipt": "treasury_receipts",
+    "bank_guarantee": "treasury_bank_guarantees",
 }
 
 
@@ -4998,42 +5106,52 @@ def _history_for_record(module_id, record_id, record_table):
     return get_approval_history(get_db(), module_id, record_id, record_table)
 
 
+APPROVAL_MODULE_GROUPS = {
+    "purchase": ("purchase_request", "purchase_order"),
+    "store": ("material_request", "store_issue", "store_receipt", "material_transfer"),
+    "timesheet": ("daily_timesheet", "monthly_staff_attendance"),
+    "payroll": ("payroll",),
+    "payment": ("account_payment", "payment_voucher", "petty_cash"),
+}
+
 NAV_GROUPS = [
     {
         "label": "Dashboard",
         "icon": "fa-gauge-high",
         "slug": "dashboard",
-        "items": [
-            {"endpoint": "dashboard", "label": "Overview", "anchor": "overview", "active_endpoints": ["dashboard", "dashboard_choice_b"]},
-            {"endpoint": "dashboard", "label": "Operations", "anchor": "operations", "active_endpoints": ["dashboard", "dashboard_choice_b"]},
-        ],
-    },
-    {
-        "label": "Masters",
-        "icon": "fa-database",
-        "slug": "masters",
-        "items": [
-            {"endpoint": "company_master", "label": "Company Master", "active_endpoints": ["company_master", "company_document_download"]},
-            {"endpoint": "store_materials", "label": "Material Master", "active_endpoints": ["store_materials"]},
-            {"endpoint": "purchase_vendors", "label": "Vendor Master", "active_endpoints": ["purchase_vendors"]},
-            {"endpoint": "plant_plants", "label": "Plant Master", "active_endpoints": ["plant_plants"]},
-            {"endpoint": "precast_yard_yards", "label": "Precast Yard Master", "active_endpoints": ["precast_yard_yards"]},
-            {"endpoint": "staff", "label": "Employee Master", "active_endpoints": ["staff", "employee_profile"]},
-            {"endpoint": "subcontractors", "label": "Subcontractor Master", "active_endpoints": ["subcontractors"]},
-            {"endpoint": "qc_master", "label": "QC Test Master", "active_endpoints": ["qc_master"]},
-            {"endpoint": "fleet_vehicles", "label": "Vehicle Master", "active_endpoints": ["fleet_vehicles", "fleet_vehicle_print"]},
-        ],
+        "endpoint": "dashboard",
+        "active_endpoints": ["dashboard", "dashboard_choice_b"],
     },
     {
         "label": "Projects",
         "icon": "fa-layer-group",
         "slug": "projects",
         "items": [
-            {"endpoint": "projects", "label": "Project Creation", "active_endpoints": ["projects"]},
-            {"endpoint": "boq_management", "label": "BOQ Creation", "active_endpoints": ["boq_management"]},
+            {
+                "endpoint": "projects",
+                "label": "Project List",
+                "anchor": "project-list",
+                "active_endpoints": ["projects", "clients"],
+            },
+            {
+                "endpoint": "projects",
+                "label": "Create Project",
+                "anchor": "add-project",
+                "active_endpoints": ["projects"],
+            },
+            {
+                "endpoint": "boq_management",
+                "label": "BOQ Management",
+                "active_endpoints": ["boq_management", "boq_print"],
+            },
+            {
+                "endpoint": "boq_multiple_entry",
+                "label": "BOQ Multiple Item Entry",
+                "active_endpoints": ["boq_multiple_entry"],
+            },
             {
                 "endpoint": "cost_planning",
-                "label": "Cost Planning",
+                "label": "Planning",
                 "active_endpoints": [
                     "cost_planning",
                     "cost_planning_export",
@@ -5042,48 +5160,110 @@ NAV_GROUPS = [
                 ],
             },
             {
-                "endpoint": "securities_guarantees",
-                "label": "Security & Guarantees",
-                "active_endpoints": ["securities_guarantees"],
-            },
-            {"endpoint": "dpr_entry", "label": "DPR Entry", "active_endpoints": ["dpr_entry", "dpr_client_bill_pending", "dpr_costing_pending"]},
-            {
-                "endpoint": "client_billing_register",
-                "label": "Client Billing",
+                "endpoint": "dpr_entry",
+                "label": "Progress Monitoring",
                 "active_endpoints": [
-                    "client_billing_register",
-                    "client_billing_form",
-                    "client_billing_print",
-                    "client_billing_reports",
-                    "client_billing_import_dpr",
-                    "client_billing_attachment",
+                    "dpr_entry",
+                    "dpr_client_bill_pending",
+                    "dpr_costing_pending",
+                    "dpr_client_bill_print",
+                    "dpr_client_bill_export",
                 ],
             },
-            {"endpoint": "project_expenses", "label": "Project Costing", "active_endpoints": ["project_expenses"]},
             {
-                "endpoint": "project_photos_register",
-                "label": "Project Photos",
-                "active_endpoints": [
-                    "project_photos_register",
-                    "project_photos_timeline",
-                    "project_photos_reports",
-                    "project_photos_report_print",
-                    "project_photos_file",
-                ],
+                "endpoint": "project_expenses",
+                "label": "Project Costing",
+                "active_endpoints": ["project_expenses"],
             },
-            {"endpoint": "reports", "label": "Project Reports", "active_endpoints": ["reports", "workflow_audit_report"]},
+            {
+                "endpoint": "reports",
+                "label": "Project Reports",
+                "active_endpoints": ["reports", "workflow_audit_report"],
+            },
         ],
     },
     {
-        "label": "Operations",
-        "icon": "fa-gears",
-        "slug": "operations",
+        "label": "Workforce",
+        "icon": "fa-users",
+        "slug": "workforce",
         "items": [
-            {"endpoint": "workers", "label": "Worker Register", "anchor": "add-worker", "active_endpoints": ["workers"]},
-            {"endpoint": "subcontract_request", "label": "Sub Bills & Payments", "active_endpoints": ["subcontract_request"]},
-            {"endpoint": "material_request", "label": "Material Request", "active_endpoints": ["material_request"]},
-            {"endpoint": "timesheet", "label": "Timesheet", "active_endpoints": ["timesheet"]},
-            {"endpoint": "attendance", "label": "Site Attendance", "active_endpoints": ["attendance"]},
+            {
+                "endpoint": "staff",
+                "label": "Employees",
+                "active_endpoints": ["staff", "employee_profile", "staff_bonus"],
+            },
+            {"endpoint": "attendance", "label": "Attendance", "active_endpoints": ["attendance"]},
+            {
+                "endpoint": "timesheet",
+                "label": "Timesheet",
+                "active_endpoints": ["timesheet", "employee_timesheets", "employee_timesheets_form"],
+            },
+            {
+                "endpoint": "payroll",
+                "label": "Payroll",
+                "active_endpoints": [
+                    "payroll",
+                    "payroll_payments",
+                    "payroll_print_slip",
+                    "payroll_export_register",
+                    "payroll_revisions",
+                    "payroll_holidays",
+                ],
+            },
+            {"endpoint": "salary", "label": "Salary Processing", "active_endpoints": ["salary"]},
+        ],
+    },
+    {
+        "label": "Subcontract",
+        "icon": "fa-people-group",
+        "slug": "subcontract",
+        "items": [
+            {
+                "endpoint": "subcontractors",
+                "label": "Subcontractor Creation",
+                "anchor": "add-subcontractor",
+                "active_endpoints": ["subcontractors"],
+            },
+            {
+                "endpoint": "subcontractors",
+                "label": "Subcontractor List",
+                "anchor": "subcontractor-list",
+                "active_endpoints": ["subcontractors"],
+            },
+            {
+                "endpoint": "workers",
+                "label": "Subcontractor Workers",
+                "active_endpoints": ["workers"],
+            },
+            {
+                "endpoint": "attendance",
+                "label": "Worker Attendance",
+                "anchor": "add-attendance",
+                "query": {"nav": "subcontract"},
+                "active_endpoints": ["attendance"],
+            },
+            {
+                "endpoint": "timesheet",
+                "label": "Worker Timesheet",
+                "query": {"nav": "subcontract"},
+                "active_endpoints": ["timesheet"],
+            },
+            {
+                "endpoint": "sub_billing_register",
+                "label": "Subcontract Bills",
+                "active_endpoints": [
+                    "sub_billing_register",
+                    "sub_billing_form",
+                    "sub_billing_print",
+                    "sub_billing_abstract_print",
+                    "sub_billing_import_workers",
+                ],
+            },
+            {
+                "endpoint": "subcontract_payments",
+                "label": "Subcontract Payments",
+                "active_endpoints": ["subcontract_payments"],
+            },
         ],
     },
     {
@@ -5091,65 +5271,22 @@ NAV_GROUPS = [
         "icon": "fa-warehouse",
         "slug": "store-procurement",
         "items": [
-            {"endpoint": "store", "label": "Store Dashboard", "active_endpoints": ["store"]},
+            {"endpoint": "store", "label": "Store Dashboard", "active_endpoints": ["store", "store_materials"]},
             {"endpoint": "material_request", "label": "Material Request", "active_endpoints": ["material_request"]},
             {"endpoint": "purchase_request", "label": "Purchase Request", "active_endpoints": ["purchase_request"]},
-            {"endpoint": "purchase_orders", "label": "Purchase Order", "active_endpoints": ["purchase_orders", "purchase_order_print"]},
+            {
+                "endpoint": "purchase_orders",
+                "label": "Purchase Order",
+                "active_endpoints": ["purchase_orders", "purchase_order_print", "purchase", "purchase_vendors"],
+            },
             {"endpoint": "store_receipt", "label": "Delivery / GRN", "active_endpoints": ["store_receipt"]},
             {"endpoint": "store_issue", "label": "Store Issue", "active_endpoints": ["store_issue"]},
-            {"endpoint": "inventory", "label": "Inventory Stock", "active_endpoints": ["inventory"]},
-        ],
-    },
-    {
-        "label": "HR & Payroll",
-        "icon": "fa-users",
-        "slug": "hr-payroll",
-        "items": [
-            {"endpoint": "staff", "label": "Employees", "active_endpoints": ["staff", "employee_profile"]},
-            {"endpoint": "staff_bonus", "label": "Staff Bonus", "active_endpoints": ["staff_bonus"]},
-            {"endpoint": "attendance", "label": "Attendance", "active_endpoints": ["attendance"]},
-            {"endpoint": "timesheet", "label": "Timesheet", "active_endpoints": ["timesheet"]},
-            {"endpoint": "payroll", "label": "Payroll", "active_endpoints": ["payroll", "payroll_payments", "payroll_print_slip", "payroll_export_register", "payroll_revisions", "employee_profile"]},
-            {"endpoint": "payroll_revisions", "label": "Salary Revisions", "active_endpoints": ["payroll_revisions"]},
-            {"endpoint": "salary", "label": "Salary Processing", "active_endpoints": ["salary"]},
-            {"endpoint": "payroll_payments", "label": "Payments", "active_endpoints": ["payroll_payments"]},
-        ],
-    },
-    {
-        "label": "Plant Operations",
-        "icon": "fa-industry",
-        "slug": "plant-operations",
-        "items": [
-            {"endpoint": "plant_dashboard", "label": "Plant Dashboard", "active_endpoints": ["plant_dashboard"]},
-            {"endpoint": "plant_asphalt_production", "label": "Asphalt Production", "active_endpoints": ["plant_asphalt_production"]},
-            {"endpoint": "plant_asphalt_dispatch", "label": "Asphalt Dispatch", "active_endpoints": ["plant_asphalt_dispatch", "plant_asphalt_dispatch_print"]},
-            {"endpoint": "plant_rmc_production", "label": "RMC Production", "active_endpoints": ["plant_rmc_production"]},
-            {"endpoint": "plant_rmc_dispatch", "label": "RMC Dispatch", "active_endpoints": ["plant_rmc_dispatch", "plant_rmc_dispatch_print"]},
-            {"endpoint": "plant_wetmix_production", "label": "Wet Mix Production", "active_endpoints": ["plant_wetmix_production"]},
             {
-                "endpoint": "precast_yard",
-                "label": "Precast Yard",
-                "active_endpoints": [
-                    "precast_yard",
-                    "precast_yard_yards",
-                    "plant_precast_production",
-                    "plant_precast_dispatch",
-                ],
+                "endpoint": "material_transfer",
+                "label": "Material Transfer",
+                "active_endpoints": ["material_transfer"],
             },
-            {"endpoint": "plant_crusher_production", "label": "Crusher / M-Sand", "active_endpoints": ["plant_crusher_production"]},
-            {"endpoint": "plant_qc", "label": "Plant QC", "active_endpoints": ["plant_qc"]},
-            {"endpoint": "plant_costing", "label": "Production Costing", "active_endpoints": ["plant_costing"]},
-            {"endpoint": "plant_maintenance", "label": "Maintenance Jobs", "active_endpoints": ["plant_maintenance"]},
-            {"endpoint": "plant_360", "label": "Plant 360° View", "active_endpoints": ["plant_360"]},
-        ],
-    },
-    {
-        "label": "Quality Control",
-        "icon": "fa-flask-vial",
-        "slug": "quality-control",
-        "items": [
-            {"endpoint": "qc_master", "label": "QC Master", "active_endpoints": ["qc_master"]},
-            {"endpoint": "plant_qc", "label": "Plant QC Records", "active_endpoints": ["plant_qc"]},
+            {"endpoint": "inventory", "label": "Inventory Stock", "active_endpoints": ["inventory"]},
         ],
     },
     {
@@ -5157,46 +5294,79 @@ NAV_GROUPS = [
         "icon": "fa-landmark",
         "slug": "accounts",
         "items": [
-            {"endpoint": "accounts_hub", "label": "Accounts Hub", "active_endpoints": ["accounts_hub"]},
-            {"endpoint": "accounts_chart_of_accounts", "label": "Chart of Accounts", "active_endpoints": ["accounts_chart_of_accounts"]},
-            {"endpoint": "accounts_expenses", "label": "Expense Entry", "active_endpoints": ["accounts_expenses"]},
-            {"endpoint": "accounts_payments", "label": "Payments", "active_endpoints": ["accounts_payments"]},
-            {"endpoint": "accounts_receipts", "label": "Receipts", "active_endpoints": ["accounts_receipts"]},
-            {"endpoint": "accounts_gst_register", "label": "GST Register", "active_endpoints": ["accounts_gst_register"]},
             {"endpoint": "petty_cash", "label": "Petty Cash", "active_endpoints": ["petty_cash"]},
-            {"endpoint": "cash_book", "label": "Cash Book", "active_endpoints": ["cash_book"]},
-            {"endpoint": "bank_book", "label": "Bank Book", "active_endpoints": ["bank_book"]},
-            {"endpoint": "ledger", "label": "Ledger", "active_endpoints": ["ledger"]},
-            {"endpoint": "account_tds", "label": "TDS", "active_endpoints": ["account_tds"]},
-            {"endpoint": "reports", "label": "Accounts Reports", "active_endpoints": ["reports"]},
-        ],
-    },
-    {
-        "label": "Admin",
-        "icon": "fa-gear",
-        "slug": "admin",
-        "items": [
-            {"endpoint": "user_management", "label": "User Management", "active_endpoints": ["user_management"]},
-            {"endpoint": "user_settings", "label": "User Access Settings", "active_endpoints": ["user_settings"]},
-            {"endpoint": "settings", "label": "Company & Departments", "active_endpoints": ["settings"]},
-            {"endpoint": "payroll_holidays", "label": "Holidays", "active_endpoints": ["payroll_holidays"]},
-            {"endpoint": "corporate_dms", "label": "Corporate DMS", "active_endpoints": ["corporate_dms", "corporate_dms_file", "corporate_dms_download"]},
-            {"endpoint": "workflow_settings", "label": "Workflow Settings", "active_endpoints": ["workflow_settings", "workflow_matrix"]},
-            {"endpoint": "office_admin", "label": "Office Dashboard", "active_endpoints": ["office_admin"]},
-            {"endpoint": "office_inward", "label": "Inward Register", "active_endpoints": ["office_inward"]},
-            {"endpoint": "office_outward", "label": "Outward Register", "active_endpoints": ["office_outward"]},
-            {"endpoint": "office_letters", "label": "Letter Management", "active_endpoints": ["office_letters", "office_letter_print"]},
-            {"endpoint": "office_quotations", "label": "Quotations", "active_endpoints": ["office_quotations", "office_quotation_print"]},
-            {"endpoint": "office_po_register", "label": "PO Register", "active_endpoints": ["office_po_register"]},
-            {"endpoint": "office_agreements", "label": "Agreement Register", "active_endpoints": ["office_agreements"]},
-            {"endpoint": "office_legal", "label": "Legal Documents", "active_endpoints": ["office_legal"]},
-            {"endpoint": "fleet_dashboard", "label": "Fleet Dashboard", "active_endpoints": ["fleet_dashboard"]},
-            {"endpoint": "fleet_vehicles", "label": "Vehicle Master", "active_endpoints": ["fleet_vehicles", "fleet_vehicle_print"]},
-            {"endpoint": "fleet_vehicle_documents", "label": "Vehicle Documents", "active_endpoints": ["fleet_vehicle_documents"]},
-            {"endpoint": "fleet_running_log", "label": "Running Log", "active_endpoints": ["fleet_running_log"]},
-            {"endpoint": "fleet_diesel_purchase", "label": "Diesel Purchase", "active_endpoints": ["fleet_diesel_purchase"]},
-            {"endpoint": "fleet_diesel_stock", "label": "Diesel Stock", "active_endpoints": ["fleet_diesel_stock"]},
-            {"endpoint": "fleet_diesel_issue", "label": "Diesel Issue", "active_endpoints": ["fleet_diesel_issue"]},
+            {
+                "endpoint": "head_office_expenses",
+                "label": "Daily Expenses",
+                "active_endpoints": ["head_office_expenses", "accounts_expenses"],
+            },
+            {"endpoint": "accounts_receipts", "label": "Receipts", "active_endpoints": ["accounts_receipts"]},
+            {"endpoint": "accounts_payments", "label": "Payments", "active_endpoints": ["accounts_payments"]},
+            {
+                "endpoint": "cash_book",
+                "label": "Cash Book",
+                "active_endpoints": ["cash_book", "accounts_cash_book_v2"],
+            },
+            {
+                "endpoint": "bank_book",
+                "label": "Bank Book",
+                "active_endpoints": ["bank_book", "accounts_bank_book_v2"],
+            },
+            {
+                "endpoint": "accounts_gst_register",
+                "label": "GST",
+                "active_endpoints": ["accounts_gst_register", "account_gst"],
+            },
+            {
+                "endpoint": "account_tds",
+                "label": "TDS",
+                "active_endpoints": ["account_tds", "accounts_tds_register"],
+            },
+            {
+                "endpoint": "ledger",
+                "label": "Ledger",
+                "active_endpoints": [
+                    "ledger",
+                    "accounts_general_ledger",
+                    "accounts_vendor_ledger",
+                    "accounts_client_ledger",
+                    "accounts_chart_of_accounts",
+                ],
+            },
+            {
+                "endpoint": "accounts_reports",
+                "label": "Accounts Reports",
+                "active_endpoints": ["accounts_reports", "accounts_tally_export"],
+            },
+            {
+                "endpoint": "treasury_hub",
+                "label": "Bank & Treasury",
+                "active_endpoints": [
+                    "treasury_hub",
+                    "treasury_bank_accounts",
+                    "treasury_payments",
+                    "treasury_receipts",
+                    "treasury_cheques",
+                    "treasury_cheque_new",
+                    "treasury_cheque_detail",
+                    "treasury_cheque_status",
+                    "treasury_budget_control",
+                    "treasury_budget_control_project",
+                    "treasury_budget_control_edit",
+                    "treasury_document_vault",
+                    "treasury_cash_flow_forecast",
+                ],
+            },
+            {
+                "endpoint": "treasury_cheques",
+                "label": "Cheque Management",
+                "active_endpoints": [
+                    "treasury_cheques",
+                    "treasury_cheque_new",
+                    "treasury_cheque_detail",
+                    "treasury_cheque_status",
+                ],
+            },
         ],
     },
     {
@@ -5204,17 +5374,59 @@ NAV_GROUPS = [
         "icon": "fa-clipboard-check",
         "slug": "approvals",
         "items": [
-            {"endpoint": "approvals", "label": "Approval Center", "active_endpoints": ["approvals", "approval_action"]},
+            {
+                "endpoint": "approvals",
+                "label": "Purchase Approval",
+                "query": {"module": "purchase"},
+                "active_endpoints": ["approvals", "approval_action", "approval_detail"],
+            },
+            {
+                "endpoint": "approvals",
+                "label": "Store Approval",
+                "query": {"module": "store"},
+                "active_endpoints": ["approvals", "approval_action", "approval_detail"],
+            },
+            {
+                "endpoint": "approvals",
+                "label": "Timesheet Approval",
+                "query": {"module": "timesheet"},
+                "active_endpoints": ["approvals", "approval_action", "approval_detail"],
+            },
+            {
+                "endpoint": "approvals",
+                "label": "Payroll Approval",
+                "query": {"module": "payroll"},
+                "active_endpoints": ["approvals", "approval_action", "approval_detail"],
+            },
+            {
+                "endpoint": "approvals",
+                "label": "Payment Approval",
+                "query": {"module": "payment"},
+                "active_endpoints": ["approvals", "approval_action", "approval_detail"],
+            },
         ],
     },
     {
-        "label": "Help & Support",
-        "icon": "fa-circle-question",
-        "slug": "help-support",
+        "label": "Settings",
+        "icon": "fa-gear",
+        "slug": "settings",
         "items": [
-            {"endpoint": "help_desk", "label": "Help Desk", "active_endpoints": ["help_desk"]},
-            {"endpoint": "help_contact", "label": "Contact Support", "active_endpoints": ["help_contact"]},
-            {"endpoint": "help_desk_admin", "label": "Manage Help Topics", "active_endpoints": ["help_desk_admin"]},
+            {"endpoint": "user_settings", "label": "Users", "active_endpoints": ["user_settings"]},
+            {
+                "endpoint": "user_management",
+                "label": "Roles & Permissions",
+                "active_endpoints": ["user_management"],
+            },
+            {
+                "endpoint": "settings",
+                "label": "Company Settings",
+                "active_endpoints": ["settings", "company_master", "company_document_download"],
+            },
+            {
+                "endpoint": "workflow_settings",
+                "label": "Workflow Settings",
+                "active_endpoints": ["workflow_settings", "workflow_matrix"],
+            },
         ],
     },
 ]
@@ -5250,13 +5462,25 @@ def active_nav_group(endpoint, nav_slug=None):
         group = get_nav_group_by_slug(nav_slug)
         if group:
             return group
+    nav_slug = nav_slug or request.args.get("nav")
+    if nav_slug:
+        group = get_nav_group_by_slug(nav_slug)
+        if group:
+            for item in group.get("items", []):
+                if endpoint in item.get("active_endpoints", []):
+                    return group
+            if endpoint in group.get("active_endpoints", []):
+                return group
+    module_key = request.args.get("module", "").strip()
+    if module_key and endpoint in ("approvals", "approval_action", "approval_detail"):
+        return get_nav_group_by_slug("approvals")
     for group in NAV_GROUPS:
         for item in group.get("items", []):
             if endpoint in item.get("active_endpoints", []):
                 return group
         if endpoint in group.get("active_endpoints", []):
             return group
-    return None
+    return get_nav_group_by_slug("dashboard")
 
 
 PRECAST_MODULE_ENDPOINTS = frozenset({
@@ -8850,8 +9074,12 @@ def approvals(role="checker"):
     tab = request.args.get("tab", "pending").strip()
     if tab not in ("pending", "history"):
         tab = "pending"
+    module_key = request.args.get("module", "").strip()
+    module_ids = APPROVAL_MODULE_GROUPS.get(module_key)
     counts = get_pending_counts(db, user_id, admin)
     raw_items = get_pending_items(db, user_id, role, admin)
+    if module_ids:
+        raw_items = [item for item in raw_items if item.get("module_id") in module_ids]
     items = _enrich_approval_items(db, raw_items, role=role, include_history=False)
     pending_items, history_items = _split_approval_items(items, role)
     display_items = pending_items if tab == "pending" else history_items
@@ -8859,6 +9087,7 @@ def approvals(role="checker"):
         "approvals.html",
         role=role,
         tab=tab,
+        module_filter=module_key,
         counts=counts,
         pending_items=pending_items,
         history_items=history_items,
@@ -8908,7 +9137,9 @@ def approval_action():
     if ok:
         _sync_payroll_run_after_workflow(get_db(), int(approval_id))
         _sync_accounts_after_workflow(get_db(), int(approval_id))
+        _sync_treasury_after_workflow(get_db(), int(approval_id))
         _sync_store_after_workflow(get_db(), int(approval_id))
+        _sync_subcontract_payments_after_workflow(get_db(), int(approval_id))
         _sync_client_billing_after_workflow(get_db(), int(approval_id))
     get_db().commit()
     flash(message, "success" if ok else "warning")
@@ -8935,7 +9166,9 @@ def workflow_reopen():
         ).fetchone()
         if req and req["record_table"] in ("account_expenses", "payment_vouchers", "receipt_vouchers"):
             void_journal_for_reference(db, req["record_table"], req["record_id"])
-        if req and req["record_table"] in ("store_receipts", "store_issues"):
+        if req and req["record_table"] in ("bank_payments", "bank_receipts"):
+            void_treasury_on_reversal(db, req["record_table"], req["record_id"], session.get("username", "system"))
+        if req and req["record_table"] in ("store_receipts", "store_issues", "material_transfers"):
             void_stock_for_reference(db, req["record_table"], req["record_id"])
     get_db().commit()
     flash(message, "success" if ok else "warning")
@@ -9020,9 +9253,12 @@ def _module_edit_context(module_id, table, endpoint):
 
 def _complete_module_save(db, module_id, table, record_id, edit_role):
     accounts_tables = ("account_expenses", "payment_vouchers", "receipt_vouchers")
+    treasury_tables = ("bank_payments", "bank_receipts")
     if edit_role == "maker":
         if table in accounts_tables:
             void_journal_for_reference(db, table, record_id)
+        if table in treasury_tables:
+            void_treasury_on_reversal(db, table, record_id, session.get("username", "system"))
         db.execute(
             f"UPDATE {table} SET approval_status=? WHERE id=?",
             ("Pending Checker", record_id),
@@ -9759,6 +9995,96 @@ def boq_management():
         edit_role=wf_ctx.get("edit_role"),
         can_reopen=wf_ctx.get("can_reopen", False),
         approval_id=wf_ctx.get("approval_id"),
+    )
+
+
+@app.route("/boq-multiple-entry", methods=["GET", "POST"])
+@login_required
+def boq_multiple_entry():
+    db = get_db()
+    ensure_boq_master_table(db)
+    module_id, table, endpoint = "boq", "boq_master", "boq_multiple_entry"
+
+    if request.method == "POST":
+        project_id = request.form.get("project_id", "").strip()
+        lines, parse_error = _parse_boq_line_items(max_lines=MAX_BOQ_BULK_LINES)
+
+        if not project_id:
+            flash("Select a project.")
+            return redirect(url_for(endpoint))
+        if parse_error:
+            flash(parse_error)
+            return redirect(url_for(endpoint))
+        if not lines:
+            flash("Add at least one BOQ line item with a description.")
+            return redirect(url_for(endpoint))
+        if len(lines) > MAX_BOQ_BULK_LINES:
+            flash(f"Maximum {MAX_BOQ_BULK_LINES} line items allowed per BOQ.")
+            return redirect(url_for(endpoint))
+
+        total_amount = round(sum(line["amount"] for line in lines), 2)
+        created_by = session.get("username", "")
+        created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        boq_number = generate_boq_number(db, int(project_id))
+        db.execute(
+            "INSERT INTO boq_master(boq_number, project_id, total_amount, line_count, "
+            "created_by, approval_status, created_at) VALUES(?,?,?,?,?,?,?)",
+            (
+                boq_number,
+                project_id,
+                total_amount,
+                len(lines),
+                created_by,
+                RECORD_PENDING_CHECKER,
+                created_at,
+            ),
+        )
+        new_boq_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+        _insert_boq_lines(db, new_boq_id, project_id, lines, created_by, created_at)
+        create_approval_request(
+            db, "boq", new_boq_id, "boq_master", created_by, session.get("user_id")
+        )
+        db.commit()
+        flash(
+            f"BOQ {boq_number} saved — {len(lines)} item(s), total amount {total_amount:,.2f}."
+        )
+        return redirect(
+            url_for(
+                endpoint,
+                saved=boq_number,
+                saved_id=new_boq_id,
+                saved_lines=len(lines),
+                saved_total=total_amount,
+                project_id=project_id,
+            )
+        )
+
+    boq_form_project_id = request.args.get("project_id", type=int)
+    projects = get_project_options_for_boq()
+    preview_project_id = boq_form_project_id
+    next_boq_number = (
+        peek_boq_number(db, preview_project_id) if preview_project_id else "Select project"
+    )
+    recent_rows = query_db(
+        "SELECT m.*, p.project_name FROM boq_master m "
+        "LEFT JOIN projects p ON m.project_id = p.id "
+        "WHERE COALESCE(m.is_deleted, 0)=0 ORDER BY m.id DESC LIMIT 15"
+    )
+    saved_boq_number = request.args.get("saved", "").strip()
+    return render_template(
+        "boq_multiple_entry.html",
+        projects=projects,
+        next_boq_number=next_boq_number,
+        boq_units=BOQ_UNITS,
+        max_boq_lines=MAX_BOQ_BULK_LINES,
+        default_row_count=10,
+        boq_form_project_id=boq_form_project_id,
+        recent_rows=[dict(r) for r in recent_rows],
+        saved_boq_number=saved_boq_number,
+        saved_boq_id=request.args.get("saved_id", type=int),
+        saved_line_count=request.args.get("saved_lines", type=int),
+        saved_total=request.args.get("saved_total", type=float),
+        continue_project_id=boq_form_project_id if saved_boq_number else None,
     )
 
 
@@ -11883,6 +12209,78 @@ def store_issue():
     )
 
 
+@app.route("/material-transfer", methods=["GET", "POST"])
+@login_required
+def material_transfer():
+    db = get_db()
+    _prepare_store_db(db)
+    module_id, table, endpoint = "material_transfer", "material_transfers", "material_transfer"
+    projects = query_db("SELECT id, project_name FROM projects ORDER BY project_name")
+    materials = list_materials(db, active_only=True)
+    if request.method == "POST":
+        ctx = _module_edit_context(module_id, table, endpoint)
+        if ctx[0] == "redirect":
+            return redirect(ctx[1])
+        record_id, edit_role = ctx
+        try:
+            if record_id:
+                save_material_transfer(db, request.form, session.get("username", ""), record_id)
+                _complete_module_save(db, module_id, table, record_id, edit_role)
+            else:
+                new_id = save_material_transfer(db, request.form, session.get("username", ""))
+                create_approval_request(
+                    db, module_id, new_id, table,
+                    session.get("username", ""), session.get("user_id"),
+                )
+                db.commit()
+                flash("Material transfer saved. Status: Pending Checker.")
+            return redirect(url_for(endpoint))
+        except ValueError as exc:
+            flash(str(exc))
+            return redirect(request.referrer or url_for(endpoint, new=1))
+    view_id = request.args.get("view")
+    edit_id = request.args.get("edit")
+    view_record = edit_record = None
+    wf_ctx = {}
+    if view_id:
+        view_record = load_material_transfer(db, int(view_id))
+        if view_record:
+            wf_ctx = _workflow_view_context(
+                module_id, view_record["id"], table, view_record["approval_status"]
+            )
+    elif edit_id:
+        edit_record = load_material_transfer(db, int(edit_id))
+        if edit_record:
+            if edit_record.get("stock_posted"):
+                flash("Cannot edit transfer after stock has been posted.")
+                return redirect(url_for(endpoint, view=edit_id))
+            edit_role = get_edit_role_for_user(
+                db, session.get("user_id"), module_id,
+                edit_record["approval_status"], is_admin_user(),
+            )
+            if not edit_role:
+                flash("This record is locked and cannot be edited.")
+                return redirect(url_for(endpoint, view=edit_id))
+            wf_ctx = {"edit_role": edit_role}
+    show_form = bool(request.args.get("new")) or edit_record
+    rows = list_material_transfers(db)
+    return render_template(
+        "material_transfer.html",
+        rows=rows,
+        view_record=view_record,
+        edit_record=edit_record,
+        show_form=show_form,
+        projects=projects,
+        materials=materials,
+        transfer_types=MATERIAL_TRANSFER_TYPES,
+        default_date=datetime.now().strftime("%Y-%m-%d"),
+        history=wf_ctx.get("history"),
+        edit_role=wf_ctx.get("edit_role"),
+        can_reopen=wf_ctx.get("can_reopen", False),
+        approval_id=wf_ctx.get("approval_id"),
+    )
+
+
 @app.route("/store-receipt", methods=["GET", "POST"])
 @login_required
 def store_receipt():
@@ -11990,6 +12388,7 @@ def store():
         {"endpoint": "purchase_orders", "label": "Purchase Orders", "icon": "fa-file-invoice", "description": "Vendor PO with workflow"},
         {"endpoint": "store_receipt", "label": "GRN / Receipt", "icon": "fa-dolly", "description": "Goods receipt & stock in"},
         {"endpoint": "store_issue", "label": "Store Issue", "icon": "fa-arrow-right-from-bracket", "description": "Issue materials with stock check"},
+        {"endpoint": "material_transfer", "label": "Material Transfer", "icon": "fa-truck-ramp-box", "description": "Store-to-store, store-to-site, site-to-site"},
         {"endpoint": "inventory", "label": "Inventory", "icon": "fa-warehouse", "description": "Stock balances & low-stock alerts"},
     ]
     return render_template("store_dashboard.html", stats=stats, modules=modules)
@@ -15196,6 +15595,101 @@ def bbs_print(bbs_id):
 # --- Sub-contractor Billing ---
 
 
+@app.route("/subcontract-payments", methods=["GET", "POST"])
+@login_required
+def subcontract_payments():
+    db = get_db()
+    _prepare_subcontract_payments_db(db)
+    module_id = SUB_PAYMENT_MODULE_ID
+    wo_table = SUB_PAYMENT_WO_TABLE
+    endpoint = "subcontract_payments"
+    projects = query_db("SELECT id, project_name FROM projects ORDER BY project_name")
+    subcontractors = list_subcontractors_for_payments(db)
+
+    if request.method == "POST":
+        action = request.form.get("form_action", "save_work_order")
+        try:
+            if action == "save_work_order":
+                record_id, edit_role = None, None
+                if request.form.get("record_id", "").strip():
+                    ctx = _module_edit_context(module_id, wo_table, endpoint)
+                    if ctx[0] == "redirect":
+                        return redirect(ctx[1])
+                    record_id, edit_role = ctx
+                saved_id = save_work_order(
+                    db, request.form, session.get("username", ""), record_id
+                )
+                if record_id:
+                    _complete_module_save(db, module_id, wo_table, saved_id, edit_role)
+                else:
+                    create_approval_request(
+                        db, module_id, saved_id, wo_table,
+                        session.get("username", ""), session.get("user_id"),
+                    )
+                    db.commit()
+                    flash("Work order saved. Status: Pending Checker.")
+                return redirect(url_for(endpoint, view=saved_id))
+            if action == "save_payment":
+                pay_id = request.form.get("payment_id", type=int)
+                saved_pay_id = save_payment_entry(
+                    db, request.form, session.get("username", ""), pay_id
+                )
+                if not pay_id:
+                    create_approval_request(
+                        db, module_id, saved_pay_id, SUB_PAYMENT_ENTRY_TABLE,
+                        session.get("username", ""), session.get("user_id"),
+                    )
+                db.commit()
+                flash("Payment entry saved. Status: Pending Checker.")
+                wo_id = request.form.get("work_order_id", type=int)
+                return redirect(url_for(endpoint, view=wo_id))
+        except ValueError as exc:
+            flash(str(exc))
+            return redirect(request.referrer or url_for(endpoint))
+
+    view_id = request.args.get("view", type=int)
+    edit_wo_id = request.args.get("edit_wo", type=int)
+    view_record = edit_wo = None
+    wf_ctx = {}
+    if view_id:
+        view_record = get_work_order(db, view_id)
+        if view_record:
+            wf_ctx = _workflow_view_context(
+                module_id, view_record["id"], wo_table, view_record["approval_status"]
+            )
+    elif edit_wo_id:
+        edit_wo = get_work_order(db, edit_wo_id)
+        if edit_wo:
+            edit_role = get_edit_role_for_user(
+                db, session.get("user_id"), module_id,
+                edit_wo["approval_status"], is_admin_user(),
+            )
+            if not edit_role:
+                flash("This work order is locked and cannot be edited.")
+                return redirect(url_for(endpoint, view=edit_wo_id))
+            wf_ctx = {"edit_role": edit_role}
+
+    search = request.args.get("q", "")
+    return render_template(
+        "subcontract_payments.html",
+        ledger_rows=list_work_order_ledger(db, search),
+        summary=ledger_summary(db),
+        subcontractors=subcontractors,
+        projects=projects,
+        view_record=view_record,
+        edit_wo=edit_wo,
+        show_wo_form=bool(request.args.get("new_wo")) or edit_wo,
+        show_pay_form=bool(request.args.get("new_pay")),
+        prefill_wo_id=request.args.get("wo_id", type=int),
+        search=search,
+        default_date=datetime.now().strftime("%Y-%m-%d"),
+        history=wf_ctx.get("history"),
+        edit_role=wf_ctx.get("edit_role"),
+        can_reopen=wf_ctx.get("can_reopen", False),
+        approval_id=wf_ctx.get("approval_id"),
+    )
+
+
 @app.route("/sub-billing")
 @login_required
 def sub_billing_register():
@@ -15530,6 +16024,21 @@ def help_desk_admin():
 
 
 app.jinja_env.globals.setdefault("safe_url_for", safe_url_for)
+
+register_treasury_routes(
+    app,
+    login_required=login_required,
+    get_db=get_db,
+    query_db=query_db,
+    is_admin_user=is_admin_user,
+    create_approval_request=create_approval_request,
+    get_edit_role_for_user=get_edit_role_for_user,
+    _workflow_view_context=_workflow_view_context,
+    _module_edit_context=_module_edit_context,
+    _complete_module_save=_complete_module_save,
+    treasury_docs_dir=TREASURY_DOCS_DIR,
+    save_file_fn=save_file,
+)
 
 if __name__ == "__main__":
     with app.app_context():

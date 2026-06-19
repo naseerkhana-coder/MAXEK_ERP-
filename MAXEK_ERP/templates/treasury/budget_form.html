@@ -1,0 +1,54 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Edit Budget — ' ~ project.project_name %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('treasury_hub') ~ '">Treasury</a> &gt; <a href="' ~ url_for('treasury_budget_control') ~ '">Budget Control</a> &gt; <a href="' ~ url_for('treasury_budget_control_project', project_id=project.id) ~ '">' ~ project.project_name ~ '</a> &gt; Edit' %}
+{% block page_actions %}
+<a href="{{ url_for('treasury_budget_control_project', project_id=project.id) }}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-arrow-left"></i> Back</a>
+{% endblock %}
+{% block content %}
+<p style="color:#64748b;margin-top:0;">
+  Set approved budget amounts by category. Committed and actual costs can be entered manually or synced from Purchase, Store, Payroll, and Subcontract modules.
+</p>
+
+<form method="post" class="erp-form-card">
+  <div class="erp-field" style="max-width:200px;margin-bottom:1rem;">
+    <input type="text" name="fiscal_year" value="{{ fiscal_year or '' }}" placeholder="e.g. 2026-27">
+    <label>Fiscal Year (optional)</label>
+  </div>
+
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead>
+        <tr>
+          <th>Category</th>
+          <th>Budget Amount (₹)</th>
+          <th>Committed Cost (₹)</th>
+          <th>Actual Cost (₹)</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for cat in categories %}
+        {% set prefix = cat.lower().replace(' ', '_') %}
+        {% set existing = line_map.get(cat, {}) %}
+        <tr>
+          <td><strong>{{ cat }}</strong></td>
+          <td><input type="number" step="0.01" min="0" name="{{ prefix }}_budget" value="{{ existing.budget_amount if existing else '' }}" style="width:100%;min-width:120px;"></td>
+          <td><input type="number" step="0.01" min="0" name="{{ prefix }}_committed" value="{{ existing.committed_cost if existing else '' }}" style="width:100%;min-width:120px;"></td>
+          <td><input type="number" step="0.01" min="0" name="{{ prefix }}_actual" value="{{ existing.actual_cost if existing else '' }}" style="width:100%;min-width:120px;"></td>
+          <td><input type="text" name="{{ prefix }}_notes" value="{{ existing.notes if existing else '' }}" style="width:100%;min-width:180px;"></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div style="margin-top:1.25rem;display:flex;gap:0.5rem;">
+    <button type="submit" class="erp-btn erp-btn-primary"><i class="fa-solid fa-save"></i> Save Budget</button>
+    <a href="{{ url_for('treasury_budget_control_project', project_id=project.id) }}" class="erp-btn erp-btn-ghost">Cancel</a>
+  </div>
+</form>
+
+<p style="margin-top:1rem;font-size:0.85rem;color:#64748b;">
+  Total row is computed automatically from category lines on save.
+</p>
+{% endblock %}

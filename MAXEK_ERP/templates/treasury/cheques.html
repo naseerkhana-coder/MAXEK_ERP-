@@ -1,0 +1,65 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Cheque Management' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('treasury_hub') ~ '">Treasury</a> &gt; Cheques' %}
+{% block page_actions %}
+<a href="{{ url_for('treasury_cheque_new') }}" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> New Cheque</a>
+{% endblock %}
+{% block content %}
+<form method="get" class="erp-table-toolbar" style="margin-bottom:0.75rem;display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+  <select name="account_id" onchange="this.form.submit()">
+    <option value="">All Accounts</option>
+    {% for a in accounts %}
+    <option value="{{ a.id }}" {% if filter_account_id == a.id %}selected{% endif %}>{{ a.bank_name }} — {{ a.account_number }}</option>
+    {% endfor %}
+  </select>
+  <select name="status" onchange="this.form.submit()">
+    <option value="">All Status</option>
+    {% for s in cheque_statuses %}
+    <option value="{{ s }}" {% if filter_status == s %}selected{% endif %}>{{ s }}</option>
+    {% endfor %}
+  </select>
+  <input type="date" name="date_from" value="{{ date_from or '' }}" placeholder="From">
+  <input type="date" name="date_to" value="{{ date_to or '' }}" placeholder="To">
+  <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Filter</button>
+  {% if filter_account_id or filter_status or date_from or date_to %}
+  <a href="{{ url_for('treasury_cheques') }}" class="erp-btn erp-btn-ghost erp-btn-sm">Clear</a>
+  {% endif %}
+</form>
+<div class="erp-summary-grid" style="margin-bottom:1rem;">
+  {% for s in cheque_statuses %}
+  <div class="erp-stat-card"><span>{{ s }}</span><strong>{{ status_counts.get(s, 0) }}</strong></div>
+  {% endfor %}
+</div>
+<div class="erp-table-panel" data-erp-table>
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead>
+        <tr>
+          <th>Cheque No</th>
+          <th>Issue Date</th>
+          <th>Bank Account</th>
+          <th>Beneficiary</th>
+          <th>Amount</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td><a href="{{ url_for('treasury_cheque_detail', cheque_id=row.id) }}">{{ row.cheque_number }}</a></td>
+          <td>{{ row.issue_date or '—' }}</td>
+          <td>{{ row.bank_name or '—' }} {{ row.account_number or '' }}</td>
+          <td>{{ row.beneficiary or '—' }}</td>
+          <td>₹{{ '{:,.2f}'.format(row.amount or 0) }}</td>
+          <td><span class="approval-badge approval-{{ (row.status or 'Issued')|lower|replace(' ', '-') }}">{{ row.status or 'Issued' }}</span></td>
+          <td><a href="{{ url_for('treasury_cheque_detail', cheque_id=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">View</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7">No cheques yet. <a href="{{ url_for('treasury_cheque_new') }}">Create one</a>.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

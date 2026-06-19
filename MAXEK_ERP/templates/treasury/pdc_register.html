@@ -1,0 +1,105 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'PDC Register' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('treasury_hub') ~ '">Treasury</a> &gt; PDC Register' %}
+{% block page_actions %}
+<a href="{{ url_for('treasury_pdc_new') }}" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> New PDC</a>
+{% endblock %}
+{% block content %}
+{% if due_alerts %}
+<div class="erp-alert erp-alert-warning" style="margin-bottom:1rem;padding:0.75rem 1rem;border-radius:0.5rem;background:#fef3c7;border:1px solid #f59e0b;">
+  <strong><i class="fa-solid fa-bell"></i> {{ due_alerts|length }} PDC(s) due within 7 days</strong>
+  <ul style="margin:0.5rem 0 0 1.25rem;padding:0;font-size:0.9rem;">
+    {% for a in due_alerts[:5] %}
+    <li>
+      <a href="{{ url_for('treasury_pdc_detail', pdc_id=a.id) }}">#{{ a.cheque_number }}</a>
+      — {{ a.party_name }} — ₹{{ '{:,.2f}'.format(a.amount or 0) }}
+      — due {{ a.cheque_date }} ({{ a.days_left }} day{% if a.days_left != 1 %}s{% endif %} left)
+      {% if a.alert_threshold <= 3 %}<span class="approval-badge approval-bounced" style="font-size:0.75rem;">Urgent</span>{% endif %}
+    </li>
+    {% endfor %}
+    {% if due_alerts|length > 5 %}
+    <li><a href="{{ url_for('treasury_pdc_register', due_soon=1) }}">View all {{ due_alerts|length }} due soon…</a></li>
+    {% endif %}
+  </ul>
+</div>
+{% endif %}
+<form method="get" class="erp-table-toolbar" style="margin-bottom:0.75rem;display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+  <select name="type" onchange="this.form.submit()">
+    <option value="">All Types</option>
+    {% for t in pdc_types %}
+    <option value="{{ t }}" {% if filter_type == t %}selected{% endif %}>{{ t }}</option>
+    {% endfor %}
+  </select>
+  <select name="account_id" onchange="this.form.submit()">
+    <option value="">All Accounts</option>
+    {% for a in accounts %}
+    <option value="{{ a.id }}" {% if filter_account_id == a.id %}selected{% endif %}>{{ a.bank_name }} — {{ a.account_number }}</option>
+    {% endfor %}
+  </select>
+  <select name="status" onchange="this.form.submit()">
+    <option value="">All Status</option>
+    {% for s in pdc_statuses %}
+    <option value="{{ s }}" {% if filter_status == s %}selected{% endif %}>{{ s }}</option>
+    {% endfor %}
+  </select>
+  <label style="display:flex;align-items:center;gap:0.35rem;font-size:0.9rem;">
+    <input type="checkbox" name="due_soon" value="1" {% if due_soon %}checked{% endif %} onchange="this.form.submit()">
+    Due within 7 days
+  </label>
+  <input type="date" name="date_from" value="{{ date_from or '' }}" placeholder="From">
+  <input type="date" name="date_to" value="{{ date_to or '' }}" placeholder="To">
+  <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Filter</button>
+  {% if filter_type or filter_account_id or filter_status or due_soon or date_from or date_to %}
+  <a href="{{ url_for('treasury_pdc_register') }}" class="erp-btn erp-btn-ghost erp-btn-sm">Clear</a>
+  {% endif %}
+</form>
+<div class="erp-summary-grid" style="margin-bottom:1rem;">
+  {% for t in pdc_types %}
+  <div class="erp-stat-card"><span>{{ t }}</span><strong>{{ type_counts.get(t, 0) }}</strong></div>
+  {% endfor %}
+  {% for s in pdc_statuses %}
+  <div class="erp-stat-card"><span>{{ s }}</span><strong>{{ status_counts.get(s, 0) }}</strong></div>
+  {% endfor %}
+</div>
+<div class="erp-table-panel" data-erp-table>
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Cheque No</th>
+          <th>Cheque Date</th>
+          <th>Received/Issued</th>
+          <th>Bank Account</th>
+          <th>Party</th>
+          <th>Amount</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr{% if row.id in (due_alerts|map(attribute='id')|list) %} style="background:#fffbeb;"{% endif %}>
+          <td><span class="approval-badge approval-{{ (row.pdc_type or 'Received')|lower }}">{{ row.pdc_type or 'Received' }}</span></td>
+          <td><a href="{{ url_for('treasury_pdc_detail', pdc_id=row.id) }}">{{ row.cheque_number }}</a></td>
+          <td>
+            {{ row.cheque_date or '—' }}
+            {% for a in due_alerts if a.id == row.id %}
+            <span class="approval-badge approval-bounced" style="font-size:0.7rem;" title="Due in {{ a.days_left }} days">{{ a.days_left }}d</span>
+            {% endfor %}
+          </td>
+          <td>{{ row.transaction_date or '—' }}</td>
+          <td>{{ row.bank_name or '—' }} {{ row.account_number or '' }}</td>
+          <td>{{ row.party_name or '—' }}</td>
+          <td>₹{{ '{:,.2f}'.format(row.amount or 0) }}</td>
+          <td><span class="approval-badge approval-{{ (row.status or 'Pending')|lower|replace(' ', '-') }}">{{ row.status or 'Pending' }}</span></td>
+          <td><a href="{{ url_for('treasury_pdc_detail', pdc_id=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">View</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9">No PDCs yet. <a href="{{ url_for('treasury_pdc_new') }}">Create one</a>.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

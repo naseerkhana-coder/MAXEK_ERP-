@@ -1,0 +1,21 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Financial Control Center' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('treasury_hub') ~ '">Treasury</a> &gt; Control Center' %}
+{% block content %}
+<div class="erp-summary-grid" style="margin-bottom:1.5rem;">
+  <div class="erp-stat-card"><span>Total Liquidity</span><strong>₹{{ '{:,.2f}'.format(stats.total_balance) }}</strong></div>
+  <div class="erp-stat-card"><span>BG Exposure</span><strong>₹{{ '{:,.2f}'.format(stats.bg_exposure) }}</strong></div>
+  <div class="erp-stat-card"><span>OD Utilized</span><strong>₹{{ '{:,.2f}'.format(stats.od_utilized) }}</strong></div>
+  <div class="erp-stat-card"><span>Unmatched Recon</span><strong>{{ stats.unmatched_recon }}</strong></div>
+  <div class="erp-stat-card"><span>Pending Payments</span><strong>{{ stats.pending_payments }}</strong></div>
+  <div class="erp-stat-card"><span>Pending Receipts</span><strong>{{ stats.pending_receipts }}</strong></div>
+</div>
+<h3>Payment Approval Matrix</h3>
+<div class="erp-table-panel" style="margin-bottom:1.5rem;"><div class="erp-table-scroll"><table class="erp-table"><thead><tr><th>Min Amount</th><th>Max Amount</th><th>Approver Role</th></tr></thead><tbody>
+{% for m in matrix %}<tr><td>₹{{ '{:,.2f}'.format(m.min_amount) }}</td><td>₹{{ '{:,.2f}'.format(m.max_amount) }}</td><td>{{ m.approver_role }}</td></tr>{% endfor %}
+</tbody></table></div></div>
+<h3>Recent Treasury Audit</h3>
+<div class="erp-table-panel"><div class="erp-table-scroll"><table class="erp-table"><thead><tr><th>Time</th><th>Entity</th><th>Action</th><th>Actor</th><th>Details</th></tr></thead><tbody>
+{% for log in audit_logs %}<tr><td>{{ log.created_at }}</td><td>{{ log.entity_type }} #{{ log.entity_id }}</td><td>{{ log.action }}</td><td>{{ log.actor or '—' }}</td><td>{{ log.details or '—' }}</td></tr>{% else %}<tr><td colspan="5">No audit entries yet.</td></tr>{% endfor %}
+</tbody></table></div></div>
+{% endblock %}

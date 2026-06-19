@@ -1,0 +1,24 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Bank Account Dashboard' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('treasury_hub') ~ '">Treasury</a> &gt; Account Dashboard' %}
+{% block content %}
+{% if not stats.account %}
+<div class="erp-form-card"><p>Account not found.</p><a href="{{ url_for('treasury_bank_accounts') }}" class="erp-btn erp-btn-primary">Back</a></div>
+{% else %}
+<h2 style="margin-top:0;">{{ stats.account.bank_name }} — {{ stats.account.account_number }}</h2>
+<div class="erp-summary-grid" style="margin-bottom:1.5rem;">
+  <div class="erp-stat-card"><span>Current Balance</span><strong>₹{{ '{:,.2f}'.format(stats.account.current_balance or 0) }}</strong></div>
+  <div class="erp-stat-card"><span>OD Limit</span><strong>₹{{ '{:,.2f}'.format(stats.account.od_limit_live or stats.account.od_limit or 0) }}</strong></div>
+  <div class="erp-stat-card"><span>OD Utilized</span><strong>₹{{ '{:,.2f}'.format(stats.account.od_utilized or 0) }}</strong></div>
+  <div class="erp-stat-card"><span>Pending Payments</span><strong>{{ stats.pending_payment_count }} (₹{{ '{:,.2f}'.format(stats.pending_payment_amount) }})</strong></div>
+  <div class="erp-stat-card"><span>Pending Receipts</span><strong>{{ stats.pending_receipt_count }} (₹{{ '{:,.2f}'.format(stats.pending_receipt_amount) }})</strong></div>
+  <div class="erp-stat-card"><span>BG Exposure</span><strong>{{ stats.bg_count }} (₹{{ '{:,.2f}'.format(stats.bg_exposure) }})</strong></div>
+</div>
+<div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:1rem;">
+  <a href="{{ url_for('treasury_account_360', account_id=stats.account.id) }}" class="erp-btn erp-btn-primary">360° View</a>
+  <a href="{{ url_for('treasury_payments', account_id=stats.account.id) }}" class="erp-btn erp-btn-ghost">Payments</a>
+  <a href="{{ url_for('treasury_receipts', account_id=stats.account.id) }}" class="erp-btn erp-btn-ghost">Receipts</a>
+  <a href="{{ url_for('treasury_reconciliation', account_id=stats.account.id) }}" class="erp-btn erp-btn-ghost">Reconciliation</a>
+</div>
+{% endif %}
+{% endblock %}

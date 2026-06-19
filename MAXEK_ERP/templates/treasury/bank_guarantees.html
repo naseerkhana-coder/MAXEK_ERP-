@@ -1,0 +1,69 @@
+{% extends 'base_maxek.html' %}
+{% from 'macros/erp_ui.html' import approval_badge, maker_row_actions, transaction_view_tabs %}
+{% set page_title = 'Bank Guarantees' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('treasury_hub') ~ '">Treasury</a> &gt; BG Management' %}
+{% block page_actions %}
+<a href="{{ url_for('treasury_bank_guarantees', new=1) }}#record-form" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> New BG</a>
+{% endblock %}
+{% block content %}
+{% if alerts %}
+<div class="erp-form-card" style="margin-bottom:1rem;border-left:4px solid #f59e0b;">
+  <h3 class="erp-form-title" style="color:#b45309;"><i class="fa-solid fa-triangle-exclamation"></i> Expiry Alerts</h3>
+  <ul style="margin:0;padding-left:1.25rem;">
+    {% for a in alerts %}
+    <li><strong>{{ a.bg_number }}</strong> — {{ a.beneficiary }} — expires {{ a.expiry_date }} ({{ a.days_left }} days)</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+{% if view_record %}
+{% call transaction_view_tabs(view_record, history, can_reopen, approval_id) %}
+<p><strong>BG No:</strong> {{ view_record.bg_number }} | <strong>Type:</strong> {{ view_record.bg_type }}</p>
+<p><strong>Project:</strong> {{ view_record.project_name or '—' }} | <strong>Beneficiary:</strong> {{ view_record.beneficiary }}</p>
+<p><strong>Amount:</strong> ₹{{ '{:,.2f}'.format(view_record.amount) }} | <strong>Expiry:</strong> {{ view_record.expiry_date }}</p>
+<p>{{ approval_badge(view_record.approval_status) }} | Status: {{ view_record.status }}</p>
+{% endcall %}
+{% endif %}
+{% if show_form %}
+<div class="erp-form-card" id="record-form" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">{% if edit_record %}Edit BG{% else %}New Bank Guarantee{% endif %}</h3>
+  <form method="post">
+    {% if edit_record %}<input type="hidden" name="record_id" value="{{ edit_record.id }}">{% endif %}
+    <div class="erp-form-grid">
+      <div class="erp-field"><input name="bg_number" required placeholder=" " value="{{ edit_record.bg_number if edit_record else '' }}"><label>BG Number *</label></div>
+      <div class="erp-field"><select name="bank_account_id"><option value="">—</option>{% for a in accounts %}<option value="{{ a.id }}" {% if edit_record and edit_record.bank_account_id == a.id %}selected{% endif %}>{{ a.bank_name }} — {{ a.account_number }}</option>{% endfor %}</select><label>Bank Account</label></div>
+      <div class="erp-field"><select name="bg_type">{% for t in bg_types %}<option value="{{ t }}" {% if edit_record and edit_record.bg_type == t %}selected{% endif %}>{{ t }}</option>{% endfor %}</select><label>BG Type</label></div>
+      <div class="erp-field"><select name="project_id"><option value="">—</option>{% for p in projects %}<option value="{{ p.id }}" {% if edit_record and edit_record.project_id == p.id %}selected{% endif %}>{{ p.project_name }}</option>{% endfor %}</select><label>Project</label></div>
+      <div class="erp-field"><input name="beneficiary" placeholder=" " value="{{ edit_record.beneficiary if edit_record else '' }}"><label>Beneficiary</label></div>
+      <div class="erp-field"><input type="number" step="0.01" name="amount" placeholder=" " value="{{ edit_record.amount if edit_record else '' }}"><label>Amount</label></div>
+      <div class="erp-field"><input type="date" name="issue_date" value="{{ edit_record.issue_date if edit_record else '' }}"><label>Issue Date</label></div>
+      <div class="erp-field"><input type="date" name="expiry_date" value="{{ edit_record.expiry_date if edit_record else '' }}"><label>Expiry Date</label></div>
+      <div class="erp-field span-2"><textarea name="remarks" placeholder=" ">{{ edit_record.remarks if edit_record else '' }}</textarea><label>Remarks</label></div>
+    </div>
+    <button type="submit" class="erp-btn erp-btn-primary">{% if edit_record %}Save{% else %}Submit for Approval{% endif %}</button>
+  </form>
+</div>
+{% endif %}
+<div class="erp-table-panel" data-erp-table>
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead><tr><th>BG No</th><th>Type</th><th>Project</th><th>Amount</th><th>Expiry</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>{{ row.bg_number }}</td>
+          <td>{{ row.bg_type }}</td>
+          <td>{{ row.project_name or '—' }}</td>
+          <td>₹{{ '{:,.2f}'.format(row.amount) }}</td>
+          <td>{{ row.expiry_date or '—' }}</td>
+          <td>{{ approval_badge(row.approval_status) }}</td>
+          <td>{{ maker_row_actions('treasury_bank_guarantees', 'bank_guarantees', row.id, row.approval_status, module_id, 'treasury_bank_guarantees') }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7">No bank guarantees yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

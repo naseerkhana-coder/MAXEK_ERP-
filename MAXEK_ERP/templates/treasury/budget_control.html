@@ -1,0 +1,79 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Budget Control' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('treasury_hub') ~ '">Treasury</a> &gt; Budget Control' %}
+{% block content %}
+<p style="color:#64748b;margin-top:0;">
+  Track approved budget vs committed and actual costs by project. Integrated with Purchase, Store, Payroll, Subcontract, and Equipment modules where data exists.
+</p>
+
+{% if alerts %}
+<div class="erp-alert erp-alert-warning" style="margin-bottom:1rem;padding:0.75rem 1rem;border-radius:0.5rem;background:#fef2f2;border:1px solid #ef4444;">
+  <strong><i class="fa-solid fa-triangle-exclamation"></i> {{ alerts|length }} budget alert(s)</strong>
+  <ul style="margin:0.5rem 0 0 1.25rem;padding:0;font-size:0.9rem;">
+    {% for a in alerts[:5] %}
+    <li>
+      <a href="{{ url_for('treasury_budget_control_project', project_id=a.project_id) }}">{{ a.project_name }}</a>
+      — {{ a.category }}
+      {% if 'budget_exceeded' in a.alert_types %}<span class="approval-badge approval-bounced">Budget Exceeded</span>{% endif %}
+      {% if 'cost_overrun' in a.alert_types %}<span class="approval-badge approval-bounced">Cost Overrun</span>{% endif %}
+      (₹{{ '{:,.0f}'.format(a.utilized) }} / ₹{{ '{:,.0f}'.format(a.budget_amount) }})
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<form method="get" class="erp-table-toolbar" style="margin-bottom:1rem;display:flex;gap:0.5rem;align-items:center;">
+  <input name="fiscal_year" value="{{ fiscal_year or '' }}" placeholder="Fiscal year (optional)" style="max-width:160px;">
+  <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Filter</button>
+  <a href="{{ url_for('treasury_budget_control') }}" class="erp-btn erp-btn-ghost erp-btn-sm">Reset</a>
+</form>
+
+<div class="erp-table-panel" data-erp-table>
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead>
+        <tr>
+          <th>Project</th>
+          <th>Status</th>
+          <th>Budget</th>
+          <th>Committed</th>
+          <th>Actual</th>
+          <th>Balance</th>
+          <th>Used %</th>
+          <th>Alert</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in overview %}
+        <tr{% if row.has_alert %} style="background:#fff7ed;"{% endif %}>
+          <td>
+            <strong>{{ row.project_name }}</strong>
+            {% if row.location %}<br><span style="font-size:0.85rem;color:#64748b;">{{ row.location }}</span>{% endif %}
+          </td>
+          <td>{{ row.status or '—' }}</td>
+          <td>₹{{ '{:,.2f}'.format(row.budget_amount) }}</td>
+          <td>₹{{ '{:,.2f}'.format(row.committed_cost) }}</td>
+          <td>₹{{ '{:,.2f}'.format(row.actual_cost) }}</td>
+          <td>₹{{ '{:,.2f}'.format(row.balance) }}</td>
+          <td>{{ row.pct_used }}%</td>
+          <td>
+            {% if row.has_alert %}
+              {% if 'budget_exceeded' in row.alerts %}<span class="approval-badge approval-bounced">Exceeded</span>{% endif %}
+              {% if 'cost_overrun' in row.alerts %}<span class="approval-badge approval-bounced">Overrun</span>{% endif %}
+            {% else %}—{% endif %}
+          </td>
+          <td>
+            <a href="{{ url_for('treasury_budget_control_project', project_id=row.project_id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">View</a>
+            <a href="{{ url_for('treasury_budget_control_edit', project_id=row.project_id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Edit</a>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9">No projects found. Add projects first, then set budget lines.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

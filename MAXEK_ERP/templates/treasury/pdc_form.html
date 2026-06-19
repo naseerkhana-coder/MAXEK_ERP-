@@ -1,0 +1,79 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'New PDC' if not edit_record else 'Edit PDC #' ~ edit_record.cheque_number %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('treasury_hub') ~ '">Treasury</a> &gt; <a href="' ~ url_for('treasury_pdc_register') ~ '">PDC Register</a> &gt; ' ~ ('Edit' if edit_record else 'New') %}
+{% block content %}
+<div class="erp-form-card" id="record-form">
+  <h3 class="erp-form-title">{% if edit_record %}Edit PDC #{{ edit_record.cheque_number }}{% else %}New Post-Dated Cheque{% endif %}</h3>
+  <form method="post" action="{% if edit_record %}{{ url_for('treasury_pdc_detail', pdc_id=edit_record.id) }}{% else %}{{ url_for('treasury_pdc_new') }}{% endif %}">
+    <div class="erp-form-grid">
+      <div class="erp-field">
+        <select name="pdc_type" required>
+          {% for t in pdc_types %}
+          <option value="{{ t }}" {% if edit_record and edit_record.pdc_type == t %}selected{% elif not edit_record and t == 'Received' %}selected{% endif %}>{{ t }}</option>
+          {% endfor %}
+        </select>
+        <label>PDC Type *</label>
+      </div>
+      <div class="erp-field">
+        <select name="bank_account_id" required>
+          <option value="">—</option>
+          {% for a in accounts %}
+          <option value="{{ a.id }}" {% if edit_record and edit_record.bank_account_id == a.id %}selected{% endif %}>{{ a.bank_name }} — {{ a.account_number }}</option>
+          {% endfor %}
+        </select>
+        <label>Bank Account *</label>
+      </div>
+      <div class="erp-field">
+        <input name="cheque_number" required placeholder=" " value="{{ edit_record.cheque_number if edit_record else '' }}">
+        <label>Cheque Number *</label>
+      </div>
+      <div class="erp-field">
+        <input type="date" name="cheque_date" required value="{{ edit_record.cheque_date if edit_record else '' }}">
+        <label>Cheque Date (Maturity) *</label>
+      </div>
+      <div class="erp-field">
+        <input type="date" name="transaction_date" required value="{{ edit_record.transaction_date if edit_record else default_date }}">
+        <label>Received / Issued Date *</label>
+      </div>
+      <div class="erp-field">
+        <input name="party_name" required placeholder=" " value="{{ edit_record.party_name if edit_record else '' }}">
+        <label>Party / Beneficiary *</label>
+      </div>
+      <div class="erp-field">
+        <input type="number" step="0.01" name="amount" required placeholder=" " value="{{ edit_record.amount if edit_record else '' }}">
+        <label>Amount *</label>
+      </div>
+      <div class="erp-field">
+        <select name="project_id">
+          <option value="">—</option>
+          {% for p in projects %}
+          <option value="{{ p.id }}" {% if edit_record and edit_record.project_id == p.id %}selected{% endif %}>{{ p.project_name }}</option>
+          {% endfor %}
+        </select>
+        <label>Project (optional)</label>
+      </div>
+      <div class="erp-field">
+        <select name="vendor_id">
+          <option value="">—</option>
+          {% for v in vendors %}
+          <option value="{{ v.id }}" {% if edit_record and edit_record.vendor_id == v.id %}selected{% endif %}>{{ v.code }} — {{ v.name }}</option>
+          {% endfor %}
+        </select>
+        <label>Vendor (optional)</label>
+      </div>
+      <div class="erp-field">
+        <input name="client_name" placeholder=" " value="{{ edit_record.client_name if edit_record else '' }}">
+        <label>Client Name (optional)</label>
+      </div>
+      <div class="erp-field span-2">
+        <textarea name="remarks" placeholder=" ">{{ edit_record.remarks if edit_record else '' }}</textarea>
+        <label>Remarks</label>
+      </div>
+    </div>
+    <div style="display:flex;gap:0.5rem;margin-top:1rem;">
+      <button type="submit" class="erp-btn erp-btn-primary">{% if edit_record %}Save Changes{% else %}Create PDC{% endif %}</button>
+      <a href="{% if edit_record %}{{ url_for('treasury_pdc_detail', pdc_id=edit_record.id) }}{% else %}{{ url_for('treasury_pdc_register') }}{% endif %}" class="erp-btn erp-btn-ghost">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,57 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Bank & Treasury' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; Treasury' %}
+{% block content %}
+<div class="erp-summary-grid" style="margin-bottom: 1.5rem;">
+  <div class="erp-stat-card"><span>Active Accounts</span><strong>{{ stats.active_accounts }}</strong></div>
+  <div class="erp-stat-card"><span>Total Balance</span><strong>₹{{ '{:,.2f}'.format(stats.total_balance) }}</strong></div>
+  <div class="erp-stat-card"><span>Pending Payments</span><strong>{{ stats.pending_payments }}</strong></div>
+  <div class="erp-stat-card"><span>Pending Receipts</span><strong>{{ stats.pending_receipts }}</strong></div>
+  <div class="erp-stat-card"><span>BG Exposure</span><strong>₹{{ '{:,.2f}'.format(stats.bg_exposure) }}</strong></div>
+  <div class="erp-stat-card"><span>OD Utilized</span><strong>₹{{ '{:,.2f}'.format(stats.od_utilized) }}</strong></div>
+  <div class="erp-stat-card"><span>BG Alerts</span><strong>{{ stats.bg_alerts }}</strong></div>
+  <div class="erp-stat-card"><span>PDC Due Alerts</span><strong>{{ stats.pdc_due_alerts }}</strong></div>
+  <div class="erp-stat-card"><span>FD Maturity Alerts</span><strong>{{ stats.fd_maturity_alerts }}</strong></div>
+  <div class="erp-stat-card"><span>Active FD Amount</span><strong>₹{{ '{:,.2f}'.format(stats.active_fd_amount) }}</strong></div>
+  <div class="erp-stat-card"><span>Unmatched Recon</span><strong>{{ stats.unmatched_recon }}</strong></div>
+</div>
+{% if pdc_alerts %}
+<div class="erp-alert erp-alert-warning" style="margin-bottom:1rem;padding:0.75rem 1rem;border-radius:0.5rem;background:#fef3c7;border:1px solid #f59e0b;">
+  <strong><i class="fa-solid fa-bell"></i> {{ pdc_alerts|length }} post-dated cheque(s) due within 7 days</strong>
+  <ul style="margin:0.5rem 0 0 1.25rem;padding:0;font-size:0.9rem;">
+    {% for a in pdc_alerts[:3] %}
+    <li>
+      <a href="{{ url_for('treasury_pdc_detail', pdc_id=a.id) }}">{{ a.pdc_type }} #{{ a.cheque_number }}</a>
+      — {{ a.party_name }} — due {{ a.cheque_date }} ({{ a.days_left }}d)
+    </li>
+    {% endfor %}
+  </ul>
+  <a href="{{ url_for('treasury_pdc_register', due_soon=1) }}" style="font-size:0.85rem;">View PDC register →</a>
+</div>
+{% endif %}
+{% if fd_alerts %}
+<div class="erp-alert erp-alert-warning" style="margin-bottom:1.5rem;padding:0.75rem 1rem;border-radius:0.5rem;background:#fef3c7;border:1px solid #f59e0b;">
+  <strong><i class="fa-solid fa-piggy-bank"></i> {{ fd_alerts|length }} fixed deposit(s) maturing within 90 days</strong>
+  <ul style="margin:0.5rem 0 0 1.25rem;padding:0;font-size:0.9rem;">
+    {% for a in fd_alerts[:3] %}
+    <li>
+      <a href="{{ url_for('treasury_fd_detail', fd_id=a.id) }}">#{{ a.fd_number }}</a>
+      — {{ a.bank_name or '—' }} — matures {{ a.maturity_date }} ({{ a.days_left }}d)
+    </li>
+    {% endfor %}
+  </ul>
+  <a href="{{ url_for('treasury_fixed_deposits', maturing_soon=1) }}" style="font-size:0.85rem;">View FD register →</a>
+</div>
+{% endif %}
+<div class="erp-summary-grid" style="grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem;">
+  {% for mod in modules %}
+  <a href="{{ url_for(mod.endpoint) }}" class="erp-form-card" style="text-decoration:none;color:inherit;display:block;padding:1.25rem;">
+    <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.5rem;">
+      <i class="fa-solid {{ mod.icon }}" style="font-size:1.5rem;color:var(--erp-primary,#2563eb);"></i>
+      <h3 style="margin:0;font-size:1rem;">{{ mod.label }}</h3>
+    </div>
+    <p style="margin:0;font-size:0.85rem;color:#64748b;">{{ mod.description }}</p>
+  </a>
+  {% endfor %}
+</div>
+{% endblock %}
