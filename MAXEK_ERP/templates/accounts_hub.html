@@ -1,0 +1,47 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Accounts & Finance' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; Accounts' %}
+{% block content %}
+<div class="erp-summary-grid" style="margin-bottom: 1.5rem;">
+  <div class="erp-stat-card">
+    <span>Chart Heads</span>
+    <strong>{{ stats.chart_heads }}</strong>
+  </div>
+  <div class="erp-stat-card">
+    <span>Expense Entries</span>
+    <strong>{{ stats.expenses }}</strong>
+  </div>
+  <div class="erp-stat-card">
+    <span>Pending Expenses</span>
+    <strong>{{ stats.pending_expenses }}</strong>
+  </div>
+  <div class="erp-stat-card">
+    <span>Payment Vouchers</span>
+    <strong>{{ stats.payments }}</strong>
+  </div>
+  <div class="erp-stat-card">
+    <span>Receipt Vouchers</span>
+    <strong>{{ stats.receipts }}</strong>
+  </div>
+  <div class="erp-stat-card">
+    <span>Journal Entries</span>
+    <strong>{{ stats.journal_entries or 0 }}</strong>
+  </div>
+  <div class="erp-stat-card">
+    <span>TDS Pending Filing</span>
+    <strong>{{ stats.tds_pending or 0 }}</strong>
+  </div>
+</div>
+
+<div class="erp-summary-grid" style="grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem;">
+  {% for mod in modules %}
+  <a href="{{ url_for(mod.endpoint) }}" class="erp-form-card" style="text-decoration:none;color:inherit;display:block;padding:1.25rem;">
+    <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.5rem;">
+      <i class="fa-solid {{ mod.icon }}" style="font-size:1.5rem;color:var(--erp-primary,#2563eb);"></i>
+      <h3 style="margin:0;font-size:1rem;">{{ mod.label }}</h3>
+    </div>
+    <p style="margin:0;font-size:0.85rem;color:#64748b;">{{ mod.description }}</p>
+  </a>
+  {% endfor %}
+</div>
+{% endblock %}

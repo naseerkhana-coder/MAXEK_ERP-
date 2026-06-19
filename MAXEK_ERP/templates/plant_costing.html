@@ -1,0 +1,53 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Production Costing' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('plant_dashboard') ~ '">Plant</a> &gt; Costing' %}
+{% block content %}
+<div class="erp-validation" style="margin-bottom:1rem;">
+  Estimated material cost from production consumption × default material rates. Configure rates in <code>plant_material_rates</code> (seeded on first run).
+</div>
+
+<form method="get" class="erp-form-grid" style="margin-bottom:1rem;max-width:720px;">
+  <div class="erp-field"><input type="date" name="from" value="{{ date_from }}"><label>From</label></div>
+  <div class="erp-field"><input type="date" name="to" value="{{ date_to }}"><label>To</label></div>
+  <div class="erp-field">
+    <select name="plant_id">
+      <option value="">All plants</option>
+      {% for pl in plants %}<option value="{{ pl.id }}" {% if plant_filter == pl.id %}selected{% endif %}>{{ pl.plant_name }}</option>{% endfor %}
+    </select>
+    <label>Plant</label>
+  </div>
+  <div class="erp-field" style="align-self:end;"><button type="submit" class="erp-btn erp-btn-primary">Apply</button></div>
+</form>
+
+<div class="erp-summary-grid" style="margin-bottom:1.5rem;">
+  <div class="erp-stat-card"><span>Production Lines</span><strong>{{ summary.total_lines }}</strong></div>
+  <div class="erp-stat-card"><span>Total Output Qty</span><strong>{{ '%.1f'|format(summary.total_output_qty) }}</strong></div>
+  <div class="erp-stat-card"><span>Est. Material Cost</span><strong>₹{{ '{:,.0f}'.format(summary.total_material_cost) }}</strong></div>
+  <div class="erp-stat-card"><span>Avg Cost / Unit</span><strong>₹{{ '%.2f'|format(summary.avg_cost_per_unit) }}</strong></div>
+</div>
+
+<div class="erp-table-panel" data-erp-table>
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead>
+        <tr><th>Date</th><th>Module</th><th>Plant</th><th>Output</th><th>Qty</th><th>Material Cost</th><th>Cost/Unit</th></tr>
+      </thead>
+      <tbody>
+        {% for row in summary.lines %}
+        <tr>
+          <td>{{ row.date }}</td>
+          <td>{{ row.module }}</td>
+          <td>{{ row.plant_name }}</td>
+          <td>{{ row.output }}</td>
+          <td>{{ '%.2f'|format(row.output_qty) }} {{ row.output_unit }}</td>
+          <td>₹{{ '{:,.0f}'.format(row.material_cost) }}</td>
+          <td>₹{{ '%.2f'|format(row.cost_per_unit) }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7">No production with consumption in this period.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

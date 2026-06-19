@@ -1,0 +1,92 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Quotations' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('office_admin') ~ '">Office</a> &gt; Quotations' %}
+{% block page_actions %}
+<a href="{{ url_for('office_quotations', new=1) }}#record-form" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> New Quotation</a>
+{% endblock %}
+{% block content %}
+{% if view_record %}
+<div class="erp-form-card" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">{{ view_record.quotation_number }}</h3>
+  <p><strong>Client:</strong> {{ view_record.client_name }} | <strong>Date:</strong> {{ view_record.quotation_date }}</p>
+  <p><strong>Grand Total:</strong> ₹{{ '%.2f'|format(view_record.grand_total or 0) }}</p>
+  <table class="erp-table" style="margin-top:0.75rem;">
+    <thead><tr><th>#</th><th>Description</th><th>Qty</th><th>Rate</th><th>GST%</th><th>Total</th></tr></thead>
+    <tbody>
+      {% for line in view_record.lines %}
+      <tr><td>{{ line.line_no }}</td><td>{{ line.description }}</td><td>{{ line.quantity }} {{ line.unit or '' }}</td><td>{{ '%.2f'|format(line.rate or 0) }}</td><td>{{ line.gst_percent or 0 }}%</td><td>{{ '%.2f'|format(line.line_total or 0) }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p style="margin-top:0.75rem;"><a href="{{ url_for('office_quotation_print', quotation_id=view_record.id) }}" target="_blank" class="erp-btn erp-btn-ghost erp-btn-sm"><i class="fa-solid fa-print"></i> Print</a>
+  <a href="{{ url_for('office_quotations', edit=view_record.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Edit</a></p>
+</div>
+{% endif %}
+
+{% if show_form %}
+<div class="erp-form-card" id="record-form" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">{% if edit_record %}Edit {{ edit_record.quotation_number }}{% else %}New Quotation{% endif %}</h3>
+  <form method="post" data-store-lines-form>
+    {% if edit_record %}<input type="hidden" name="record_id" value="{{ edit_record.id }}">{% endif %}
+    <div class="erp-form-grid">
+      <div class="erp-field"><input type="date" name="quotation_date" required value="{{ edit_record.quotation_date if edit_record else default_date }}"><label>Quotation Date *</label></div>
+      <div class="erp-field"><input name="client_name" required placeholder=" " value="{{ edit_record.client_name if edit_record else '' }}"><label>Client Name *</label></div>
+      <div class="erp-field span-2"><textarea name="client_address" placeholder=" ">{{ edit_record.client_address if edit_record else '' }}</textarea><label>Client Address</label></div>
+      <div class="erp-field"><input name="client_gstin" placeholder=" " value="{{ edit_record.client_gstin if edit_record else '' }}"><label>Client GSTIN</label></div>
+      <div class="erp-field"><input name="client_contact" placeholder=" " value="{{ edit_record.client_contact if edit_record else '' }}"><label>Contact</label></div>
+      <div class="erp-field"><select name="project_id"><option value="">—</option>{% for p in projects %}<option value="{{ p.id }}" {% if edit_record and edit_record.project_id == p.id %}selected{% endif %}>{{ p.project_name }}</option>{% endfor %}</select><label>Project</label></div>
+      <div class="erp-field"><select name="tax_type">{% for t in tax_types %}<option value="{{ t }}" {% if edit_record and edit_record.tax_type == t %}selected{% endif %}>{{ t }}</option>{% endfor %}</select><label>Default Tax Type</label></div>
+      <div class="erp-field"><input type="number" name="validity_days" value="{{ edit_record.validity_days if edit_record else 30 }}"><label>Validity (days)</label></div>
+      <div class="erp-field span-2"><input name="subject" placeholder=" " value="{{ edit_record.subject if edit_record else '' }}"><label>Subject</label></div>
+      <div class="erp-field span-2"><textarea name="terms" placeholder=" ">{{ edit_record.terms if edit_record else '' }}</textarea><label>Terms</label></div>
+    </div>
+    <div class="erp-table-panel" style="margin-top:1rem;">
+      <div class="erp-table-toolbar"><h3 class="erp-table-title">Line Items</h3><button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-add-line>Add Line</button></div>
+      <div class="erp-table-scroll">
+        <table class="erp-table" data-lines-table>
+          <thead><tr><th>Description *</th><th>Qty</th><th>Unit</th><th>Rate</th><th>GST%</th><th>Tax</th><th></th></tr></thead>
+          <tbody>
+            {% set lines = edit_record.lines if edit_record else [{'description':'','quantity':1,'unit':'Nos','rate':0,'gst_percent':18,'tax_type':'CGST_SGST'}] %}
+            {% for line in lines %}
+            <tr data-line-row>
+              <td><input name="description[]" required value="{{ line.description }}"></td>
+              <td><input type="number" step="0.01" name="quantity[]" value="{{ line.quantity or 1 }}"></td>
+              <td><input name="unit[]" value="{{ line.unit or 'Nos' }}"></td>
+              <td><input type="number" step="0.01" name="rate[]" value="{{ line.rate or 0 }}"></td>
+              <td><select name="gst_percent[]">{% for g in gst_rates %}<option value="{{ g }}" {% if (line.gst_percent or 18)|int == g|int %}selected{% endif %}>{{ g }}%</option>{% endfor %}</select></td>
+              <td><select name="tax_type[]">{% for t in tax_types %}<option value="{{ t }}" {% if (line.tax_type or 'CGST_SGST') == t %}selected{% endif %}>{{ t }}</option>{% endfor %}</select></td>
+              <td><button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-remove-line>×</button></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <button type="submit" class="erp-btn erp-btn-primary" style="margin-top:1rem;">Save Quotation</button>
+  </form>
+</div>
+{% endif %}
+
+<div class="erp-table-panel" data-erp-table>
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead><tr><th>Quotation No</th><th>Date</th><th>Client</th><th>Project</th><th>Total</th><th></th></tr></thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>{{ row.quotation_number }}</td>
+          <td>{{ row.quotation_date or '—' }}</td>
+          <td>{{ row.client_name }}</td>
+          <td>{{ row.project_name or '—' }}</td>
+          <td>₹{{ '%.2f'|format(row.grand_total or 0) }}</td>
+          <td><a href="{{ url_for('office_quotations', view=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">View</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6">No quotations yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/store-forms.js') }}"></script>{% endblock %}

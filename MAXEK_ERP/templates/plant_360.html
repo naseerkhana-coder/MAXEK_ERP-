@@ -1,0 +1,81 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Plant 360° View' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('plant_dashboard') ~ '">Plant</a> &gt; 360° View' %}
+{% block content %}
+<form method="get" style="margin-bottom:1.25rem;display:flex;gap:0.75rem;flex-wrap:wrap;align-items:flex-end;">
+  <div class="erp-field" style="min-width:280px;">
+    <select name="plant_id" required onchange="this.form.submit()">
+      <option value="">Select a plant…</option>
+      {% for pl in plants %}
+      <option value="{{ pl.id }}" {% if plant_id == pl.id %}selected{% endif %}>{{ pl.plant_name }} — {{ pl.plant_type }} ({{ pl.plant_id }})</option>
+      {% endfor %}
+    </select>
+    <label>Plant</label>
+  </div>
+</form>
+
+{% if data %}
+<div class="erp-form-card" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">{{ data.plant.plant_name }} <small style="font-weight:400;">{{ data.plant.plant_id }}</small></h3>
+  <p><strong>Type:</strong> {{ data.plant.plant_type }} | <strong>Status:</strong> {{ data.plant.status }} | <strong>Location:</strong> {{ data.plant.location or '—' }}</p>
+  <p><strong>Incharge:</strong> {{ data.plant.incharge or '—' }} | <strong>Project:</strong> {{ data.plant.project_name or '—' }} | <strong>Capacity:</strong> {{ data.plant.capacity or '—' }}</p>
+  <div style="margin-top:0.75rem;display:flex;gap:0.5rem;flex-wrap:wrap;">
+    <a href="{{ url_for('plant_plants', edit=data.plant.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Edit Master</a>
+    <a href="{{ url_for('plant_qc', plant_id=data.plant.id, new=1) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Add QC</a>
+    <a href="{{ url_for('plant_maintenance', plant_id=data.plant.id, new=1) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Add Maintenance</a>
+    <a href="{{ url_for('plant_costing', plant_id=data.plant.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">View Costing</a>
+  </div>
+</div>
+
+<div class="erp-summary-grid" style="margin-bottom:1rem;">
+  <div class="erp-stat-card"><span>Asphalt Today</span><strong>{{ '%.1f'|format(data.production_today.asphalt_ton) }} T</strong></div>
+  <div class="erp-stat-card"><span>RMC Today</span><strong>{{ '%.1f'|format(data.production_today.rmc_m3) }} m³</strong></div>
+  <div class="erp-stat-card"><span>Wet Mix Today</span><strong>{{ '%.1f'|format(data.production_today.wetmix_ton) }} T</strong></div>
+  <div class="erp-stat-card"><span>Crusher/M-Sand Today</span><strong>{{ '%.1f'|format(data.production_today.crusher_ton) }} T</strong></div>
+  <div class="erp-stat-card"><span>Precast Today</span><strong>{{ '%.0f'|format(data.production_today.precast_nos) }} Nos</strong></div>
+  <div class="erp-stat-card"><span>MTD Material Cost</span><strong>₹{{ '{:,.0f}'.format(data.costing_month.total_material_cost) }}</strong></div>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1rem;">
+  <div class="erp-form-card">
+    <h4 class="erp-form-title">Stock Balances</h4>
+    <div class="erp-table-scroll">
+      <table class="erp-table erp-table-sm">
+        <thead><tr><th>Material</th><th>Closing</th><th>Unit</th></tr></thead>
+        <tbody>
+          {% for s in data.stock %}
+          <tr><td>{{ s.material_type }}</td><td>{{ '%.2f'|format(s.closing or 0) }}</td><td>{{ s.unit }}</td></tr>
+          {% else %}
+          <tr><td colspan="3">No stock ledger for this plant.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="erp-form-card">
+    <h4 class="erp-form-title">Recent QC <a href="{{ url_for('plant_qc', plant_id=data.plant.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm" style="float:right;">All</a></h4>
+    <ul style="margin:0;padding-left:1.1rem;font-size:0.9rem;">
+      {% for q in data.qc_recent %}
+      <li>{{ q.qc_date }} — {{ q.test_type }}: <strong>{{ q.pass_fail }}</strong></li>
+      {% else %}
+      <li>No QC records.</li>
+      {% endfor %}
+    </ul>
+  </div>
+  <div class="erp-form-card">
+    <h4 class="erp-form-title">Open Maintenance <a href="{{ url_for('plant_maintenance', plant_id=data.plant.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm" style="float:right;">All</a></h4>
+    <ul style="margin:0;padding-left:1.1rem;font-size:0.9rem;">
+      {% for j in data.maintenance_open %}
+      <li>{{ j.job_number }} — {{ j.equipment_name }} ({{ j.status }})</li>
+      {% else %}
+      <li>No open jobs.</li>
+      {% endfor %}
+    </ul>
+  </div>
+</div>
+{% elif plant_id %}
+<div class="erp-validation">Plant not found.</div>
+{% else %}
+<div class="erp-validation">Select a plant above to view the 360° snapshot — production today, stock, QC, maintenance and month-to-date costing.</div>
+{% endif %}
+{% endblock %}

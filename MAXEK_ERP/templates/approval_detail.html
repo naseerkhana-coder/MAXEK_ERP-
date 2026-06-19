@@ -1,0 +1,54 @@
+{% extends 'base_maxek.html' %}
+{% from 'macros/erp_ui.html' import role_status_badge, checker_row_actions, approver_row_actions, maker_row_actions, approval_history_timeline, reject_modal %}
+{% set page_title = 'Approval Detail — ' ~ item.reference_no %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('approvals', role=role) ~ '">Approvals</a> &gt; ' ~ item.reference_no %}
+{% block content %}
+<div class="erp-form-card approval-detail-card">
+  <div class="approval-detail-header">
+    <div>
+      <h2 class="erp-form-title">{{ item.module_name }}</h2>
+      <p class="approval-detail-ref">Reference: <strong>{{ item.reference_no }}</strong></p>
+    </div>
+    <div>{{ role_status_badge(item.record_status, role) }}</div>
+  </div>
+
+  <div class="approval-detail-grid">
+    <div><span class="detail-label">Maker</span><strong>{{ item.maker_name }}</strong></div>
+    <div><span class="detail-label">Created</span><strong>{{ item.created_at|app_datetime if item.created_at else '—' }}</strong></div>
+    <div><span class="detail-label">Record ID</span><strong>#{{ item.record_id }}</strong></div>
+    <div><span class="detail-label">Table</span><strong>{{ item.record_table }}</strong></div>
+    {% if item.maker_designation %}
+    <div><span class="detail-label">Maker Role</span><strong>{{ item.maker_designation }}</strong></div>
+    {% endif %}
+    {% if item.checker_designation %}
+    <div><span class="detail-label">Checker Role</span><strong>{{ item.checker_designation }}</strong></div>
+    {% endif %}
+    {% if item.approver_designation %}
+    <div><span class="detail-label">Approver Role</span><strong>{{ item.approver_designation }}</strong></div>
+    {% endif %}
+  </div>
+
+  <div class="erp-form-actions approval-detail-actions">
+    <a href="{{ url_for('approvals', role=role) }}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-arrow-left"></i> Back to queue</a>
+    <a href="{{ url_for(module_route, view=item.record_id) }}" class="erp-btn erp-btn-primary"><i class="fa-solid fa-file-lines"></i> Open full record</a>
+    {% if role == 'checker' %}
+      {{ checker_row_actions(item.id, module_route, item.record_id, item.record_status, role) }}
+    {% elif role == 'approver' %}
+      {{ approver_row_actions(item.id, module_route, item.record_id, item.record_status) }}
+    {% elif role == 'maker' %}
+      {{ maker_row_actions(module_route, item.record_table, item.record_id, item.record_status, item.module_id, module_route) }}
+    {% endif %}
+  </div>
+</div>
+
+<div class="erp-form-card" style="margin-top: 1rem;">
+  <h3 class="erp-form-title">Approval History</h3>
+  {{ approval_history_timeline(item.history) }}
+</div>
+
+{{ reject_modal() }}
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/workflow.js') }}"></script>
+{% endblock %}

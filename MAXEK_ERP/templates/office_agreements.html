@@ -1,0 +1,61 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Agreement Register' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('office_admin') ~ '">Office</a> &gt; Agreements' %}
+{% block page_actions %}
+<a href="{{ url_for('office_agreements', new=1) }}#record-form" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> New Agreement</a>
+{% endblock %}
+{% block content %}
+{% if view_record %}
+<div class="erp-form-card" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">{{ view_record.agreement_number }} — {{ view_record.title }}</h3>
+  <p><strong>Party:</strong> {{ view_record.party_name }} | <strong>Type:</strong> {{ view_record.agreement_type or '—' }}</p>
+  <p><strong>Period:</strong> {{ view_record.start_date or '—' }} to {{ view_record.end_date or '—' }} | <strong>Value:</strong> ₹{{ '%.2f'|format(view_record.value or 0) }}</p>
+  {% if view_record.attachment %}<p><a href="{{ url_for('office_document_download', filename=view_record.attachment) }}" class="erp-btn erp-btn-ghost erp-btn-sm"><i class="fa-solid fa-download"></i> Attachment</a></p>{% endif %}
+  <a href="{{ url_for('office_agreements', edit=view_record.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Edit</a>
+</div>
+{% endif %}
+
+{% if show_form %}
+<div class="erp-form-card" id="record-form" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">{% if edit_record %}Edit {{ edit_record.agreement_number }}{% else %}New Agreement{% endif %}</h3>
+  <form method="post" enctype="multipart/form-data">
+    {% if edit_record %}<input type="hidden" name="record_id" value="{{ edit_record.id }}">{% endif %}
+    <div class="erp-form-grid">
+      <div class="erp-field span-2"><input name="title" required placeholder=" " value="{{ edit_record.title if edit_record else '' }}"><label>Title *</label></div>
+      <div class="erp-field"><input name="party_name" required placeholder=" " value="{{ edit_record.party_name if edit_record else '' }}"><label>Party Name *</label></div>
+      <div class="erp-field"><select name="agreement_type">{% for t in agreement_types %}<option value="{{ t }}" {% if edit_record and edit_record.agreement_type == t %}selected{% endif %}>{{ t }}</option>{% endfor %}</select><label>Type</label></div>
+      <div class="erp-field"><input type="date" name="start_date" value="{{ edit_record.start_date if edit_record else '' }}"><label>Start Date</label></div>
+      <div class="erp-field"><input type="date" name="end_date" value="{{ edit_record.end_date if edit_record else '' }}"><label>End Date</label></div>
+      <div class="erp-field"><input type="number" step="0.01" name="value" value="{{ edit_record.value if edit_record else 0 }}"><label>Value (₹)</label></div>
+      <div class="erp-field"><select name="project_id"><option value="">—</option>{% for p in projects %}<option value="{{ p.id }}" {% if edit_record and edit_record.project_id == p.id %}selected{% endif %}>{{ p.project_name }}</option>{% endfor %}</select><label>Project</label></div>
+      <div class="erp-field span-2"><textarea name="remarks" placeholder=" ">{{ edit_record.remarks if edit_record else '' }}</textarea><label>Remarks</label></div>
+      <div class="erp-field span-2"><input type="file" name="attachment" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"><label>Attachment</label></div>
+    </div>
+    <button type="submit" class="erp-btn erp-btn-primary">Save</button>
+  </form>
+</div>
+{% endif %}
+
+<form method="get" style="margin-bottom:0.75rem;"><input name="q" value="{{ search }}" placeholder="Search agreements…" style="max-width:280px;"> <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Search</button></form>
+<div class="erp-table-panel" data-erp-table>
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead><tr><th>Agreement No</th><th>Title</th><th>Party</th><th>End Date</th><th>Value</th><th></th></tr></thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>{{ row.agreement_number }}</td>
+          <td>{{ row.title }}</td>
+          <td>{{ row.party_name }}</td>
+          <td>{{ row.end_date or '—' }}</td>
+          <td>₹{{ '%.2f'|format(row.value or 0) }}</td>
+          <td><a href="{{ url_for('office_agreements', view=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">View</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6">No agreements yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

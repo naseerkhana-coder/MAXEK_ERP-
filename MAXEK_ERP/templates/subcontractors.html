@@ -2,26 +2,226 @@
 {% from 'macros/erp_ui.html' import approval_badge, erp_pagination %}
 {% set page_title = 'Subcontract' %}
 {% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; Operations &gt; Subcontract' %}
+{% set form_sub = editing_subcontractor %}
 {% block page_actions %}
-<a href="#add-subcontractor" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> Add Subcontractor</a>
+<a href="{{ url_for('subcontractors') }}#add-subcontractor" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> Add Subcontractor</a>
+{% if form_sub %}<a href="{{ url_for('subcontractors') }}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-xmark"></i> Cancel Edit</a>{% endif %}
 {% endblock %}
 {% block content %}
 <div class="module-layout">
   <div class="erp-form-card" id="add-subcontractor">
-    <h3 class="erp-form-title">Add Sub Contractor</h3>
-    <form method="post" enctype="multipart/form-data" class="erp-form-grid">
-      <div class="erp-field span-2"><input name="subcontractor_name" placeholder=" " required><label>Sub Contractor Name</label></div>
-      <div class="erp-field"><input name="company_name" placeholder=" "><label>Company Name</label></div>
-      <div class="erp-field"><input name="mobile" placeholder=" "><label>Mobile</label></div>
-      <div class="erp-field"><input type="email" name="email" placeholder=" "><label>Email</label></div>
-      <div class="erp-field span-2"><textarea name="address" placeholder=" "></textarea><label>Address</label></div>
-      <div class="erp-field"><input name="work_type" placeholder=" "><label>Work Type</label></div>
-      <div class="erp-field"><select name="payment_mode"><option>Cash</option><option>Bank Transfer</option><option>Cheque</option><option>UPI</option></select><label>Payment Mode</label></div>
-      <div class="erp-field"><input name="working_hours" type="number" step="0.1" placeholder=" "><label>Working Hours</label></div>
-      <div class="erp-field"><input name="gst_number" placeholder=" "><label>GST Number</label></div>
-      <div class="erp-field span-2"><input name="id_proof" type="file"><label>ID Proof</label></div>
-      <div class="erp-field"><select name="status"><option selected>Active</option><option>Inactive</option></select><label>Status</label></div>
-      <div class="erp-form-actions"><button class="erp-btn erp-btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Save Sub Contractor</button></div>
+    <h3 class="erp-form-title">{{ 'Edit Sub Contractor' if form_sub else 'Add Sub Contractor' }}</h3>
+    <form method="post" enctype="multipart/form-data" class="erp-form-grid" data-subcontractor-form
+          {% if form_sub %}data-edit-mode="1" data-sub-code="{{ form_sub.subcontractor_code or '' }}"{% endif %}>
+      {% if form_sub %}<input type="hidden" name="subcontractor_id" value="{{ form_sub.id }}">{% endif %}
+
+      <div class="erp-field span-2"><input name="subcontractor_name" id="subcontractor_name" placeholder=" " required data-sub-name-input value="{{ form_sub.subcontractor_name if form_sub else '' }}"><label>Sub Contractor Name</label></div>
+      <div class="erp-field"><input id="subcontractor_code_preview" placeholder=" " readonly data-sub-code-preview value="{{ form_sub.subcontractor_code if form_sub else '' }}"><label>Sub Contractor ID (Auto)</label></div>
+      <div class="erp-field"><input name="date_of_birth" type="date" placeholder=" " value="{{ form_sub.date_of_birth if form_sub else '' }}"><label>Date of Birth</label></div>
+
+      <div class="erp-field"><input name="id_number" placeholder=" " value="{{ form_sub.id_number if form_sub else '' }}"><label>ID Number</label></div>
+      <div class="erp-field span-2"><input name="id_document" type="file" accept="image/*,.pdf"><label>ID Document Upload{% if form_sub and form_sub.id_document %} <span class="erp-hint">(on file: {{ form_sub.id_document }})</span>{% endif %}</label></div>
+      <div class="erp-field span-2"><input name="photo" type="file" accept="image/*"><label>Photo Upload{% if form_sub and form_sub.photo %} <span class="erp-hint">(on file: {{ form_sub.photo }})</span>{% endif %}</label></div>
+      <div class="erp-field"><input name="mobile" placeholder=" " value="{{ form_sub.mobile if form_sub else '' }}"><label>Phone Number</label></div>
+
+      <div class="erp-field"><input name="pan_number" placeholder=" " value="{{ form_sub.pan_number if form_sub else '' }}"><label>PAN Number</label></div>
+      <div class="erp-field span-2"><input name="pan_document" type="file" accept="image/*,.pdf"><label>PAN Document Upload{% if form_sub and form_sub.pan_document %} <span class="erp-hint">(on file: {{ form_sub.pan_document }})</span>{% endif %}</label></div>
+
+      <div class="erp-field"><input name="bank_account" placeholder=" " value="{{ form_sub.bank_account if form_sub else '' }}"><label>Bank Account Number</label></div>
+      <div class="erp-field"><input name="bank_name" placeholder=" " value="{{ form_sub.bank_name if form_sub else '' }}"><label>Bank Name</label></div>
+      <div class="erp-field"><input name="ifsc_code" placeholder=" " value="{{ form_sub.ifsc_code if form_sub else '' }}"><label>IFSC Code</label></div>
+      <div class="erp-field"><input name="branch_name" placeholder=" " value="{{ form_sub.branch_name if form_sub else '' }}"><label>Branch Name</label></div>
+
+      <div class="erp-field span-2">
+        <select name="rate_type" id="subcontractor_rate_type" data-rate-type-select>
+          {% for rt in rate_types %}
+          <option value="{{ rt }}"{% if (form_sub and form_sub.rate_type == rt) or (not form_sub and rt == 'Manpower') %} selected{% endif %}>{{ rt }}</option>
+          {% endfor %}
+        </select>
+        <label>Rate Type</label>
+      </div>
+
+      <div class="span-2" id="manpower-rates-section" data-manpower-section{% if select_trade_name %} data-select-trade-name="{{ select_trade_name }}"{% endif %}>
+        <h4 class="erp-form-subtitle">Manpower Rates (by trade)</h4>
+        <p class="erp-hint">Enter working hours per day and the salary amount for that day (e.g. 8 hr day salary or 10 hr day salary).</p>
+        <div class="erp-table-scroll">
+          <table class="erp-table erp-table-module">
+            <thead>
+              <tr>
+                <th>Trade</th>
+                <th>Rate Basis</th>
+                <th>Working Hours / Day</th>
+                <th>Salary Amount</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody data-manpower-rows data-max="{{ max_manpower_trades }}">
+              {% set mp_list = editing_manpower_rates if editing_manpower_rates else [none] %}
+              {% for mp in mp_list %}
+              <tr data-manpower-row>
+                <td>
+                  <select name="mp_trade_name[]" data-trade-select>
+                    <option value="">Select trade</option>
+                    {% for trade in trades %}
+                    <option value="{{ trade.trade_name }}"{% if mp and mp.trade_name == trade.trade_name %} selected{% elif select_trade_name and trade.trade_name == select_trade_name and loop.parentloop.first and not mp %} selected{% endif %}>{{ trade.trade_name }}</option>
+                    {% endfor %}
+                  </select>
+                </td>
+                <td>
+                  <select name="mp_rate_unit[]">
+                    <option value="Day"{% if mp and mp.rate_unit == 'Day' %} selected{% endif %}>Per Day</option>
+                    <option value="Hour"{% if mp and mp.rate_unit == 'Hour' %} selected{% endif %}>Per Hour</option>
+                  </select>
+                </td>
+                <td><input name="mp_working_hours[]" type="number" step="0.5" min="1" max="24" placeholder="8" value="{{ mp.working_hours if mp else '' }}"></td>
+                <td><input name="mp_salary_amount[]" type="number" step="0.01" min="0" placeholder="0" value="{{ mp.salary_amount if mp else '' }}"></td>
+                <td>
+                  <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-manpower-remove{% if mp_list|length <= 1 %} hidden{% endif %} aria-label="Remove trade"><i class="fa-solid fa-trash"></i></button>
+                </td>
+              </tr>
+              {% endfor %}
+              <tr data-manpower-row data-manpower-row-template hidden>
+                <td>
+                  <select name="mp_trade_name[]" data-trade-select>
+                    <option value="">Select trade</option>
+                    {% for trade in trades %}
+                    <option value="{{ trade.trade_name }}">{{ trade.trade_name }}</option>
+                    {% endfor %}
+                  </select>
+                </td>
+                <td>
+                  <select name="mp_rate_unit[]">
+                    <option value="Day">Per Day</option>
+                    <option value="Hour">Per Hour</option>
+                  </select>
+                </td>
+                <td><input name="mp_working_hours[]" type="number" step="0.5" min="1" max="24" placeholder="8"></td>
+                <td><input name="mp_salary_amount[]" type="number" step="0.01" min="0" placeholder="0"></td>
+                <td>
+                  <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-manpower-remove aria-label="Remove trade"><i class="fa-solid fa-trash"></i></button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="erp-form-actions" style="margin-top:0.75rem">
+          <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-manpower-add><i class="fa-solid fa-plus"></i> Add Trade</button>
+          <button type="button" class="erp-inline-action" id="open-new-trade-modal"><i class="fa-solid fa-plus"></i> New Trade</button>
+        </div>
+      </div>
+
+      <div class="span-2" id="boq-rates-section" data-boq-section style="display:none">
+        <h4 class="erp-form-subtitle">BOQ Base Rates</h4>
+        <p class="erp-hint">Select a project and load BOQ lines. Edit rate, quantity, or total as needed.</p>
+        <div class="erp-form-grid" style="margin-bottom:0.75rem">
+          <div class="erp-field span-2">
+            <select name="boq_project_id" id="boq_project_id" data-boq-project-select>
+              <option value="">Select project</option>
+              {% for p in projects %}
+              <option value="{{ p.id }}"{% if editing_boq_project_id and editing_boq_project_id == p.id %} selected{% endif %}>{{ p.project_code or p.id }} — {{ p.project_name }}</option>
+              {% endfor %}
+            </select>
+            <label>Project</label>
+          </div>
+          <div class="erp-form-actions">
+            <button type="button" class="erp-btn erp-btn-ghost" data-load-boq-items><i class="fa-solid fa-list"></i> Load BOQ Items</button>
+          </div>
+        </div>
+        <div class="erp-table-scroll">
+          <table class="erp-table erp-table-module" data-boq-rates-table>
+            <thead>
+              <tr>
+                <th>Project</th>
+                <th>Unit</th>
+                <th>BOQ No.</th>
+                <th>Description</th>
+                <th>Rate</th>
+                <th>Qty</th>
+                <th>Total Amount</th>
+              </tr>
+            </thead>
+            <tbody data-boq-rates-body>
+              {% if editing_boq_rates %}
+                {% for line in editing_boq_rates %}
+                <tr>
+                  <td>{{ line.project_code or line.project_id }} — {{ line.project_name or '—' }}</td>
+                  <td><input name="sb_unit[]" value="{{ line.unit or '' }}" readonly></td>
+                  <td>
+                    <input type="hidden" name="sb_boq_item_id[]" value="{{ line.boq_item_id or '' }}">
+                    <input type="hidden" name="sb_boq_number[]" value="{{ line.boq_number or '' }}">
+                    <input value="{{ line.boq_number or '—' }}" readonly>
+                  </td>
+                  <td>
+                    <input type="hidden" name="sb_item_description[]" value="{{ line.item_description or '' }}">
+                    <input value="{{ line.item_description or '—' }}" readonly>
+                  </td>
+                  <td><input name="sb_rate[]" type="number" step="0.01" min="0" value="{{ '%.2f'|format(line.rate or 0) }}" data-boq-rate></td>
+                  <td><input name="sb_quantity[]" type="number" step="0.01" min="0" value="{{ '%.2f'|format(line.quantity or 0) }}" data-boq-qty></td>
+                  <td><input name="sb_total_amount[]" type="number" step="0.01" min="0" value="{{ '%.2f'|format(line.total_amount or 0) }}" data-boq-total></td>
+                </tr>
+                {% endfor %}
+              {% else %}
+              <tr><td colspan="7">Select a project and load BOQ items.</td></tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="erp-field"><select name="status"><option value="Active"{% if not form_sub or form_sub.status == 'Active' %} selected{% endif %}>Active</option><option value="Inactive"{% if form_sub and form_sub.status == 'Inactive' %} selected{% endif %}>Inactive</option></select><label>Status</label></div>
+      <div class="erp-form-actions">
+        <button class="erp-btn erp-btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> {{ 'Update Sub Contractor' if form_sub else 'Save Sub Contractor' }}</button>
+        {% if form_sub %}<a href="{{ url_for('subcontractors') }}" class="erp-btn erp-btn-ghost">Cancel</a>{% endif %}
+      </div>
+    </form>
+  </div>
+
+  <div class="erp-form-card" id="add-boq-rates" data-boq-add-section>
+    <h3 class="erp-form-title">Add BOQ Rates to Existing Subcontractor</h3>
+    <form method="post" enctype="multipart/form-data" class="erp-form-grid" data-add-boq-form>
+      <input type="hidden" name="form_action" value="add_boq_rates">
+      <div class="erp-field span-2">
+        <select name="existing_subcontractor_id" required data-existing-sub-select>
+          <option value="">Select subcontractor</option>
+          {% for row in rows %}
+          <option value="{{ row.id }}">{{ row.subcontractor_code or '—' }} — {{ row.subcontractor_name }}</option>
+          {% endfor %}
+        </select>
+        <label>Subcontractor</label>
+      </div>
+      <div class="erp-field span-2">
+        <select name="boq_project_id" data-boq-project-select-add>
+          <option value="">Select project</option>
+          {% for p in projects %}
+          <option value="{{ p.id }}">{{ p.project_code or p.id }} — {{ p.project_name }}</option>
+          {% endfor %}
+        </select>
+        <label>Project</label>
+      </div>
+      <div class="erp-form-actions">
+        <button type="button" class="erp-btn erp-btn-ghost" data-load-boq-items-add><i class="fa-solid fa-list"></i> Load BOQ Items</button>
+      </div>
+      <div class="span-2">
+        <div class="erp-table-scroll">
+          <table class="erp-table erp-table-module">
+            <thead>
+              <tr>
+                <th>Project</th>
+                <th>Unit</th>
+                <th>BOQ No.</th>
+                <th>Description</th>
+                <th>Rate</th>
+                <th>Qty</th>
+                <th>Total Amount</th>
+              </tr>
+            </thead>
+            <tbody data-boq-rates-body-add>
+              <tr><td colspan="7">Select a project and load BOQ items.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="erp-form-actions"><button class="erp-btn erp-btn-primary" type="submit"><i class="fa-solid fa-plus"></i> Add BOQ Lines</button></div>
     </form>
   </div>
 
@@ -36,18 +236,26 @@
     </div>
     <div class="erp-table-scroll">
       <table class="erp-table erp-table-module">
-        <thead><tr><th>#</th><th>Name</th><th>Company</th><th>Mobile</th><th>Status</th></tr></thead>
+        <thead><tr><th>Sub Contractor ID</th><th>Name</th><th>Phone</th><th>Rate Type</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody>
           {% for row in rows %}
           <tr>
-            <td>{{ row.id }}</td>
+            <td>{{ row.subcontractor_code or '—' }}</td>
             <td>{{ row.subcontractor_name }}</td>
-            <td>{{ row.company_name }}</td>
-            <td>{{ row.mobile }}</td>
+            <td>{{ row.mobile or '—' }}</td>
+            <td>{{ row.rate_type or '—' }}{% if row.manpower_rate_count %} ({{ row.manpower_rate_count }} trades){% elif row.boq_rate_count %} ({{ row.boq_rate_count }} BOQ){% endif %}</td>
             <td>{{ approval_badge(row.status) }}</td>
+            <td style="white-space:nowrap;">
+              <a href="{{ url_for('subcontractors', edit=row.id) }}#add-subcontractor" class="erp-btn erp-btn-sm erp-btn-ghost"><i class="fa-solid fa-pen"></i> Edit</a>
+              <form method="post" style="display:inline;" onsubmit="return confirm('Delete subcontractor {{ row.subcontractor_name|e }}? This cannot be undone.');">
+                <input type="hidden" name="form_action" value="delete">
+                <input type="hidden" name="subcontractor_id" value="{{ row.id }}">
+                <button type="submit" class="erp-btn erp-btn-sm erp-btn-ghost" title="Delete"><i class="fa-solid fa-trash"></i></button>
+              </form>
+            </td>
           </tr>
           {% else %}
-          <tr><td colspan="5">No subcontractor records yet.</td></tr>
+          <tr><td colspan="6">No subcontractor records yet.</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -55,4 +263,29 @@
     {{ erp_pagination(rows|length) }}
   </div>
 </div>
+
+<div class="erp-modal" id="new-trade-modal" hidden aria-hidden="true">
+  <div class="erp-modal-backdrop" data-modal-close></div>
+  <div class="erp-modal-card" role="dialog" aria-modal="true" aria-labelledby="new-trade-title">
+    <div class="erp-modal-header">
+      <div>
+        <h3 id="new-trade-title">Add Trade</h3>
+        <p>Add a trade to the master list, then continue with the subcontractor form.</p>
+      </div>
+      <button type="button" class="erp-modal-close" data-modal-close aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <form method="post" class="erp-form-grid" action="{{ url_for('subcontractors') }}#add-subcontractor">
+      <input type="hidden" name="form_action" value="add_trade">
+      {% if form_sub %}<input type="hidden" name="subcontractor_id" value="{{ form_sub.id }}">{% endif %}
+      <div class="erp-field span-2"><input name="trade_name" placeholder=" " required><label>Trade Name</label></div>
+      <div class="erp-form-actions">
+        <button type="button" class="erp-btn erp-btn-ghost" data-modal-close>Cancel</button>
+        <button class="erp-btn erp-btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Save Trade</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/subcontractors.js') }}"></script>
 {% endblock %}

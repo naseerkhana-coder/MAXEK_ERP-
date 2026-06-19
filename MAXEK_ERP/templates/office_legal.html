@@ -1,0 +1,61 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Legal Documents' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('office_admin') ~ '">Office</a> &gt; Legal' %}
+{% block page_actions %}
+<a href="{{ url_for('office_legal', new=1) }}#record-form" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> New Document</a>
+{% endblock %}
+{% block content %}
+{% if view_record %}
+<div class="erp-form-card" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">{{ view_record.doc_number }} — {{ view_record.title }}</h3>
+  <p><strong>Type:</strong> {{ view_record.doc_type }} | <strong>Authority:</strong> {{ view_record.authority or '—' }}</p>
+  <p><strong>Issue:</strong> {{ view_record.issue_date or '—' }} | <strong>Expiry:</strong> {{ view_record.expiry_date or '—' }}
+    {% if view_record.alert_flag %}<span class="approval-badge" style="background:#fef3c7;color:#92400e;">Alert</span>{% endif %}
+  </p>
+  {% if view_record.attachment %}<p><a href="{{ url_for('office_document_download', filename=view_record.attachment) }}" class="erp-btn erp-btn-ghost erp-btn-sm"><i class="fa-solid fa-download"></i> Attachment</a></p>{% endif %}
+  <a href="{{ url_for('office_legal', edit=view_record.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Edit</a>
+</div>
+{% endif %}
+
+{% if show_form %}
+<div class="erp-form-card" id="record-form" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">{% if edit_record %}Edit {{ edit_record.doc_number }}{% else %}New Legal Document{% endif %}</h3>
+  <form method="post" enctype="multipart/form-data">
+    {% if edit_record %}<input type="hidden" name="record_id" value="{{ edit_record.id }}">{% endif %}
+    <div class="erp-form-grid">
+      <div class="erp-field span-2"><input name="title" required placeholder=" " value="{{ edit_record.title if edit_record else '' }}"><label>Title *</label></div>
+      <div class="erp-field"><select name="doc_type">{% for t in legal_doc_types %}<option value="{{ t }}" {% if edit_record and edit_record.doc_type == t %}selected{% endif %}>{{ t }}</option>{% endfor %}</select><label>Document Type</label></div>
+      <div class="erp-field"><input name="authority" placeholder=" " value="{{ edit_record.authority if edit_record else '' }}"><label>Authority / Court</label></div>
+      <div class="erp-field"><input type="date" name="issue_date" value="{{ edit_record.issue_date if edit_record else '' }}"><label>Issue Date</label></div>
+      <div class="erp-field"><input type="date" name="expiry_date" value="{{ edit_record.expiry_date if edit_record else '' }}"><label>Expiry Date</label></div>
+      <div class="erp-field span-2"><textarea name="remarks" placeholder=" ">{{ edit_record.remarks if edit_record else '' }}</textarea><label>Remarks</label></div>
+      <div class="erp-field span-2"><input type="file" name="attachment" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"><label>Attachment</label></div>
+    </div>
+    <button type="submit" class="erp-btn erp-btn-primary">Save</button>
+  </form>
+</div>
+{% endif %}
+
+<form method="get" style="margin-bottom:0.75rem;"><input name="q" value="{{ search }}" placeholder="Search legal docs…" style="max-width:280px;"> <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Search</button></form>
+<div class="erp-table-panel" data-erp-table>
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead><tr><th>Doc No</th><th>Title</th><th>Type</th><th>Expiry</th><th>Days Left</th><th></th></tr></thead>
+      <tbody>
+        {% for row in rows %}
+        <tr{% if row.alert_flag %} style="background:#fffbeb;"{% endif %}>
+          <td>{{ row.doc_number }}</td>
+          <td>{{ row.title }}</td>
+          <td>{{ row.doc_type or '—' }}</td>
+          <td>{{ row.expiry_date or '—' }}</td>
+          <td>{% if row.days_left is not none %}{{ row.days_left }}{% else %}—{% endif %}</td>
+          <td><a href="{{ url_for('office_legal', view=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">View</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6">No legal documents yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,955 @@
+{% extends 'base_maxek.html' %}
+{% from 'macros/erp_ui.html' import role_status_badge, rejection_notice, workflow_modals, transaction_view_tabs, checker_row_actions, approver_row_actions, maker_row_actions, erp_pagination %}
+{% set page_title = 'DPR Entry' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; Projects &gt; DPR Entry' %}
+{% block page_actions %}
+<a href="{{ url_for('boq_management') }}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-list-check"></i> BOQ</a>
+<a href="{{ url_for('dpr_entry') }}#dpr-form" class="erp-btn erp-btn-primary"><i class="fa-solid fa-ruler-combined"></i> New Measurement</a>
+{% endblock %}
+{% block content %}
+<div class="erp-validation" style="margin-bottom: 1rem;">
+  <strong>Flow:</strong> Maker [Save / Submit] → Checker [Verify / Edit / Reject] → Approver [Approve / Edit / Reject]
+</div>
+<div class="module-layout dpr-module-layout">
+  <div class="erp-form-card" style="margin-bottom: 1rem;">
+    <div class="erp-tab-bar">
+      <a href="{{ url_for('dpr_entry') }}" class="erp-tab{% if active_tab == 'entry' %} active{% endif %}">DPR Entry</a>
+      <a href="{{ url_for('dpr_client_bill_pending') }}" class="erp-tab{% if active_tab == 'client_bill' %} active{% endif %}">
+        Client Bill Pending
+        {% if pending_bills is defined and pending_bills|length %}<span class="erp-badge">{{ pending_bills|length }}</span>{% endif %}
+      </a>
+      <a href="{{ url_for('dpr_costing_pending') }}" class="erp-tab{% if active_tab == 'costing' %} active{% endif %}">
+        Costing Pending
+        {% if costing_pending is defined and costing_pending|length %}<span class="erp-badge">{{ costing_pending|length }}</span>{% endif %}
+      </a>
+    </div>
+  </div>
+
+  {% if active_tab == 'client_bill' %}
+  <div class="erp-form-card">
+    <h3 class="erp-form-title">Client Bill Pending</h3>
+    <p class="erp-form-hint">Measurements marked for client billing — ready to raise client bill.</p>
+    <div class="erp-form-actions" style="margin-bottom: 1rem;">
+      <a href="{{ url_for('dpr_client_bill_print', print=1) }}" class="erp-btn erp-btn-ghost" target="_blank">
+        <i class="fa-solid fa-print"></i> Print All
+      </a>
+      <a href="{{ url_for('dpr_client_bill_export') }}" class="erp-btn erp-btn-primary">
+        <i class="fa-solid fa-file-excel"></i> Export Excel
+      </a>
+    </div>
+    <div class="erp-table-scroll" data-erp-table>
+      <table class="erp-table erp-table-module">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Project</th>
+            <th>BOQ No.</th>
+            <th>Description</th>
+            <th>Unit</th>
+            <th>Qty</th>
+            <th>Rate</th>
+            <th>Amount</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in pending_bills or [] %}
+          <tr>
+            <td>{{ row.report_date or '—' }}</td>
+            <td>{{ row.project_code or row.project_id }} — {{ row.project_name or '—' }}</td>
+            <td>{{ row.boq_number or '—' }}</td>
+            <td>{{ row.boq_description or '—' }}</td>
+            <td>{{ row.unit or '—' }}</td>
+            <td>{{ '%.4f'|format(row.calculated_quantity or 0) }}</td>
+            <td>{{ '%.2f'|format(row.boq_rate or 0) }}</td>
+            <td>{{ '%.2f'|format(row.bill_amount or 0) }}</td>
+            <td>{{ role_status_badge(row.approval_status, 'maker') }}</td>
+            <td style="white-space:nowrap;">
+              <a href="{{ url_for('dpr_client_bill_print_one', measurement_id=row.id, print=1) }}" class="erp-btn erp-btn-sm erp-btn-ghost" target="_blank">Print</a>
+              <form method="post" style="display:inline;">
+                <input type="hidden" name="form_action" value="mark_billed">
+                <input type="hidden" name="measurement_id" value="{{ row.id }}">
+                <button type="submit" class="erp-btn erp-btn-sm erp-btn-primary">Mark Billed</button>
+              </form>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="10">No client bill pending measurements.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% elif active_tab == 'costing' %}
+  <div class="erp-form-card">
+    <h3 class="erp-form-title">Costing Pending</h3>
+    <p class="erp-form-hint">Measurements flagged for costing with manpower details.</p>
+    {% for row in costing_pending or [] %}
+    <div class="erp-form-card" style="margin-bottom: 1rem; border: 1px solid var(--erp-border, #e2e8f0);">
+      <div class="erp-form-grid">
+        <p><strong>Date:</strong> {{ row.report_date }}</p>
+        <p><strong>Project:</strong> {{ row.project_code or row.project_id }} — {{ row.project_name }}</p>
+        <p><strong>BOQ:</strong> {{ row.boq_number }} — {{ row.boq_description }}</p>
+        <p><strong>Qty:</strong> {{ '%.4f'|format(row.calculated_quantity or 0) }} {{ row.unit }}</p>
+        <p><strong>Costing Status:</strong>
+          {% if row.costing_status == 'linked' %}Linked to Project Costing{% else %}Pending{% endif %}
+        </p>
+        <p><strong>Status:</strong> {{ role_status_badge(row.approval_status, 'maker') }}</p>
+      </div>
+      {% set mp_list = manpower_map.get(row.id, []) if manpower_map is defined else [] %}
+      {% if mp_list %}
+      <div class="erp-table-scroll" style="margin-top: 0.75rem;">
+        <table class="erp-table erp-table-module">
+          <thead>
+            <tr>
+              <th>Subcontractor</th>
+              <th>Worker</th>
+              <th>Trade</th>
+              <th>Hours</th>
+              <th>Remarks</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for mp in mp_list %}
+            <tr>
+              <td>{{ mp.subcontractor_name or 'Company' }}</td>
+              <td>{{ mp.worker_name or '—' }}</td>
+              <td>{{ mp.trade_name or '—' }}</td>
+              <td>{{ mp.hours_worked or 0 }}</td>
+              <td>{{ mp.remarks or '—' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p style="margin-top: 0.5rem;">No manpower details recorded.</p>
+      {% endif %}
+      {% set res = resources_map.get(row.id, {}) if resources_map is defined else {} %}
+      {% if res.get('materials') %}
+      <div class="erp-table-scroll" style="margin-top: 0.75rem;">
+        <p><strong>Materials</strong></p>
+        <table class="erp-table erp-table-module">
+          <thead><tr><th>Material</th><th>Qty</th><th>Unit</th><th>Remarks</th></tr></thead>
+          <tbody>
+            {% for mat in res.materials %}
+            <tr>
+              <td>{{ mat.material_name or '—' }}</td>
+              <td>{{ mat.quantity or 0 }}</td>
+              <td>{{ mat.unit or '—' }}</td>
+              <td>{{ mat.remarks or '—' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+      {% if res.get('equipment') %}
+      <div class="erp-table-scroll" style="margin-top: 0.75rem;">
+        <p><strong>Equipment</strong></p>
+        <table class="erp-table erp-table-module">
+          <thead><tr><th>Equipment</th><th>Hours</th><th>Remarks</th></tr></thead>
+          <tbody>
+            {% for eq in res.equipment %}
+            <tr>
+              <td>{{ eq.equipment_name or '—' }}</td>
+              <td>{{ eq.hours_used or 0 }}</td>
+              <td>{{ eq.remarks or '—' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+      {% if res.get('additional') %}
+      <p style="margin-top: 0.75rem;"><strong>Additional:</strong> {{ res.additional }}</p>
+      {% endif %}
+      <div class="erp-form-actions" style="margin-top: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
+        {% if row.costing_status == 'pending' %}
+        <form method="post" style="display:inline;">
+          <input type="hidden" name="form_action" value="push_to_costing">
+          <input type="hidden" name="measurement_id" value="{{ row.id }}">
+          <button type="submit" class="erp-btn erp-btn-sm erp-btn-primary">
+            <i class="fa-solid fa-link"></i> Push to Project Costing
+          </button>
+        </form>
+        {% elif row.costing_status == 'linked' %}
+        <a href="{{ url_for('project_expenses', dpr_measurement_id=row.id) }}" class="erp-btn erp-btn-sm erp-btn-ghost">
+          <i class="fa-solid fa-receipt"></i> View in Project Costing
+        </a>
+        {% endif %}
+        <form method="post" style="display:inline;">
+          <input type="hidden" name="form_action" value="mark_costed">
+          <input type="hidden" name="measurement_id" value="{{ row.id }}">
+          <button type="submit" class="erp-btn erp-btn-sm erp-btn-ghost">Mark Costed</button>
+        </form>
+      </div>
+    </div>
+    {% else %}
+    <p>No costing pending measurements.</p>
+    {% endfor %}
+  </div>
+
+  {% else %}
+  {% if view_record %}
+  <div class="erp-form-card" style="margin-bottom: 1rem;">
+    {% call transaction_view_tabs(view_record, history, can_reopen, approval_id) %}
+    <h3 class="erp-form-title">DPR Measurement #{{ view_record.id }}</h3>
+    <div class="erp-form-grid">
+      <p><strong>Date:</strong> {{ view_record.report_date or '—' }}</p>
+      <p><strong>Project:</strong> {{ view_record.project_code or view_record.project_id }} — {{ view_record.project_name or '—' }}</p>
+      <p><strong>BOQ:</strong> {{ view_record.boq_number or '—' }} — {{ view_record.boq_description or '—' }}</p>
+      <p><strong>Quantity:</strong> {{ '%.4f'|format(view_record.calculated_quantity or 0) }} {{ view_record.unit or '' }}</p>
+      <p><strong>Type:</strong> {{ view_record.measurement_type or '—' }}</p>
+      <p><strong>Workflow:</strong> {{ role_status_badge(view_record.approval_status, 'maker') }}</p>
+      <p><strong>DPR Status:</strong> {{ (view_record.dpr_status or 'submitted')|title }}</p>
+      <p><strong>Bill Client:</strong> {% if view_record.bill_client %}Yes{% else %}No{% endif %}</p>
+      <p><strong>For Costing:</strong> {% if view_record.for_costing %}Yes{% else %}No{% endif %}</p>
+      <p class="span-2"><strong>Work Description:</strong> {{ view_record.work_description or '—' }}</p>
+      <p><strong>Created By:</strong> {{ view_record.created_by or '—' }}</p>
+      <p><strong>Created At:</strong> {{ view_record.created_at or '—' }}</p>
+    </div>
+    {% if view_extras.manpower %}
+    <div class="erp-table-scroll" style="margin-top: 1rem;">
+      <h4 class="erp-form-subtitle">Manpower</h4>
+      <table class="erp-table erp-table-module">
+        <thead><tr><th>Subcontractor</th><th>Worker</th><th>Trade</th><th>Hours</th><th>Remarks</th></tr></thead>
+        <tbody>
+          {% for mp in view_extras.manpower %}
+          <tr>
+            <td>{{ mp.subcontractor_name or 'Company' }}</td>
+            <td>{{ mp.worker_name or '—' }}</td>
+            <td>{{ mp.trade_name or '—' }}</td>
+            <td>{{ mp.hours_worked or 0 }}</td>
+            <td>{{ mp.remarks or '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+    {% if view_extras.steel_lines %}
+    <div class="erp-table-scroll" style="margin-top: 1rem;">
+      <h4 class="erp-form-subtitle">Steel Lines</h4>
+      <table class="erp-table erp-table-module">
+        <thead><tr><th>Description</th><th>Bars</th><th>Length</th><th>Dia (mm)</th><th>Qty</th></tr></thead>
+        <tbody>
+          {% for line in view_extras.steel_lines %}
+          <tr>
+            <td>{{ line.line_description or '—' }}</td>
+            <td>{{ line.num_bars or 0 }}</td>
+            <td>{{ line.cutting_length or 0 }}</td>
+            <td>{{ line.diameter_mm or 0 }}</td>
+            <td>{{ line.quantity or 0 }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+    {{ rejection_notice(history, view_record.approval_status) }}
+    <div class="erp-form-actions" style="margin-top: 1rem; flex-wrap: wrap;">
+      {% if edit_role == 'checker' and approval_id and view_record.approval_status == 'Pending Checker' %}
+      {{ checker_row_actions(approval_id, 'dpr_entry', view_record.id, view_record.approval_status) }}
+      {% elif edit_role == 'approver' and approval_id and view_record.approval_status == 'Pending Approval' %}
+      {{ approver_row_actions(approval_id, 'dpr_entry', view_record.id, view_record.approval_status) }}
+      {% elif can_edit_dpr or edit_role == 'maker' %}
+      <a href="{{ url_for('dpr_entry', edit=view_record.id) }}#dpr-form" class="erp-btn erp-btn-primary erp-btn-sm"><i class="fa-solid fa-pen-to-square"></i> Edit DPR</a>
+      {% endif %}
+      <a href="{{ url_for('dpr_entry') }}" class="erp-btn erp-btn-ghost erp-btn-sm">Back to List</a>
+    </div>
+    {% endcall %}
+  </div>
+  {% endif %}
+
+  {% if not view_record %}
+  <div class="erp-form-card" id="dpr-form">
+    {% if editing_measurement %}
+    <div class="erp-validation" style="margin-bottom: 1rem;">
+      <strong>Editing DPR #{{ editing_measurement.id }}</strong> —
+      {{ editing_measurement.project_code or editing_measurement.project_id }} — {{ editing_measurement.project_name or '—' }} ·
+      Date {{ editing_measurement.report_date or '—' }} ·
+      BOQ {{ editing_measurement.boq_number or '—' }} — {{ editing_measurement.boq_description or '—' }} ·
+      Status {{ role_status_badge(editing_measurement.approval_status or 'Draft', 'maker')|safe }} ·
+      {{ (editing_measurement.dpr_status or 'submitted')|title }}
+      {% if edit_role %}<span class="workflow-role-badge role-{{ edit_role|lower }}">{{ edit_role|title }}</span>{% endif %}
+      <a href="{{ url_for('dpr_entry', view=editing_measurement.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm" style="margin-left: 0.5rem;">View record</a>
+      <a href="{{ url_for('dpr_entry') }}" class="erp-btn erp-btn-ghost erp-btn-sm">Cancel</a>
+    </div>
+    {% endif %}
+    <h3 class="erp-form-title">{% if editing_measurement %}Edit DPR #{{ editing_measurement.id }}{% if edit_role %} ({{ edit_role|title }}){% endif %}{% else %}DPR Measurement Entry{% endif %}</h3>
+    <form method="post" class="erp-form-grid" data-dpr-form
+          data-continue-project="{{ continue_project_id or '' }}"
+          data-continue-boq="{{ continue_boq_number or '' }}"
+          {% if editing_measurement %}
+          data-edit-measurement="{{ editing_measurement.id }}"
+          data-edit-project="{{ editing_measurement.project_id }}"
+          data-edit-boq-item="{{ editing_measurement.boq_item_id }}"
+          data-edit-boq-number="{{ editing_measurement.boq_number or '' }}"
+          data-edit-payload="{{ (view_extras.measurement_data or {})|tojson|e }}"
+          data-edit-manpower="{{ (view_extras.manpower or [])|tojson|e }}"
+          data-edit-steel-lines="{{ (view_extras.steel_lines or [])|tojson|e }}"
+          data-edit-bill-client="{{ 'yes' if editing_measurement.bill_client else 'no' }}"
+          data-edit-for-costing="{{ 'yes' if editing_measurement.for_costing else 'no' }}"
+          data-edit-dpr-status="{{ editing_measurement.dpr_status or 'submitted' }}"
+          {% endif %}>
+      {% if editing_measurement %}<input type="hidden" name="measurement_id" value="{{ editing_measurement.id }}">{% endif %}
+      <div class="erp-field">
+        <input type="date" name="report_date" id="dpr_report_date" required value="{{ editing_measurement.report_date if editing_measurement else '' }}">
+        <label>Date</label>
+      </div>
+      <div class="erp-field">
+        <select name="project_id_select" id="dpr_project_id" data-dpr-project-id required>
+          <option value="">Select Project Number</option>
+          {% for p in projects %}
+          <option value="{{ p.id }}" data-code="{{ p.project_code or p.id }}" data-name="{{ p.project_name }}"
+            {% if continue_project_id == p.id or (editing_measurement and editing_measurement.project_id == p.id) %}selected{% endif %}>{{ p.project_code or p.id }}</option>
+          {% endfor %}
+        </select>
+        <label>Project Number</label>
+      </div>
+      <div class="erp-field">
+        <select name="project_name_select" id="dpr_project_name" data-dpr-project-name required>
+          <option value="">Select Project Name</option>
+          {% for p in projects %}
+          <option value="{{ p.id }}" data-code="{{ p.project_code or p.id }}" data-name="{{ p.project_name }}"
+            {% if continue_project_id == p.id or (editing_measurement and editing_measurement.project_id == p.id) %}selected{% endif %}>{{ p.project_name }}</option>
+          {% endfor %}
+        </select>
+        <label>Project Name</label>
+      </div>
+      <input type="hidden" name="project_id" id="dpr_project_id_hidden" value="{{ editing_measurement.project_id if editing_measurement else (continue_project_id or '') }}">
+
+      <div class="erp-field span-2">
+        <select id="dpr_boq_number" data-dpr-boq-number required disabled>
+          <option value="">Select BOQ Number</option>
+        </select>
+        <label>BOQ Number</label>
+      </div>
+      <div class="erp-field span-2">
+        <select name="boq_item_id" id="dpr_boq_description" data-dpr-boq-description required disabled>
+          <option value="">Select BOQ Description</option>
+        </select>
+        <label>BOQ Description</label>
+      </div>
+      <input type="hidden" name="boq_number" id="dpr_boq_number_hidden" value="{{ editing_measurement.boq_number if editing_measurement else (continue_boq_number or '') }}">
+      <input type="hidden" name="boq_description" id="dpr_boq_description_hidden" value="{{ editing_measurement.boq_description if editing_measurement else '' }}">
+
+      <div class="erp-field erp-field-readonly">
+        <input type="text" id="dpr_unit_display" readonly placeholder="—" data-dpr-unit-display value="{{ editing_measurement.unit if editing_measurement else '' }}">
+        <label>Unit (from BOQ)</label>
+      </div>
+      <input type="hidden" name="unit" id="dpr_unit_hidden" value="{{ editing_measurement.unit if editing_measurement else '' }}">
+      <div class="erp-field erp-field-readonly">
+        <input type="text" id="dpr_boq_qty_display" readonly placeholder="—" data-dpr-boq-qty-display>
+        <label>BOQ Quantity</label>
+      </div>
+      <div class="erp-field erp-field-readonly">
+        <input type="text" id="dpr_balance_qty_display" readonly placeholder="—" data-dpr-balance-qty-display>
+        <label>Balance Quantity</label>
+      </div>
+
+      <div class="span-2" data-dpr-boq-progress-panel hidden>
+        <h4 class="erp-form-subtitle">DPR vs BOQ Progress</h4>
+        <div class="dpr-progress-grid">
+          <div class="dpr-progress-card"><span>BOQ Qty</span><strong data-dpr-progress-boq>—</strong></div>
+          <div class="dpr-progress-card"><span>Today Qty</span><strong data-dpr-progress-today>—</strong></div>
+          <div class="dpr-progress-card"><span>Total Executed</span><strong data-dpr-progress-executed>—</strong></div>
+          <div class="dpr-progress-card"><span>Balance</span><strong data-dpr-progress-balance>—</strong></div>
+          <div class="dpr-progress-card"><span>Completion</span><strong data-dpr-progress-completion>—</strong></div>
+        </div>
+      </div>
+
+      <div class="erp-field span-2">
+        <input type="text" name="work_description" placeholder="Work / measurement description" value="{{ editing_measurement.work_description if editing_measurement else '' }}">
+        <label>Work Description</label>
+      </div>
+
+      <div class="span-2">
+        <h4 class="erp-form-subtitle">Billing</h4>
+        <div class="erp-form-grid">
+          <div class="erp-field">
+            <select name="bill_client" id="dpr_bill_client" data-dpr-bill-client>
+              <option value="no"{% if editing_measurement and not editing_measurement.bill_client %} selected{% endif %}>No — Quantity / Costing Only</option>
+              <option value="yes"{% if editing_measurement and editing_measurement.bill_client %} selected{% endif %}>Yes — Client Bill</option>
+            </select>
+            <label>Bill Client?</label>
+          </div>
+        </div>
+        <p class="erp-form-hint" data-dpr-bill-hint>
+          <span data-dpr-hint-yes hidden>Measurements will go to <strong>Client Bill Pending</strong> after save.</span>
+          <span data-dpr-hint-no>Quantity entry for internal records. Add manpower, materials &amp; equipment below.</span>
+        </p>
+      </div>
+      <input type="hidden" name="for_costing" id="dpr_for_costing" value="{% if editing_measurement %}{{ 'yes' if editing_measurement.for_costing else 'no' }}{% else %}no{% endif %}">
+
+      <div class="span-2" data-dpr-activities-panel hidden>
+        <h4 class="erp-form-subtitle">BOQ Activity Split-Up</h4>
+        <p class="erp-form-hint">Record activity-wise quantities under this BOQ item (optional).</p>
+        <div data-dpr-activity-rows></div>
+        <button type="button" class="erp-btn erp-btn-ghost" data-dpr-add-activity><i class="fa-solid fa-plus"></i> Add Activity</button>
+        <p class="erp-form-hint" style="margin-top: 0.5rem;"><strong>Activity Total:</strong> <span data-dpr-activity-total>0.0000</span></p>
+        <template data-dpr-activity-template>
+          <div class="erp-form-grid dpr-activity-row" data-dpr-activity-row style="margin-bottom: 0.75rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--erp-border, #e2e8f0);">
+            <div class="erp-field span-2">
+              <select data-act-name>
+                <option value="">Select Activity</option>
+                {% for act in dpr_activities %}
+                <option value="{{ act }}">{{ act }}</option>
+                {% endfor %}
+                <option value="__custom__">Other (type below)</option>
+              </select>
+              <label>Activity</label>
+            </div>
+            <div class="erp-field span-2" data-act-custom-wrap hidden>
+              <input type="text" data-act-custom placeholder="Custom activity name">
+              <label>Custom Activity</label>
+            </div>
+            <div class="erp-field">
+              <input type="number" min="0" step="0.0001" data-act-qty placeholder="0">
+              <label>Quantity</label>
+            </div>
+            <div class="erp-field">
+              <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-dpr-remove-activity><i class="fa-solid fa-trash"></i></button>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <div class="span-2" data-dpr-measurement-panel hidden>
+        <h4 class="erp-form-subtitle">Measurements</h4>
+        <div data-dpr-volume-panel hidden>
+          <p class="erp-form-hint">Cubic meter (m³) — enter multiple length, width &amp; depth readings; averages are used.</p>
+          <div class="dpr-dimension-group" data-dpr-dimension="length">
+            <div class="dpr-dimension-header"><strong>Length (m)</strong> <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-dpr-add-reading="length"><i class="fa-solid fa-plus"></i> Add</button></div>
+            <div data-dpr-readings="length"></div>
+          </div>
+          <div class="dpr-dimension-group" data-dpr-dimension="width">
+            <div class="dpr-dimension-header"><strong>Width (m)</strong> <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-dpr-add-reading="width"><i class="fa-solid fa-plus"></i> Add</button></div>
+            <div data-dpr-readings="width"></div>
+          </div>
+          <div class="dpr-dimension-group" data-dpr-dimension="depth">
+            <div class="dpr-dimension-header"><strong>Depth (m)</strong> <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-dpr-add-reading="depth"><i class="fa-solid fa-plus"></i> Add</button></div>
+            <div data-dpr-readings="depth"></div>
+          </div>
+        </div>
+        <div data-dpr-area-panel hidden>
+          <p class="erp-form-hint">Square meter (m²) — enter multiple length &amp; width readings; averages are used.</p>
+          <div class="dpr-dimension-group" data-dpr-dimension="length">
+            <div class="dpr-dimension-header"><strong>Length (m)</strong> <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-dpr-add-reading="length"><i class="fa-solid fa-plus"></i> Add</button></div>
+            <div data-dpr-readings="length"></div>
+          </div>
+          <div class="dpr-dimension-group" data-dpr-dimension="width">
+            <div class="dpr-dimension-header"><strong>Width (m)</strong> <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-dpr-add-reading="width"><i class="fa-solid fa-plus"></i> Add</button></div>
+            <div data-dpr-readings="width"></div>
+          </div>
+        </div>
+        <div data-dpr-steel-panel hidden>
+          <p class="erp-form-hint">Steel BBS — add bar lines with shape, diameter &amp; cutting length. Quantity auto-calculated (D²×L/162).</p>
+          <div data-dpr-steel-lines></div>
+          <button type="button" class="erp-btn erp-btn-ghost" data-dpr-add-steel-line><i class="fa-solid fa-plus"></i> Add Steel Line</button>
+          <template data-dpr-steel-line-template>
+            <div class="dpr-steel-line erp-form-grid" data-dpr-steel-line>
+              <div class="erp-field span-2">
+                <input type="text" data-steel-description placeholder="Bar description">
+                <label>Description</label>
+              </div>
+              <div class="erp-field">
+                <input type="number" min="1" step="1" data-steel-bars placeholder="0">
+                <label>No. of Bars</label>
+              </div>
+              <div class="erp-field">
+                <select data-steel-dia>
+                  <option value="">Dia (mm)</option>
+                  {% for d in steel_diameters %}<option value="{{ d }}">{{ d }} mm</option>{% endfor %}
+                </select>
+                <label>Diameter</label>
+              </div>
+              <div class="erp-field">
+                <select data-steel-shape>
+                  <option value="">Select Shape</option>
+                  {% for shape in steel_shapes %}
+                  <option value="{{ shape.id }}" data-sides="{{ shape.side_count }}" data-formula="{{ shape.formula_type }}">{{ shape.shape_name }}</option>
+                  {% endfor %}
+                  <option value="new">+ Create New Shape</option>
+                </select>
+                <label>Shape</label>
+              </div>
+              <div class="erp-field" data-steel-cutting-wrap>
+                <input type="number" min="0" step="0.001" data-steel-cutting placeholder="m">
+                <label>Cutting Length (m)</label>
+              </div>
+              <div class="span-2" data-steel-sides-wrap hidden>
+                <div class="dpr-dimension-header"><strong>Side Measurements (mm)</strong> <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-steel-add-side><i class="fa-solid fa-plus"></i> Add Side</button></div>
+                <div data-steel-sides></div>
+              </div>
+              <div class="erp-field erp-field-readonly">
+                <span data-steel-qty>0.0000</span>
+                <label>Line Qty</label>
+              </div>
+              <div class="erp-field">
+                <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-dpr-remove-steel-line><i class="fa-solid fa-trash"></i> Remove</button>
+              </div>
+            </div>
+          </template>
+        </div>
+        <div data-dpr-simple-panel hidden>
+          <p class="erp-form-hint">Enter multiple measurement readings; total quantity is summed (optional average).</p>
+          <div data-dpr-simple-rows></div>
+          <button type="button" class="erp-btn erp-btn-ghost" data-dpr-add-simple-row><i class="fa-solid fa-plus"></i> Add Measurement</button>
+          <label class="dpr-inline-check"><input type="checkbox" data-dpr-use-average> Use average instead of total</label>
+          <p class="erp-form-hint" style="margin-top: 0.5rem;">
+            <strong>Row Total:</strong> <span data-dpr-simple-total>0.0000</span>
+            · <strong>Average:</strong> <span data-dpr-simple-avg>0.0000</span>
+          </p>
+          <template data-dpr-simple-row-template>
+            <div class="erp-form-grid dpr-simple-row" data-dpr-simple-row style="margin-bottom: 0.75rem;">
+              <div class="erp-field span-2">
+                <input type="text" data-simple-description placeholder="Description">
+                <label>Description</label>
+              </div>
+              <div class="erp-field">
+                <input type="number" min="0" step="0.0001" data-simple-qty placeholder="0">
+                <label>Measurement Value</label>
+              </div>
+              <div class="erp-field">
+                <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-dpr-remove-simple-row><i class="fa-solid fa-trash"></i></button>
+              </div>
+            </div>
+          </template>
+        </div>
+        <p class="erp-form-hint" style="margin-top: 0.75rem;"><strong>Calculated Qty:</strong> <span data-dpr-calculated-qty>0.0000</span> <span data-dpr-calculated-unit></span></p>
+        <div class="erp-form-actions" style="margin-top: 0.75rem;">
+          <button type="submit" class="erp-btn erp-btn-primary" data-dpr-save-measurement-inline data-dpr-set-status="submitted">
+            <i class="fa-solid fa-floppy-disk"></i> Save Measurements
+          </button>
+        </div>
+      </div>
+
+      <div class="span-2" data-dpr-resource-panel hidden>
+        <h4 class="erp-form-subtitle">Costing Resources</h4>
+        <p class="erp-form-hint">Record manpower, materials, equipment and any extra details for project costing.</p>
+
+      <div data-dpr-manpower-panel>
+        <h5 class="erp-form-subtitle" style="margin-top: 0.5rem;">Manpower</h5>
+        <div data-dpr-manpower-rows></div>
+        <button type="button" class="erp-btn erp-btn-ghost" data-dpr-add-manpower><i class="fa-solid fa-plus"></i> Add Worker</button>
+        <button type="button" class="erp-btn erp-btn-ghost" data-dpr-save-manpower><i class="fa-solid fa-floppy-disk"></i> Save Manpower</button>
+        <template data-dpr-manpower-template>
+          <div class="erp-form-grid dpr-manpower-row" data-dpr-manpower-row style="margin-bottom: 0.75rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--erp-border, #e2e8f0);">
+            <div class="erp-field">
+              <select data-mp-subcontractor>
+                <option value="">Company Staff</option>
+                {% for sc in subcontractors %}
+                <option value="{{ sc.id }}">{{ sc.subcontractor_name }}</option>
+                {% endfor %}
+              </select>
+              <label>Subcontractor</label>
+            </div>
+            <div class="erp-field">
+              <select data-mp-worker-id disabled><option value="">Select Worker ID</option></select>
+              <label>Worker ID</label>
+            </div>
+            <div class="erp-field">
+              <select data-mp-worker-name disabled><option value="">Select Worker Name</option></select>
+              <label>Worker Name</label>
+            </div>
+            <div class="erp-field">
+              <select data-mp-trade>
+                <option value="">Trade</option>
+                {% for trade in ['Carpenter', 'Steel Fixer', 'Helper', 'Mason', 'Electrician', 'Plumber', 'Painter'] %}
+                <option value="{{ trade }}">{{ trade }}</option>
+                {% endfor %}
+              </select>
+              <label>Trade</label>
+            </div>
+            <div class="erp-field">
+              <input type="number" min="0" step="0.5" data-mp-hours placeholder="0">
+              <label>Hours Worked</label>
+            </div>
+            <div class="erp-field">
+              <input type="text" data-mp-remarks placeholder="Remarks">
+              <label>Remarks</label>
+            </div>
+            <div class="erp-field">
+              <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-dpr-remove-manpower><i class="fa-solid fa-trash"></i></button>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <div data-dpr-materials-panel style="margin-top: 1rem;">
+        <h5 class="erp-form-subtitle">Materials Usage</h5>
+        <div data-dpr-materials-rows></div>
+        <button type="button" class="erp-btn erp-btn-ghost" data-dpr-add-material><i class="fa-solid fa-plus"></i> Add Material</button>
+        <template data-dpr-material-template>
+          <div class="erp-form-grid dpr-resource-row" data-dpr-material-row style="margin-bottom: 0.75rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--erp-border, #e2e8f0);">
+            <div class="erp-field span-2">
+              <input type="text" data-mat-name placeholder="Material name">
+              <label>Material</label>
+            </div>
+            <div class="erp-field">
+              <input type="number" min="0" step="0.01" data-mat-qty placeholder="0">
+              <label>Quantity</label>
+            </div>
+            <div class="erp-field">
+              <input type="text" data-mat-unit placeholder="e.g. bag, kg">
+              <label>Unit</label>
+            </div>
+            <div class="erp-field span-2">
+              <input type="text" data-mat-remarks placeholder="Remarks">
+              <label>Remarks</label>
+            </div>
+            <div class="erp-field">
+              <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-dpr-remove-material><i class="fa-solid fa-trash"></i></button>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <div data-dpr-equipment-panel style="margin-top: 1rem;">
+        <h5 class="erp-form-subtitle">Equipment Details</h5>
+        <div data-dpr-equipment-rows></div>
+        <button type="button" class="erp-btn erp-btn-ghost" data-dpr-add-equipment><i class="fa-solid fa-plus"></i> Add Equipment</button>
+        <button type="button" class="erp-btn erp-btn-ghost" data-dpr-save-equipment><i class="fa-solid fa-floppy-disk"></i> Save Equipment</button>
+        <template data-dpr-equipment-template>
+          <div class="erp-form-grid dpr-resource-row" data-dpr-equipment-row style="margin-bottom: 0.75rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--erp-border, #e2e8f0);">
+            <div class="erp-field">
+              <select data-eq-reg-no>
+                <option value="">Reg No</option>
+              </select>
+              <label>Registration No</label>
+            </div>
+            <div class="erp-field">
+              <select data-eq-type>
+                <option value="">Equipment Type</option>
+              </select>
+              <label>Equipment Type</label>
+            </div>
+            <div class="erp-field span-2">
+              <input type="text" data-eq-name readonly placeholder="Auto from master">
+              <label>Equipment Name</label>
+            </div>
+            <div class="erp-field">
+              <input type="text" data-eq-owner readonly placeholder="—">
+              <label>Owner Type</label>
+            </div>
+            <div class="erp-field">
+              <input type="number" min="0" step="0.01" data-eq-start placeholder="0">
+              <label>Start Reading</label>
+            </div>
+            <div class="erp-field">
+              <input type="number" min="0" step="0.01" data-eq-end placeholder="0">
+              <label>End Reading</label>
+            </div>
+            <div class="erp-field erp-field-readonly">
+              <span data-eq-worked>0</span>
+              <label>Worked (Hr/Km)</label>
+            </div>
+            <div class="erp-field">
+              <select data-eq-rate-type>
+                <option value="hourly">Hourly Rate</option>
+                <option value="km">KM Rate</option>
+                <option value="trip">Trip Rate</option>
+                <option value="lump_sum">Lump Sum</option>
+              </select>
+              <label>Rate Type</label>
+            </div>
+            <div class="erp-field" data-eq-trips-wrap hidden>
+              <input type="number" min="0" step="1" data-eq-trips placeholder="0">
+              <label>Trips</label>
+            </div>
+            <div class="erp-field">
+              <input type="number" min="0" step="0.01" data-eq-rate placeholder="0">
+              <label>Rate / Amount</label>
+            </div>
+            <div class="erp-field erp-field-readonly">
+              <span data-eq-amount>0.00</span>
+              <label>Calculated Amount</label>
+            </div>
+            <div class="erp-field span-2">
+              <input type="text" data-eq-remarks placeholder="Remarks">
+              <label>Remarks</label>
+            </div>
+            <div class="erp-field">
+              <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-dpr-remove-equipment><i class="fa-solid fa-trash"></i></button>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <div data-dpr-additional-panel style="margin-top: 1rem;">
+        <h5 class="erp-form-subtitle">Additional Details</h5>
+        <div class="erp-field span-2">
+          <textarea name="additional_details" rows="3" data-dpr-additional-details placeholder="Any extra notes for this DPR entry">{% if editing_measurement and view_extras.measurement_data and view_extras.measurement_data.additional_details %}{{ view_extras.measurement_data.additional_details }}{% endif %}</textarea>
+          <label>Additional Notes</label>
+        </div>
+      </div>
+      </div>
+
+      <input type="hidden" name="measurement_payload" data-dpr-measurement-payload value="{}">
+      <input type="hidden" name="manpower_payload" data-dpr-manpower-payload value="[]">
+      <input type="hidden" name="materials_payload" data-dpr-materials-payload value="[]">
+      <input type="hidden" name="equipment_payload" data-dpr-equipment-payload value="[]">
+      <input type="hidden" name="activities_payload" data-dpr-activities-payload value="[]">
+      <input type="hidden" name="dpr_status" id="dpr_status" value="submitted">
+
+      <div class="erp-form-actions span-2">
+        <button type="submit" class="erp-btn erp-btn-ghost" data-dpr-save-draft data-dpr-set-status="draft">
+          <i class="fa-solid fa-file-pen"></i> Save Draft
+        </button>
+        <button type="submit" class="erp-btn erp-btn-primary" data-dpr-save-measurement data-dpr-set-status="submitted">
+          <i class="fa-solid fa-paper-plane"></i> Submit DPR
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <div class="erp-form-card" id="dpr-site-upload">
+    <h3 class="erp-form-title">Site DPR Upload</h3>
+    <p class="erp-form-hint">Upload hard-copy or scanned site DPR sheets (PDF, JPG, PNG). Max 10 MB per file.</p>
+    <form method="post" enctype="multipart/form-data" class="erp-form-grid" data-dpr-upload-form>
+      <input type="hidden" name="form_action" value="upload_site_dpr">
+      <div class="erp-field">
+        <input type="date" name="attach_report_date" id="dpr_attach_date" required value="{{ attach_filter_date or '' }}">
+        <label>Report Date</label>
+      </div>
+      <div class="erp-field span-2">
+        <select name="attach_project_id" id="dpr_attach_project" required>
+          <option value="">Select Project</option>
+          {% for p in projects %}
+          <option value="{{ p.id }}" {% if attach_filter_project == p.id %}selected{% endif %}>
+            {{ p.project_code or p.id }} — {{ p.project_name }}
+          </option>
+          {% endfor %}
+        </select>
+        <label>Project</label>
+      </div>
+      <div class="erp-field span-2">
+        <select name="attach_measurement_id" id="dpr_attach_measurement">
+          <option value="">Link to measurement (optional)</option>
+          {% for row in records %}
+          <option value="{{ row.id }}" data-project="{{ row.project_id }}" data-date="{{ row.report_date or '' }}">
+            #{{ row.id }} — {{ row.report_date or '—' }} — {{ row.boq_number or '—' }} — {{ row.boq_description or '—' }}
+          </option>
+          {% endfor %}
+        </select>
+        <label>Link to DPR Measurement</label>
+      </div>
+      <div class="erp-field span-2">
+        <input type="file" name="site_dpr_file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" required>
+        <label>Site DPR Document</label>
+      </div>
+      <div class="erp-field span-2">
+        <input type="text" name="attach_notes" placeholder="Optional notes">
+        <label>Notes</label>
+      </div>
+      <div class="erp-form-actions span-2">
+        <button type="submit" class="erp-btn erp-btn-primary"><i class="fa-solid fa-upload"></i> Upload Site DPR</button>
+      </div>
+    </form>
+
+    <form method="get" class="erp-form-grid" style="margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--erp-border, #e2e8f0);">
+      <div class="erp-field">
+        <input type="date" name="attach_report_date" value="{{ attach_filter_date or '' }}">
+        <label>Filter by Date</label>
+      </div>
+      <div class="erp-field span-2">
+        <select name="attach_project_id">
+          <option value="">All Projects</option>
+          {% for p in projects %}
+          <option value="{{ p.id }}" {% if attach_filter_project == p.id %}selected{% endif %}>
+            {{ p.project_code or p.id }} — {{ p.project_name }}
+          </option>
+          {% endfor %}
+        </select>
+        <label>Filter by Project</label>
+      </div>
+      <div class="erp-form-actions">
+        <button type="submit" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-filter"></i> Filter</button>
+        <a href="{{ url_for('dpr_entry') }}#dpr-site-upload" class="erp-btn erp-btn-ghost">Clear</a>
+      </div>
+    </form>
+
+    <div class="erp-table-scroll dpr-attach-scroll" style="margin-top: 1rem;">
+      <table class="erp-table erp-table-module dpr-attach-table">
+        <thead>
+          <tr>
+            <th>Uploaded</th>
+            <th>Date</th>
+            <th>Project</th>
+            <th>File</th>
+            <th>Linked Measurement</th>
+            <th>Notes</th>
+            <th>By</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for att in dpr_attachments or [] %}
+          <tr>
+            <td>{{ att.uploaded_at or '—' }}</td>
+            <td>{{ att.report_date or '—' }}</td>
+            <td>{{ att.project_code or att.project_id }} — {{ att.project_name or '—' }}</td>
+            <td>{{ att.original_filename or '—' }}</td>
+            <td>
+              {% if att.measurement_id %}
+              #{{ att.measurement_id }}{% if att.boq_number %} — {{ att.boq_number }}{% endif %}
+              {% else %}—{% endif %}
+            </td>
+            <td>{{ att.notes or '—' }}</td>
+            <td>{{ att.uploaded_by or '—' }}</td>
+            <td class="dpr-attach-actions">
+              <a href="{{ url_for('dpr_attachment_file', attachment_id=att.id) }}"
+                 class="erp-btn erp-btn-sm erp-btn-ghost dpr-attach-view"
+                 target="_blank" rel="noopener noreferrer"
+                 title="Open {{ att.original_filename or 'document' }}">
+                <i class="fa-solid fa-eye"></i> View
+              </a>
+              <a href="{{ url_for('dpr_attachment_file', attachment_id=att.id, download=1) }}"
+                 class="erp-btn erp-btn-sm erp-btn-primary dpr-attach-download"
+                 title="Download {{ att.original_filename or 'document' }}">
+                <i class="fa-solid fa-download"></i> Download
+              </a>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="8">No site DPR documents uploaded yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="erp-form-card">
+    <h3 class="erp-form-title">Recent DPR Measurements</h3>
+    <div class="erp-table-scroll">
+      <table class="erp-table erp-table-module">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Project</th>
+            <th>BOQ</th>
+            <th>Description</th>
+            <th>Unit</th>
+            <th>Qty</th>
+            <th>Approval</th>
+            <th>Workflow</th>
+            <th>Client Bill</th>
+            <th>Costing</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in records %}
+          <tr>
+            <td>{{ row.report_date or '—' }}</td>
+            <td>{{ row.project_code or row.project_id }}</td>
+            <td>{{ row.boq_number or '—' }}</td>
+            <td>{{ row.boq_description or '—' }}</td>
+            <td>{{ row.unit or '—' }}</td>
+            <td>{{ '%.4f'|format(row.calculated_quantity or 0) }}</td>
+            <td>{{ role_status_badge(row.approval_status or 'Draft', 'maker') }}</td>
+            <td>{{ (row.dpr_status or 'submitted')|title }}</td>
+            <td>{% if row.bill_client %}Yes{% else %}No{% endif %}</td>
+            <td>{% if row.for_costing %}Yes{% else %}No{% endif %}</td>
+            <td>
+              <div class="workflow-row-actions">
+                <a href="{{ url_for('dpr_entry', view=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">View</a>
+                {% if row.can_edit %}
+                <a href="{{ url_for('dpr_entry', edit=row.id) }}#dpr-form" class="erp-btn erp-btn-ghost erp-btn-sm">Edit</a>
+                {% elif row.approval_status == 'Pending Approval' %}
+                <span class="workflow-hint">Waiting for Approval</span>
+                {% elif row.approval_status == 'Approved' %}
+                <span class="workflow-hint">Approved</span>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="11">No DPR measurements yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+  {% endif %}
+</div>
+
+<div class="erp-modal" id="dpr-continue-modal"{% if not show_continue_prompt %} hidden aria-hidden="true"{% else %} aria-hidden="false"{% endif %}
+     data-continue-project="{{ continue_project_id or '' }}"
+     data-continue-boq="{{ continue_boq_number or '' }}"
+     data-saved-qty="{{ saved_qty or '' }}">
+  <div class="erp-modal-backdrop" data-dpr-continue-no></div>
+  <div class="erp-modal-card" role="dialog" aria-modal="true">
+    <div class="erp-modal-header">
+      <h3>Measurement Saved</h3>
+      <p>Qty <strong data-dpr-saved-qty-display>{{ saved_qty or '0' }}</strong> saved. Continue more measurements for the same BOQ?</p>
+    </div>
+    <div class="erp-form-actions">
+      <button type="button" class="erp-btn erp-btn-ghost" data-dpr-continue-no><i class="fa-solid fa-xmark"></i> No — Close BOQ</button>
+      <button type="button" class="erp-btn erp-btn-primary" data-dpr-continue-yes><i class="fa-solid fa-plus"></i> Yes — Same BOQ</button>
+    </div>
+  </div>
+</div>
+
+<div class="erp-modal" id="dpr-new-shape-modal" hidden aria-hidden="true">
+  <div class="erp-modal-backdrop" data-dpr-shape-cancel></div>
+  <div class="erp-modal-card" role="dialog" aria-modal="true">
+    <div class="erp-modal-header">
+      <h3>Create New Steel Shape</h3>
+    </div>
+    <div class="erp-form-grid">
+      <div class="erp-field span-2">
+        <input type="text" id="dpr_new_shape_name" placeholder="e.g. Custom Ring">
+        <label>Shape Name</label>
+      </div>
+      <div class="erp-field">
+        <input type="number" min="1" max="20" id="dpr_new_shape_sides" value="6">
+        <label>Default Side Count</label>
+      </div>
+      <div class="erp-field">
+        <select id="dpr_new_shape_formula">
+          <option value="perimeter">Perimeter (sum sides)</option>
+          <option value="straight">Straight (cutting length)</option>
+        </select>
+        <label>Formula</label>
+      </div>
+    </div>
+    <div class="erp-form-actions">
+      <button type="button" class="erp-btn erp-btn-ghost" data-dpr-shape-cancel>Cancel</button>
+      <button type="button" class="erp-btn erp-btn-primary" data-dpr-shape-save>Save Shape</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block head_extra %}
+<style>
+  .erp-tab-bar { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+  .erp-tab { padding: 0.5rem 1rem; border-radius: 6px; text-decoration: none; color: inherit; border: 1px solid var(--erp-border, #e2e8f0); }
+  .erp-tab.active { background: var(--erp-primary, #2563eb); color: #fff; border-color: transparent; }
+  .erp-badge { background: #ef4444; color: #fff; border-radius: 999px; padding: 0 0.4rem; font-size: 0.75rem; margin-left: 0.25rem; }
+  .dpr-dimension-group { margin-bottom: 1rem; }
+  .dpr-dimension-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem; }
+  .dpr-reading-row { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.35rem; }
+  .dpr-reading-row input { flex: 1; }
+  .dpr-steel-line { border: 1px solid var(--erp-border, #e2e8f0); padding: 0.75rem; border-radius: 8px; margin-bottom: 0.75rem; }
+  .dpr-attach-table { min-width: 880px; }
+  .dpr-attach-actions { white-space: nowrap; min-width: 11rem; }
+  .dpr-attach-actions .erp-btn { margin-right: 0.35rem; }
+  .dpr-attach-actions .erp-btn:last-child { margin-right: 0; }
+  .dpr-progress-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.75rem; margin-top: 0.5rem; }
+  .dpr-progress-card { border: 1px solid var(--erp-border, #e2e8f0); border-radius: 8px; padding: 0.65rem 0.75rem; background: #f8fafc; }
+  .dpr-progress-card span { display: block; font-size: 0.75rem; color: #64748b; margin-bottom: 0.25rem; }
+  .dpr-progress-card strong { font-size: 1rem; }
+  .dpr-inline-check { display: inline-flex; align-items: center; gap: 0.35rem; margin-top: 0.5rem; font-size: 0.9rem; }
+</style>
+{% endblock %}
+{% block scripts %}
+{{ workflow_modals() }}
+<script src="{{ url_for('static', filename='js/workflow.js') }}"></script>
+<script src="{{ url_for('static', filename='js/dpr-forms.js') }}"></script>
+{% endblock %}

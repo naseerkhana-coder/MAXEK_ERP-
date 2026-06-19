@@ -3,7 +3,8 @@
 {% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('settings') ~ '">Settings</a> &gt; Workflow Assignment Matrix' %}
 {% block content %}
 <div class="erp-validation" style="margin-bottom: 1rem;">
-  <strong>MAXEK Standard:</strong> Maker [Save] → Checker [Verify] → Approver [Approve] — applied to all ERP modules without exception.
+  <strong>Per-module workflow:</strong> Choose how each module routes after save —
+  Maker only (auto-approve), Maker + Checker, full 3-step, or strict Checker + Approver.
 </div>
 
 <div class="module-layout">
@@ -18,7 +19,8 @@
           <option value="{{ wf.module_id }}"
             data-maker="{{ wf.maker_designation_id or '' }}"
             data-checker="{{ wf.checker_designation_id or '' }}"
-            data-approver="{{ wf.approver_designation_id or '' }}">
+            data-approver="{{ wf.approver_designation_id or '' }}"
+            data-mode="{{ wf.workflow_mode or default_workflow_mode }}">
             {{ wf.module_name }}
           </option>
           {% endfor %}
@@ -26,7 +28,15 @@
         <label>Module</label>
       </div>
       <div class="erp-field span-2">
-        <select name="maker_designation_id" id="maker_designation_id" required>
+        <select name="workflow_mode" id="workflow_mode" required>
+          {% for mode in workflow_modes %}
+          <option value="{{ mode }}">{{ workflow_mode_labels.get(mode, mode) }}</option>
+          {% endfor %}
+        </select>
+        <label>Workflow Path</label>
+      </div>
+      <div class="erp-field span-2" id="field-maker">
+        <select name="maker_designation_id" id="maker_designation_id">
           <option value="">Select designation</option>
           {% for d in designations %}
           <option value="{{ d.id }}">{{ d.designation_name }}</option>
@@ -34,8 +44,8 @@
         </select>
         <label>Maker Designation</label>
       </div>
-      <div class="erp-field span-2">
-        <select name="checker_designation_id" id="checker_designation_id" required>
+      <div class="erp-field span-2" id="field-checker">
+        <select name="checker_designation_id" id="checker_designation_id">
           <option value="">Select designation</option>
           {% for d in designations %}
           <option value="{{ d.id }}">{{ d.designation_name }}</option>
@@ -43,8 +53,8 @@
         </select>
         <label>Checker Designation</label>
       </div>
-      <div class="erp-field span-2">
-        <select name="approver_designation_id" id="approver_designation_id" required>
+      <div class="erp-field span-2" id="field-approver">
+        <select name="approver_designation_id" id="approver_designation_id">
           <option value="">Select designation</option>
           {% for d in designations %}
           <option value="{{ d.id }}">{{ d.designation_name }}</option>
@@ -80,9 +90,10 @@
         <thead>
           <tr>
             <th>Module</th>
-            <th>Maker Designation</th>
-            <th>Checker Designation</th>
-            <th>Approver Designation</th>
+            <th>Workflow Path</th>
+            <th>Maker</th>
+            <th>Checker</th>
+            <th>Approver</th>
             <th>Status</th>
             <th>Actions</th>
           </tr>
@@ -91,6 +102,7 @@
           {% for wf in workflows %}
           <tr>
             <td><strong>{{ wf.module_name }}</strong></td>
+            <td>{{ workflow_mode_labels.get(wf.workflow_mode or default_workflow_mode, wf.workflow_mode or 'Full') }}</td>
             <td>{{ wf.maker_designation or '—' }}</td>
             <td>{{ wf.checker_designation or '—' }}</td>
             <td>{{ wf.approver_designation or '—' }}</td>
@@ -100,11 +112,12 @@
                 data-module="{{ wf.module_id }}"
                 data-maker="{{ wf.maker_designation_id or '' }}"
                 data-checker="{{ wf.checker_designation_id or '' }}"
-                data-approver="{{ wf.approver_designation_id or '' }}">Edit</button>
+                data-approver="{{ wf.approver_designation_id or '' }}"
+                data-mode="{{ wf.workflow_mode or default_workflow_mode }}">Edit</button>
             </td>
           </tr>
           {% else %}
-          <tr><td colspan="6">No workflow assignments found.</td></tr>
+          <tr><td colspan="7">No workflow assignments found.</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -114,25 +127,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
-function loadModule(opt) {
-  if (!opt || !opt.value) return;
-  document.getElementById('maker_designation_id').value = opt.dataset.maker || '';
-  document.getElementById('checker_designation_id').value = opt.dataset.checker || '';
-  document.getElementById('approver_designation_id').value = opt.dataset.approver || '';
-}
-document.getElementById('module_id').addEventListener('change', function() {
-  loadModule(this.options[this.selectedIndex]);
-});
-document.querySelectorAll('.js-edit-matrix').forEach(function(btn) {
-  btn.addEventListener('click', function() {
-    var sel = document.getElementById('module_id');
-    sel.value = btn.dataset.module;
-    document.getElementById('maker_designation_id').value = btn.dataset.maker || '';
-    document.getElementById('checker_designation_id').value = btn.dataset.checker || '';
-    document.getElementById('approver_designation_id').value = btn.dataset.approver || '';
-    document.getElementById('configure-form').scrollIntoView({ behavior: 'smooth' });
-  });
-});
-</script>
+<script src="{{ url_for('static', filename='js/workflow-settings.js') }}"></script>
 {% endblock %}

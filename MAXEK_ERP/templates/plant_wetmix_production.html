@@ -1,0 +1,98 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Wet Mix Production' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('plant_dashboard') ~ '">Plant</a> &gt; Wet Mix Production' %}
+{% block page_actions %}
+<a href="{{ url_for('plant_wetmix_production', new=1) }}#record-form" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> New Entry</a>
+{% endblock %}
+{% block content %}
+{% if view_record %}
+<div class="erp-form-card" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">{{ view_record.material_mix }}</h3>
+  <p><strong>Date:</strong> {{ view_record.production_date }} | <strong>Plant:</strong> {{ view_record.plant_name }} ({{ view_record.plant_code }})</p>
+  <p><strong>Qty:</strong> {{ '%.2f'|format(view_record.qty or 0) }} Ton | <strong>Operator:</strong> {{ view_record.operator or '—' }}</p>
+  {% if view_record.consumption %}
+  <p><strong>Consumption:</strong>
+    {% for c in view_record.consumption %}{{ c.material }}: {{ c.qty }} {{ c.unit }}{% if not loop.last %} · {% endif %}{% endfor %}
+  </p>
+  {% endif %}
+  <a href="{{ url_for('plant_wetmix_production', edit=view_record.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Edit</a>
+</div>
+{% endif %}
+
+{% if show_form %}
+<div class="erp-form-card" id="record-form" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">{% if edit_record %}Edit Wet Mix Production{% else %}Wet Mix Production{% endif %}</h3>
+  <form method="post">
+    {% if edit_record %}<input type="hidden" name="record_id" value="{{ edit_record.id }}">{% endif %}
+    <div class="erp-form-grid">
+      <div class="erp-field"><input type="date" name="production_date" required value="{{ edit_record.production_date if edit_record else default_date }}"><label>Date *</label></div>
+      <div class="erp-field"><select name="plant_id" required><option value="">Select Plant</option>{% for pl in plants %}<option value="{{ pl.id }}" {% if edit_record and edit_record.plant_id == pl.id %}selected{% endif %}>{{ pl.plant_name }} ({{ pl.plant_id }})</option>{% endfor %}</select><label>Plant *</label></div>
+      <div class="erp-field"><input name="material_mix" required placeholder="WMM, GSB, etc." value="{{ edit_record.material_mix if edit_record else 'WMM' }}"><label>Material Mix *</label></div>
+      <div class="erp-field"><input type="number" step="0.01" name="qty" required placeholder=" " value="{{ edit_record.qty if edit_record else '' }}"><label>Qty (Ton) *</label></div>
+      <div class="erp-field"><input name="operator" placeholder=" " value="{{ edit_record.operator if edit_record else '' }}"><label>Operator</label></div>
+    </div>
+    <h4 style="margin:1rem 0 0.5rem;font-size:0.9rem;">Raw Material Consumption</h4>
+    <div class="erp-form-grid">
+      <div class="erp-field"><input type="number" step="0.01" name="consumption_aggregate" placeholder=" " value="{{ consumption_values.aggregate if consumption_values else '' }}"><label>Aggregate (Ton)</label></div>
+      <div class="erp-field"><input type="number" step="0.01" name="consumption_cement" placeholder=" " value="{{ consumption_values.cement if consumption_values else '' }}"><label>Cement (Ton)</label></div>
+      <div class="erp-field"><input type="number" step="0.01" name="consumption_water" placeholder=" " value="{{ consumption_values.water if consumption_values else '' }}"><label>Water (L)</label></div>
+      <div class="erp-field"><input type="number" step="0.01" name="consumption_additive" placeholder=" " value="{{ consumption_values.additive if consumption_values else '' }}"><label>Additive (L)</label></div>
+      <div class="erp-field span-2"><textarea name="remarks" placeholder=" ">{{ edit_record.remarks if edit_record else '' }}</textarea><label>Remarks</label></div>
+    </div>
+    <button type="submit" class="erp-btn erp-btn-primary">Save Production</button>
+    {% if edit_record %}
+    <button type="submit" name="form_action" value="delete" class="erp-btn erp-btn-ghost" onclick="return confirm('Delete this entry? Stock will be adjusted.');">Delete</button>
+    {% endif %}
+  </form>
+</div>
+{% endif %}
+
+<form method="get" style="margin-bottom:0.75rem;display:flex;gap:0.5rem;flex-wrap:wrap;">
+  <input name="q" value="{{ search }}" placeholder="Search mix / operator…" style="max-width:200px;">
+  <select name="plant_id" onchange="this.form.submit()"><option value="">All plants</option>{% for pl in plants %}<option value="{{ pl.id }}" {% if plant_filter == pl.id %}selected{% endif %}>{{ pl.plant_name }}</option>{% endfor %}</select>
+  <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Filter</button>
+</form>
+
+{% if stock_rows %}
+<div class="erp-form-card" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title" style="font-size:0.95rem;">Wet Mix Stock Balance</h3>
+  <div class="erp-table-scroll">
+    <table class="erp-table erp-table-compact">
+      <thead><tr><th>Plant</th><th>Mix</th><th>Production</th><th>Closing</th></tr></thead>
+      <tbody>
+        {% for s in stock_rows %}
+        <tr>
+          <td>{{ s.plant_name }}</td>
+          <td>{{ (s.material_type or '')|replace('WETMIX:', '') }}</td>
+          <td>{{ '%.2f'|format(s.production or 0) }}</td>
+          <td><strong>{{ '%.2f'|format(s.closing or 0) }}</strong></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<div class="erp-table-panel" data-erp-table>
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead><tr><th>Date</th><th>Plant</th><th>Mix</th><th>Qty (T)</th><th>Operator</th><th></th></tr></thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>{{ row.production_date or '—' }}</td>
+          <td>{{ row.plant_name }}</td>
+          <td>{{ row.material_mix or '—' }}</td>
+          <td>{{ '%.2f'|format(row.qty or 0) }}</td>
+          <td>{{ row.operator or '—' }}</td>
+          <td><a href="{{ url_for('plant_wetmix_production', view=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">View</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6">No wet mix production entries yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Salary Slip — {{ line.employee_name }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/maxek-dashboard.css') }}">
+  <style>
+    body { font-family: system-ui, sans-serif; padding: 2rem; max-width: 720px; margin: 0 auto; }
+    .slip-header { text-align: center; border-bottom: 2px solid #1e3a5f; padding-bottom: 1rem; margin-bottom: 1rem; }
+    .slip-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem 1.5rem; }
+    .slip-table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+    .slip-table th, .slip-table td { border: 1px solid #ccc; padding: 0.4rem 0.6rem; text-align: left; }
+    .slip-table th { background: #f0f4f8; }
+    @media print { .no-print { display: none; } body { padding: 0; } }
+  </style>
+</head>
+<body>
+  <div class="slip-header">
+    <h1>MAXEK Technologies</h1>
+    <h2>Salary Slip</h2>
+    <p>{{ line.run_ref }} | {{ line.period_start }} to {{ line.period_end }}</p>
+  </div>
+  <div class="slip-grid">
+    <div><strong>Employee:</strong> {{ line.employee_name }}</div>
+    <div><strong>Code:</strong> {{ line.employee_code or '—' }}</div>
+    <div><strong>Type:</strong> {{ line.employee_type }}</div>
+    <div><strong>Department:</strong> {{ line.department or '—' }}</div>
+    <div><strong>Bank A/C:</strong> {{ bank.bank_account or '—' }}</div>
+    <div><strong>IFSC:</strong> {{ bank.ifsc_code or '—' }}</div>
+  </div>
+  <table class="slip-table">
+    <thead><tr><th>Component</th><th>Amount (₹)</th></tr></thead>
+    <tbody>
+      <tr><td>Base / Daily Rate</td><td>{{ '%.2f'|format(line.base_salary or 0) }}</td></tr>
+      <tr><td>Present Days</td><td>{{ line.present_days or 0 }} / {{ line.working_days or 0 }}</td></tr>
+      <tr><td>OT ({{ line.ot_hours or 0 }} hrs)</td><td>{{ '%.2f'|format(line.ot_amount or 0) }}</td></tr>
+      <tr><td>Holiday Pay</td><td>{{ '%.2f'|format(line.holiday_pay or 0) }}</td></tr>
+      <tr><td><strong>Gross Salary</strong></td><td><strong>{{ '%.2f'|format(line.gross_salary or 0) }}</strong></td></tr>
+      <tr><td>Deductions</td><td>{{ '%.2f'|format(line.deductions or 0) }}</td></tr>
+      <tr><td>Advance Deduction</td><td>{{ '%.2f'|format(line.advance_deduction or 0) }}</td></tr>
+      <tr><td><strong>Net Salary</strong></td><td><strong>{{ '%.2f'|format(line.net_salary or 0) }}</strong></td></tr>
+    </tbody>
+  </table>
+  {% if payment %}
+  <p style="margin-top:1rem;"><strong>Paid:</strong> {{ payment.payment_date }} via {{ payment.payment_mode }}
+    {% if payment.utr_ref %}| UTR: {{ payment.utr_ref }}{% endif %}</p>
+  {% endif %}
+  <p class="no-print" style="margin-top:2rem;">
+    <button onclick="window.print()" class="erp-btn erp-btn-primary">Print</button>
+    <a href="{{ url_for('payroll', view=line.payroll_run_id) }}" class="erp-btn erp-btn-ghost">Back</a>
+  </p>
+  {% if print_mode %}<script>window.onload=function(){window.print();}</script>{% endif %}
+</body>
+</html>

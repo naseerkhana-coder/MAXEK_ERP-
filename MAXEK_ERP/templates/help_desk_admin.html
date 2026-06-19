@@ -1,0 +1,72 @@
+{% extends 'base_maxek.html' %}
+{% from 'macros/erp_ui.html' import erp_sub_toolbar %}
+{% set page_title = 'Manage Help Topics' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('help_desk') ~ '">Help Desk</a> &gt; Admin' %}
+{% block page_actions %}
+<a href="{{ url_for('help_desk_admin', new=1) }}#topic-form" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> New Topic</a>
+{% endblock %}
+{% block content %}
+{{ erp_sub_toolbar(sub_toolbar, 'Help and support') }}
+
+{% if show_form %}
+<div class="erp-form-card erp-form-card--compact" id="topic-form" style="margin-top:0.75rem;">
+  <h3 class="erp-form-title">{% if edit_record %}Edit Help Topic{% else %}New Help Topic{% endif %}</h3>
+  <form method="post">
+    {% if edit_record %}<input type="hidden" name="record_id" value="{{ edit_record.id }}">{% endif %}
+    <div class="erp-form-grid erp-form-grid--compact">
+      <div class="erp-field span-2"><input name="title" required placeholder=" " value="{{ edit_record.title if edit_record else '' }}"><label>Title *</label></div>
+      <div class="erp-field">
+        <select name="category">
+          {% for cat in categories %}
+          <option value="{{ cat }}" {% if edit_record and edit_record.category == cat %}selected{% elif not edit_record and cat == 'General' %}selected{% endif %}>{{ cat }}</option>
+          {% endfor %}
+        </select>
+        <label>Category</label>
+      </div>
+      <div class="erp-field"><input type="number" name="sort_order" placeholder=" " value="{{ edit_record.sort_order if edit_record else 0 }}"><label>Sort Order</label></div>
+      <div class="erp-field">
+        <select name="status">
+          {% for st in topic_statuses %}
+          <option value="{{ st }}" {% if edit_record and edit_record.status == st %}selected{% elif not edit_record and st == 'Active' %}selected{% endif %}>{{ st }}</option>
+          {% endfor %}
+        </select>
+        <label>Status</label>
+      </div>
+      <div class="erp-field span-2"><textarea name="description" placeholder=" ">{{ edit_record.description if edit_record else '' }}</textarea><label>Description</label></div>
+      <div class="erp-field span-2"><input name="video_url" placeholder=" " value="{{ edit_record.video_url if edit_record else '' }}"><label>Tutorial Video URL (YouTube / hosted link)</label></div>
+      <div class="erp-field span-2"><input name="manual_url" placeholder=" " value="{{ edit_record.manual_url if edit_record else '' }}"><label>User Manual URL (PDF or web page)</label></div>
+    </div>
+    <div class="erp-form-actions">
+      <button type="submit" class="erp-btn erp-btn-primary">Save Topic</button>
+      {% if edit_record %}
+      <button type="submit" name="form_action" value="delete" class="erp-btn erp-btn-ghost" onclick="return confirm('Delete this help topic?');">Delete</button>
+      {% endif %}
+      <a href="{{ url_for('help_desk_admin') }}" class="erp-btn erp-btn-ghost">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endif %}
+
+<div class="erp-table-panel" data-erp-table style="margin-top:0.75rem;">
+  <div class="erp-table-scroll">
+    <table class="erp-table erp-table-compact">
+      <thead><tr><th>#</th><th>Title</th><th>Category</th><th>Video</th><th>Manual</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        {% for row in topics %}
+        <tr>
+          <td>{{ row.sort_order }}</td>
+          <td>{{ row.title }}</td>
+          <td>{{ row.category }}</td>
+          <td>{% if row.video_url %}<i class="fa-solid fa-check" style="color:#16a34a;"></i>{% else %}—{% endif %}</td>
+          <td>{% if row.manual_url %}<i class="fa-solid fa-check" style="color:#16a34a;"></i>{% else %}—{% endif %}</td>
+          <td>{{ row.status }}</td>
+          <td><a href="{{ url_for('help_desk_admin', edit=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Edit</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7">No help topics yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

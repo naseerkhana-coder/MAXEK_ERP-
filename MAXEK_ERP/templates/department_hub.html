@@ -1,0 +1,13 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = '' %}
+{% block content %}
+<section class="department-hub">
+  <div class="department-hub-card">
+    <div class="department-hub-icon">
+      <i class="fa-solid {{ nav_group.icon }}"></i>
+    </div>
+    <h2>{{ nav_group.label }}</h2>
+    <p>Select a module from the toolbar above to continue.</p>
+  </div>
+</section>
+{% endblock %}

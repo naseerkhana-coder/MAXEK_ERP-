@@ -3,15 +3,23 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MAXEK ERP - Choice B Dashboard</title>
+  <meta name="description" content="MAXEK Technologies ERP dashboard — construction operations overview.">
+  <title>Dashboard — MAXEK Technologies ERP</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/maxek-dashboard.css') }}">
 </head>
 <body class="maxek-layout">
   <nav class="tool-rail">
     <div class="logo-container">
+      <img
+        src="{{ url_for('static', filename='images/maxek-logo.png') }}"
+        alt="MAXEK Technologies"
+        class="maxek-logo maxek-logo--sidebar"
+        width="48"
+        height="48"
+      >
       <div class="logo-text-main">MAX<span>EK</span></div>
-      <div class="logo-subtext">Private Limited</div>
+      <div class="logo-subtext">Technologies</div>
     </div>
 
     <h3 class="action-heading">Quick Launch Tools</h3>

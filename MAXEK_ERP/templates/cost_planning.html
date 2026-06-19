@@ -1,0 +1,359 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Cost Planning & Monitoring' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; Projects &gt; Cost Planning' %}
+{% block page_actions %}
+<a href="{{ url_for('boq_management') }}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-list-ol"></i> BOQ</a>
+<a href="{{ url_for('cost_planning_export', project_id=filter_project) if filter_project else url_for('cost_planning_export') }}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-file-excel"></i> Export Excel</a>
+<a href="{{ url_for('cost_planning_print', project_id=filter_project, print=1) if filter_project else '#' }}" class="erp-btn erp-btn-ghost"{% if not filter_project %} aria-disabled="true" title="Select a project first"{% endif %}><i class="fa-solid fa-print"></i> Print Summary</a>
+<a href="{{ url_for('cost_planning_reports') }}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-chart-line"></i> Reports</a>
+<a href="#cost-plan-form" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> New Cost Plan</a>
+{% endblock %}
+{% block content %}
+<div class="module-layout cost-planning-module" data-cost-planning-module>
+  <div class="erp-form-card" style="margin-bottom:1rem;">
+    <h3 class="erp-form-title">Project Filter</h3>
+    <form method="get" class="erp-form-grid">
+      <div class="erp-field span-2">
+        <select name="project_id" class="has-value" data-cp-project-filter onchange="this.form.submit()">
+          <option value="">All projects</option>
+          {% for p in projects %}
+          <option value="{{ p.id }}"{% if filter_project == p.id %} selected{% endif %}>{{ p.project_code or p.id }} — {{ p.project_name }}</option>
+          {% endfor %}
+        </select>
+        <label>Project</label>
+      </div>
+    </form>
+  </div>
+
+  {% if filter_project %}
+  <div class="erp-summary-grid" style="margin-bottom:1rem;" id="cp-dashboard">
+    <div class="erp-stat-card"><span>Cost Plans</span><strong>{{ dashboard.plan_count }}</strong></div>
+    <div class="erp-stat-card"><span>Planned Cost</span><strong>₹{{ '%.2f'|format(dashboard.total_planned_cost) }}</strong></div>
+    <div class="erp-stat-card"><span>Actual Cost (est.)</span><strong>₹{{ '%.2f'|format(dashboard.total_actual_cost) }}</strong></div>
+    <div class="erp-stat-card"><span>Cost Variance</span><strong>₹{{ '%.2f'|format(dashboard.cost_variance) }}</strong></div>
+    <div class="erp-stat-card"><span>Planned Progress</span><strong>{{ '%.1f'|format(dashboard.avg_planned_progress) }}%</strong></div>
+    <div class="erp-stat-card"><span>Actual Progress</span><strong>{{ '%.1f'|format(dashboard.avg_actual_progress) }}%</strong></div>
+    <div class="erp-stat-card"><span>Delayed Items</span><strong>{{ dashboard.delayed_activities }}</strong></div>
+  </div>
+  {% endif %}
+
+  {% if view_plan %}
+  <div class="erp-form-card" style="margin-bottom:1rem;">
+    <h3 class="erp-form-title">Cost Plan — {{ view_plan.boq_number }} / {{ view_plan.item_code or 'Item' }}</h3>
+    <p><strong>Description:</strong> {{ view_plan.item_description }} | <strong>BOQ Qty:</strong> {{ view_plan.boq_quantity }} {{ view_plan.boq_unit }}</p>
+    <p><strong>Planned Cost:</strong> ₹{{ '%.2f'|format(view_plan.totals.total_planned_cost) }}
+      (Material ₹{{ '%.2f'|format(view_plan.totals.material_cost) }},
+      Labour ₹{{ '%.2f'|format(view_plan.totals.labour_cost) }},
+      Machinery ₹{{ '%.2f'|format(view_plan.totals.machinery_cost) }})</p>
+    <p><strong>DPR Actual Qty:</strong> {{ view_plan.actuals.actual_quantity }} ({{ view_plan.actuals.actual_progress_percent }}%)</p>
+    <div class="workflow-row-actions" style="margin-top:0.75rem;">
+      <a href="{{ url_for('cost_planning', edit=view_plan.id, project_id=filter_project) }}#cost-plan-form" class="erp-btn erp-btn-primary erp-btn-sm">Edit</a>
+      <a href="{{ url_for('cost_planning', project_id=filter_project) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Back to list</a>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="erp-form-card" id="cost-plan-form" style="margin-bottom:1rem;">
+    <h3 class="erp-form-title">{% if editing_plan %}Edit Cost Plan{% else %}Create Cost Plan{% endif %}</h3>
+    <form method="post" class="erp-form-grid" data-cost-plan-form>
+      <input type="hidden" name="form_action" value="save_plan">
+      {% if editing_plan %}<input type="hidden" name="cost_plan_id" value="{{ editing_plan.id }}">{% endif %}
+      <div class="erp-field span-2">
+        <select name="project_id" required class="has-value" data-cp-project-select>
+          <option value="">Select project</option>
+          {% for p in projects %}
+          <option value="{{ p.id }}"{% if (editing_plan and editing_plan.project_id == p.id) or (not editing_plan and filter_project == p.id) or (prefill_context and prefill_context.project_id == p.id) %} selected{% endif %}>{{ p.project_code or p.id }} — {{ p.project_name }}</option>
+          {% endfor %}
+        </select>
+        <label>Project</label>
+      </div>
+      <div class="erp-field">
+        <select name="boq_master_id" required class="has-value" data-cp-boq-select>
+          <option value="">Select BOQ</option>
+          {% if editing_plan %}
+          <option value="{{ editing_plan.boq_master_id }}" selected>{{ editing_plan.boq_number }}</option>
+          {% elif prefill_context %}
+          <option value="{{ prefill_context.boq_id }}" selected>{{ prefill_context.boq_number }}</option>
+          {% endif %}
+        </select>
+        <label>BOQ Number</label>
+      </div>
+      <div class="erp-field">
+        <select name="boq_item_id" required class="has-value" data-cp-boq-item-select>
+          <option value="">Select BOQ item</option>
+          {% if editing_plan %}
+          <option value="{{ editing_plan.boq_item_id }}" selected>{{ editing_plan.item_code }} — {{ editing_plan.item_description }}</option>
+          {% elif prefill_context %}
+          <option value="{{ prefill_context.id }}" selected>{{ prefill_context.item_code or ('BOQ' ~ prefill_context.line_no) }} — {{ prefill_context.item_description }}</option>
+          {% endif %}
+        </select>
+        <label>BOQ Item</label>
+      </div>
+      <div class="erp-field erp-field-auto-number span-2">
+        <span class="erp-auto-number" data-cp-boq-qty-display>{% if editing_plan %}{{ editing_plan.boq_quantity }} {{ editing_plan.boq_unit }}{% elif prefill_context %}{{ prefill_context.quantity }} {{ prefill_context.unit }}{% else %}—{% endif %}</span>
+        <label>BOQ Quantity (auto)</label>
+      </div>
+      <div class="erp-field">
+        <select name="plan_status" class="has-value">
+          <option value="Draft"{% if not editing_plan or editing_plan.plan_status == 'Draft' %} selected{% endif %}>Draft</option>
+          <option value="Active"{% if editing_plan and editing_plan.plan_status == 'Active' %} selected{% endif %}>Active</option>
+        </select>
+        <label>Status</label>
+      </div>
+      <div class="erp-field span-2"><input name="remarks" value="{{ editing_plan.remarks if editing_plan else '' }}" placeholder=" " class="{% if editing_plan and editing_plan.remarks %}has-value{% endif %}"><label>Remarks</label></div>
+
+      <div class="erp-form-subtitle span-2">BOQ Activity Split-Up (WBS Level 4)</div>
+      <div class="span-2 erp-table-scroll">
+        <table class="erp-table erp-table-module">
+          <thead><tr><th>Activity</th><th>Unit</th><th>Planned Qty</th><th></th></tr></thead>
+          <tbody data-cp-activity-rows>
+            {% set act_rows = editing_plan.activities if editing_plan else [] %}
+            {% if act_rows %}
+            {% for act in act_rows %}
+            <tr data-cp-activity-row>
+              <td><input name="activity_name[]" class="boq-input" value="{{ act.activity_name }}" list="cp-activity-suggestions"></td>
+              <td><input name="activity_unit[]" class="boq-input" value="{{ act.activity_unit or '' }}"></td>
+              <td><input name="activity_planned_qty[]" type="number" step="0.01" class="boq-input" value="{{ act.planned_qty or 0 }}"></td>
+              <td><button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-cp-remove-row><i class="fa-solid fa-trash"></i></button></td>
+            </tr>
+            {% endfor %}
+            {% else %}
+            {% for name in default_activities[:4] %}
+            <tr data-cp-activity-row>
+              <td><input name="activity_name[]" class="boq-input" value="{{ name }}" list="cp-activity-suggestions"></td>
+              <td><input name="activity_unit[]" class="boq-input"></td>
+              <td><input name="activity_planned_qty[]" type="number" step="0.01" class="boq-input" value="0"></td>
+              <td><button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-cp-remove-row><i class="fa-solid fa-trash"></i></button></td>
+            </tr>
+            {% endfor %}
+            {% endif %}
+          </tbody>
+        </table>
+        <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-cp-add-activity><i class="fa-solid fa-plus"></i> Add Activity</button>
+        <datalist id="cp-activity-suggestions">
+          {% for name in default_activities %}<option value="{{ name }}">{% endfor %}
+        </datalist>
+      </div>
+
+      <div class="erp-form-subtitle span-2">Material Planning</div>
+      <div class="span-2 erp-table-scroll">
+        <table class="erp-table erp-table-module">
+          <thead><tr><th>Material</th><th>Unit</th><th>Qty/BOQ Unit</th><th>Rate</th><th>Planned Qty</th><th>Amount</th><th></th></tr></thead>
+          <tbody data-cp-material-rows>
+            {% set mat_rows = editing_plan.materials if editing_plan else default_material_rows %}
+            {% for mat in mat_rows %}
+            <tr data-cp-material-row>
+              <td><input name="material_name[]" class="boq-input" value="{{ mat.material_name }}"></td>
+              <td><input name="material_unit[]" class="boq-input" value="{{ mat.material_unit or '' }}"></td>
+              <td><input name="consumption_factor[]" type="number" step="0.0001" class="boq-input cp-factor" value="{{ mat.consumption_factor or 0 }}"></td>
+              <td><input name="material_rate[]" type="number" step="0.01" class="boq-input cp-rate" value="{{ mat.rate or 0 }}"></td>
+              <td><input type="text" class="boq-input cp-planned-qty" readonly value="{{ mat.planned_qty or 0 }}"></td>
+              <td><input type="text" class="boq-input cp-planned-amt" readonly value="{{ mat.planned_amount or 0 }}"></td>
+              <td><input type="hidden" name="material_activity_id[]" value="{{ mat.activity_id or '' }}"><button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-cp-remove-row><i class="fa-solid fa-trash"></i></button></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-cp-add-material><i class="fa-solid fa-plus"></i> Add Material</button>
+      </div>
+
+      <div class="erp-form-subtitle span-2">Manpower Planning</div>
+      <div class="span-2 erp-table-scroll">
+        <table class="erp-table erp-table-module">
+          <thead><tr><th>Trade</th><th>Planned #</th><th>Hrs/BOQ Unit</th><th>Rate/hr</th><th>Total Hrs</th><th>Amount</th><th></th></tr></thead>
+          <tbody data-cp-manpower-rows>
+            {% set mp_rows = editing_plan.manpower if editing_plan else default_manpower_rows %}
+            {% for mp in mp_rows %}
+            <tr data-cp-manpower-row>
+              <td><input name="trade_name[]" class="boq-input" value="{{ mp.trade_name }}"></td>
+              <td><input name="planned_manpower[]" type="number" step="0.01" class="boq-input" value="{{ mp.planned_manpower or 0 }}"></td>
+              <td><input name="hours_per_unit[]" type="number" step="0.0001" class="boq-input cp-hpu" value="{{ mp.hours_per_unit or 0 }}"></td>
+              <td><input name="labour_rate[]" type="number" step="0.01" class="boq-input cp-rate" value="{{ mp.labour_rate or 0 }}"></td>
+              <td><input type="text" class="boq-input cp-planned-hrs" readonly value="{{ mp.planned_hours or 0 }}"></td>
+              <td><input type="text" class="boq-input cp-planned-amt" readonly value="{{ mp.planned_amount or 0 }}"></td>
+              <td><input type="hidden" name="manpower_activity_id[]" value="{{ mp.activity_id or '' }}"><button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-cp-remove-row><i class="fa-solid fa-trash"></i></button></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-cp-add-manpower><i class="fa-solid fa-plus"></i> Add Trade</button>
+      </div>
+
+      <div class="erp-form-subtitle span-2">Machinery Planning</div>
+      <div class="span-2 erp-table-scroll">
+        <table class="erp-table erp-table-module">
+          <thead><tr><th>Equipment</th><th>Hrs/BOQ Unit</th><th>Hourly Rate</th><th>Total Hrs</th><th>Amount</th><th></th></tr></thead>
+          <tbody data-cp-machinery-rows>
+            {% set mach_rows = editing_plan.machinery if editing_plan else default_machinery_rows %}
+            {% for mach in mach_rows %}
+            <tr data-cp-machinery-row>
+              <td>
+                <select name="equipment_type[]" class="boq-input has-value" data-cp-equipment-select>
+                  <option value="">Type</option>
+                  {% for eq in equipment_options %}
+                  <option value="{{ eq.equipment_type }}" data-eq-id="{{ eq.id }}" data-hourly="{{ eq.hourly_rate or 0 }}"{% if mach.equipment_type == eq.equipment_type %} selected{% endif %}>{{ eq.equipment_type }} — {{ eq.equipment_name }}</option>
+                  {% endfor %}
+                  {% if mach.equipment_type and mach.equipment_type not in equipment_options|map(attribute='equipment_type')|list %}
+                  <option value="{{ mach.equipment_type }}" selected>{{ mach.equipment_type }}</option>
+                  {% endif %}
+                </select>
+                <input type="hidden" name="equipment_id[]" value="{{ mach.equipment_id or '' }}">
+              </td>
+              <td><input name="machinery_hours_per_unit[]" type="number" step="0.0001" class="boq-input cp-hpu" value="{{ mach.hours_per_unit or 0 }}"></td>
+              <td><input name="hourly_rate[]" type="number" step="0.01" class="boq-input cp-rate" value="{{ mach.hourly_rate or 0 }}"></td>
+              <td><input type="text" class="boq-input cp-planned-hrs" readonly value="{{ mach.planned_hours or 0 }}"></td>
+              <td><input type="text" class="boq-input cp-planned-amt" readonly value="{{ mach.planned_amount or 0 }}"></td>
+              <td><input type="hidden" name="machinery_activity_id[]" value="{{ mach.activity_id or '' }}"><button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-cp-remove-row><i class="fa-solid fa-trash"></i></button></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-cp-add-machinery><i class="fa-solid fa-plus"></i> Add Equipment</button>
+      </div>
+
+      <div class="erp-form-actions span-2">
+        <p data-cp-dpr-actuals-hint style="font-size:0.9rem;color:var(--text-muted,#64748b);"></p>
+        <button type="submit" class="erp-btn erp-btn-primary"><i class="fa-solid fa-floppy-disk"></i> Save Cost Plan</button>
+        {% if editing_plan %}
+        <a href="{{ url_for('cost_planning', project_id=filter_project) }}" class="erp-btn erp-btn-ghost">Cancel</a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  <div class="erp-form-card" id="wbs-view" style="margin-bottom:1rem;">
+    <h3 class="erp-form-title">Work Breakdown Structure (WBS)</h3>
+    {% if not filter_project %}
+    <p>Select a project to view WBS hierarchy: Project → BOQ → BOQ Item → Activity.</p>
+    {% elif wbs_tree %}
+    <ul class="cp-wbs-tree" data-cp-wbs-tree>
+      {% macro render_wbs(nodes) %}
+      {% for node in nodes %}
+      <li class="cp-wbs-level-{{ node.level }}">
+        <span class="cp-wbs-label">{{ node.label }}</span>
+        {% if node.type == 'activity' %}
+        <span class="cp-wbs-meta">Planned: {{ node.planned_qty or 0 }} | Actual: {{ node.actual_qty or 0 }} {{ node.unit or '' }}</span>
+        {% endif %}
+        {% if node.children %}
+        <ul>{{ render_wbs(node.children) }}</ul>
+        {% endif %}
+      </li>
+      {% endfor %}
+      {% endmacro %}
+      {{ render_wbs(wbs_tree) }}
+    </ul>
+    {% else %}
+    <p>No BOQ data for this project.</p>
+    {% endif %}
+  </div>
+
+  <div class="erp-form-card" id="micro-planning" style="margin-bottom:1rem;">
+    <h3 class="erp-form-title">Micro Planning</h3>
+    {% if active_plan %}
+    <form method="post" class="erp-form-grid" style="margin-bottom:1rem;">
+      <input type="hidden" name="form_action" value="save_micro">
+      <input type="hidden" name="micro_cost_plan_id" value="{{ active_plan.id }}">
+      <input type="hidden" name="micro_project_id" value="{{ active_plan.project_id }}">
+      <div class="erp-field">
+        <select name="plan_period" class="has-value">
+          {% for period in micro_periods %}
+          <option value="{{ period }}">{{ period }}</option>
+          {% endfor %}
+        </select>
+        <label>Period</label>
+      </div>
+      <div class="erp-field"><input type="date" name="plan_date" required placeholder=" " class="has-value"><label>Date</label></div>
+      <div class="erp-field span-2">
+        <select name="micro_activity_id" class="has-value">
+          <option value="">Activity (optional)</option>
+          {% for act in active_plan.activities %}
+          <option value="{{ act.id }}">{{ act.activity_name }}</option>
+          {% endfor %}
+        </select>
+        <label>Activity</label>
+      </div>
+      <div class="erp-field"><input name="micro_planned_qty" type="number" step="0.01" placeholder=" "><label>Planned Qty</label></div>
+      <div class="erp-field"><input name="micro_planned_manpower" type="number" step="0.01" placeholder=" "><label>Planned Manpower</label></div>
+      <div class="erp-field"><input name="micro_planned_equipment" placeholder=" "><label>Planned Equipment</label></div>
+      <div class="erp-field"><input name="micro_planned_material" placeholder=" "><label>Planned Material</label></div>
+      <div class="erp-field span-2"><input name="micro_remarks" placeholder=" "><label>Remarks</label></div>
+      <div class="erp-form-actions span-2"><button type="submit" class="erp-btn erp-btn-primary">Add Micro Plan Entry</button></div>
+    </form>
+  {% if micro_entries %}
+    <div class="erp-table-scroll">
+      <table class="erp-table erp-table-module">
+        <thead><tr><th>Period</th><th>Date</th><th>Activity</th><th>Qty</th><th>Manpower</th><th>Equipment</th><th>Material</th></tr></thead>
+        <tbody>
+          {% for m in micro_entries %}
+          <tr>
+            <td>{{ m.plan_period }}</td>
+            <td>{{ m.plan_date }}</td>
+            <td>{{ m.activity_name or '—' }}</td>
+            <td>{{ m.planned_qty or 0 }}</td>
+            <td>{{ m.planned_manpower or 0 }}</td>
+            <td>{{ m.planned_equipment or '—' }}</td>
+            <td>{{ m.planned_material or '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+    {% else %}
+    <p>Create or open a cost plan to add daily / weekly / monthly micro planning entries.</p>
+    {% endif %}
+  </div>
+
+  <div class="erp-form-card" id="monitoring-view">
+    <h3 class="erp-form-title">Planned vs Actual Monitoring</h3>
+    <div class="erp-table-scroll">
+      <table class="erp-table erp-table-module">
+        <thead>
+          <tr>
+            <th>BOQ</th>
+            <th>Item</th>
+            <th>Planned Cost</th>
+            <th>Actual Cost</th>
+            <th>Variance</th>
+            <th>Planned %</th>
+            <th>Actual %</th>
+            <th>Labour Prod.</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in monitoring_rows %}
+          <tr>
+            <td>{{ row.boq_number or '—' }}</td>
+            <td>{{ row.item_code or '—' }} — {{ row.item_description or '' }}</td>
+            <td>₹{{ '%.2f'|format(row.total_planned_cost or 0) }}</td>
+            <td>₹{{ '%.2f'|format(row.actual_cost or 0) }}</td>
+            <td>₹{{ '%.2f'|format(row.cost_variance or 0) }}</td>
+            <td>{{ row.planned_progress_percent or 0 }}%</td>
+            <td>{{ row.actual_progress_percent or 0 }}%</td>
+            <td>{{ row.labour_productivity or 0 }}</td>
+            <td>
+              <a href="{{ url_for('cost_planning', view=row.id, project_id=filter_project) }}" class="erp-btn erp-btn-ghost erp-btn-sm">View</a>
+              <a href="{{ url_for('cost_planning', edit=row.id, project_id=filter_project) }}#cost-plan-form" class="erp-btn erp-btn-ghost erp-btn-sm">Edit</a>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="9">No cost plans yet. Create BOQ items first, then add cost planning per item.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<style>
+.cp-wbs-tree { list-style: none; padding-left: 0; margin: 0; }
+.cp-wbs-tree ul { list-style: none; padding-left: 1.25rem; margin: 0.25rem 0; border-left: 2px solid var(--border-subtle, #e2e8f0); }
+.cp-wbs-tree li { margin: 0.35rem 0; }
+.cp-wbs-level-1 > .cp-wbs-label { font-weight: 700; }
+.cp-wbs-level-2 > .cp-wbs-label { font-weight: 600; }
+.cp-wbs-meta { font-size: 0.85rem; color: var(--text-muted, #64748b); margin-left: 0.5rem; }
+</style>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/cost-planning.js') }}"></script>
+{% endblock %}

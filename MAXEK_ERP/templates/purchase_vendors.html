@@ -1,0 +1,123 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Vendor Master' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('store') ~ '">Store</a> &gt; Vendors' %}
+{% block page_actions %}
+<button type="button" class="erp-btn erp-btn-primary" data-vendor-open="new"><i class="fa-solid fa-plus"></i> Add Vendor</button>
+{% endblock %}
+{% block content %}
+<div class="erp-form-card" id="vendor-form-panel" hidden style="margin-bottom:1.25rem;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:0.75rem;">
+    <h3 class="erp-form-title" id="vendor-form-title" style="margin:0;">Add Vendor</h3>
+    <div style="display:flex;gap:0.75rem;">
+      <button type="submit" form="vendor-form" class="erp-btn erp-btn-primary">Save</button>
+      <button type="button" class="erp-btn erp-btn-ghost" data-vendor-close>Cancel</button>
+    </div>
+  </div>
+  <form method="post" class="erp-form-grid" id="vendor-form" enctype="multipart/form-data">
+    <input type="hidden" name="form_action" value="save_vendor">
+    <input type="hidden" name="vendor_id" id="vendor_id" value="">
+    <div class="erp-field"><input name="code" id="vendor_code" required placeholder=" "><label>Code *</label></div>
+    <div class="erp-field"><input name="name" id="vendor_name" required placeholder=" "><label>Name *</label></div>
+    <div class="erp-field"><input name="gstin" id="vendor_gstin" placeholder=" "><label>GSTIN</label></div>
+    <div class="erp-field"><input name="pan" id="vendor_pan" placeholder=" "><label>PAN</label></div>
+    <div class="erp-field"><input name="contact_person" id="vendor_contact" placeholder=" "><label>Contact Person</label></div>
+    <div class="erp-field"><input name="phone" id="vendor_phone" placeholder=" "><label>Phone</label></div>
+    <div class="erp-field"><input name="email" id="vendor_email" placeholder=" "><label>Email</label></div>
+    <div class="erp-field span-2"><input name="address" id="vendor_address" placeholder=" "><label>Address</label></div>
+    <div class="erp-field"><input name="city" id="vendor_city" placeholder=" "><label>City</label></div>
+    <div class="erp-field"><input name="state" id="vendor_state" placeholder=" "><label>State</label></div>
+    <div class="erp-field"><input name="pincode" id="vendor_pincode" placeholder=" "><label>Pincode</label></div>
+    <div class="span-2"><label class="coa-check"><input type="checkbox" name="is_active" id="vendor_active" value="1" checked> Active</label></div>
+    <div class="erp-field">
+      <select name="doc_type" id="vendor_doc_type">
+        {% for t in doc_types %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+      </select>
+      <label>Document Type (upload)</label>
+    </div>
+    <div class="erp-field"><input type="file" name="vendor_doc"><label>Upload Document</label></div>
+  </form>
+</div>
+
+<div class="erp-table-panel" data-erp-table>
+  <div class="erp-table-toolbar"><h3 class="erp-table-title">Vendors</h3></div>
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead>
+        <tr><th>Code</th><th>Name</th><th>GSTIN</th><th>PAN</th><th>Contact</th><th>Phone</th><th>Status</th><th>Actions</th></tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>{{ row.code }}</td>
+          <td><a href="{{ url_for('purchase_vendors', view=row.id) }}">{{ row.name }}</a></td>
+          <td>{{ row.gstin or '—' }}</td>
+          <td>{{ row.pan or '—' }}</td>
+          <td>{{ row.contact_person or '—' }}</td>
+          <td>{{ row.phone or '—' }}</td>
+          <td>{{ 'Active' if row.is_active else 'Inactive' }}</td>
+          <td>
+            <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-vendor-open="{{ row.id }}"
+              data-code="{{ row.code }}" data-name="{{ row.name }}" data-gstin="{{ row.gstin or '' }}"
+              data-pan="{{ row.pan or '' }}" data-contact="{{ row.contact_person or '' }}"
+              data-phone="{{ row.phone or '' }}" data-email="{{ row.email or '' }}"
+              data-address="{{ row.address or '' }}" data-city="{{ row.city or '' }}"
+              data-state="{{ row.state or '' }}" data-pincode="{{ row.pincode or '' }}"
+              data-active="{{ row.is_active or 1 }}">Edit</button>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8">No vendors yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if view_vendor %}
+<div class="erp-form-card" style="margin-top:1.25rem;">
+  <h3 class="erp-form-title">{{ view_vendor.name }} — Documents</h3>
+  <p><strong>GSTIN:</strong> {{ view_vendor.gstin or '—' }} | <strong>PAN:</strong> {{ view_vendor.pan or '—' }}</p>
+  <table class="erp-table">
+    <thead><tr><th>Type</th><th>File</th><th>Uploaded</th><th>By</th></tr></thead>
+    <tbody>
+      {% for doc in view_docs %}
+      <tr>
+        <td>{{ doc.doc_type or '—' }}</td>
+        <td><a href="{{ url_for('vendor_document_download', vendor_id=view_vendor.id, filename=doc.filename) }}">{{ doc.filename }}</a></td>
+        <td>{{ doc.uploaded_at or '—' }}</td>
+        <td>{{ doc.uploaded_by or '—' }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4">No documents uploaded.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  var panel = document.getElementById('vendor-form-panel');
+  if (!panel) return;
+  function closePanel() { panel.hidden = true; }
+  function openPanel(btn) {
+    var isNew = btn.getAttribute('data-vendor-open') === 'new';
+    document.getElementById('vendor-form-title').textContent = isNew ? 'Add Vendor' : 'Edit Vendor';
+    document.getElementById('vendor_id').value = isNew ? '' : btn.getAttribute('data-vendor-open');
+    ['code','name','gstin','pan','contact','phone','email','address','city','state','pincode'].forEach(function (k) {
+      var el = document.getElementById('vendor_' + k);
+      if (el) el.value = isNew ? '' : (btn.getAttribute('data-' + k) || '');
+    });
+    document.getElementById('vendor_active').checked = isNew || btn.getAttribute('data-active') !== '0';
+    panel.hidden = false;
+  }
+  document.querySelectorAll('[data-vendor-open]').forEach(function (btn) {
+    btn.addEventListener('click', function () { openPanel(btn); });
+  });
+  document.querySelectorAll('[data-vendor-close]').forEach(function (btn) {
+    btn.addEventListener('click', closePanel);
+  });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,39 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'BBS Reports' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; Projects &gt; BBS Reports' %}
+{% block page_actions %}
+<a href="{{ url_for('bbs_form', new=1) }}" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> New BBS Report</a>
+{% endblock %}
+{% block content %}
+<form method="get" class="erp-table-toolbar" style="margin-bottom:0.75rem;display:flex;gap:0.5rem;">
+  <input name="q" value="{{ search }}" placeholder="Search ref, building…">
+  <select name="project_id"><option value="">All projects</option>
+    {% for p in projects %}<option value="{{ p.id }}" {% if project_filter == p.id %}selected{% endif %}>{{ p.project_code }} — {{ p.project_name }}</option>{% endfor %}
+  </select>
+  <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Filter</button>
+</form>
+<div class="erp-table-wrap">
+  <table class="erp-table">
+    <thead><tr><th>Ref No.</th><th>Date</th><th>Project</th><th>Building</th><th>Period</th><th>≤12mm Mt</th><th>&gt;12mm Mt</th><th>Actions</th></tr></thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td><a href="{{ url_for('bbs_form', view=row.id) }}">{{ row.ref_no }}</a></td>
+        <td>{{ row.report_date }}</td>
+        <td>{{ row.project_code or '' }} {{ row.project_name }}</td>
+        <td>{{ row.building_number or '—' }}</td>
+        <td>{{ row.measurement_from or '—' }} → {{ row.measurement_to or '—' }}</td>
+        <td class="num">{{ '%.3f'|format(row.weight_up_to_12mm or 0) }}</td>
+        <td class="num">{{ '%.3f'|format(row.weight_above_12mm or 0) }}</td>
+        <td>
+          <a href="{{ url_for('bbs_print', bbs_id=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm" target="_blank">Print</a>
+          <a href="{{ url_for('bbs_form', edit=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Edit</a>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8" class="erp-empty">No BBS reports yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

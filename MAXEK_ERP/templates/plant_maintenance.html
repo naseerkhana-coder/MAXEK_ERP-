@@ -1,0 +1,73 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Maintenance Job Cards' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('plant_dashboard') ~ '">Plant</a> &gt; Maintenance' %}
+{% block page_actions %}
+<a href="{{ url_for('plant_maintenance', new=1) }}#record-form" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> New Job Card</a>
+{% endblock %}
+{% block content %}
+{% if view_record %}
+<div class="erp-form-card" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">{{ view_record.job_number }}</h3>
+  <p><strong>Plant:</strong> {{ view_record.plant_name }} | <strong>Equipment:</strong> {{ view_record.equipment_name }}</p>
+  <p><strong>Date:</strong> {{ view_record.job_date }} | <strong>Type:</strong> {{ view_record.job_type }} | <strong>Status:</strong> {{ view_record.status }}</p>
+  <p><strong>Assigned:</strong> {{ view_record.assigned_to or '—' }} | <strong>Downtime:</strong> {{ view_record.downtime_hours or 0 }} hrs | <strong>Cost:</strong> ₹{{ '%.2f'|format(view_record.cost or 0) }}</p>
+  {% if view_record.description %}<p><strong>Description:</strong> {{ view_record.description }}</p>{% endif %}
+  <a href="{{ url_for('plant_maintenance', edit=view_record.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Edit</a>
+</div>
+{% endif %}
+
+{% if show_form %}
+<div class="erp-form-card" id="record-form" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">{% if edit_record %}Edit{% else %}New{% endif %} Maintenance Job</h3>
+  <form method="post">
+    {% if edit_record %}<input type="hidden" name="record_id" value="{{ edit_record.id }}">{% endif %}
+    <div class="erp-form-grid">
+      <div class="erp-field"><input type="date" name="job_date" required value="{{ edit_record.job_date if edit_record else default_date }}"><label>Job Date *</label></div>
+      <div class="erp-field"><select name="plant_id" required><option value="">Select Plant</option>{% for pl in plants %}<option value="{{ pl.id }}" {% if edit_record and edit_record.plant_id == pl.id %}selected{% endif %}>{{ pl.plant_name }}</option>{% endfor %}</select><label>Plant *</label></div>
+      <div class="erp-field"><input name="equipment_name" required placeholder=" " value="{{ edit_record.equipment_name if edit_record else '' }}"><label>Equipment *</label></div>
+      <div class="erp-field"><select name="job_type">{% for j in job_types %}<option value="{{ j }}" {% if edit_record and edit_record.job_type == j %}selected{% endif %}>{{ j }}</option>{% endfor %}</select><label>Job Type</label></div>
+      <div class="erp-field"><select name="status">{% for s in job_statuses %}<option value="{{ s }}" {% if edit_record and edit_record.status == s %}selected{% elif not edit_record and s == 'Open' %}selected{% endif %}>{{ s }}</option>{% endfor %}</select><label>Status</label></div>
+      <div class="erp-field"><input name="assigned_to" placeholder=" " value="{{ edit_record.assigned_to if edit_record else '' }}"><label>Assigned To</label></div>
+      <div class="erp-field"><input type="number" step="0.1" name="downtime_hours" placeholder=" " value="{{ edit_record.downtime_hours if edit_record else '' }}"><label>Downtime (hrs)</label></div>
+      <div class="erp-field"><input type="number" step="0.01" name="cost" placeholder=" " value="{{ edit_record.cost if edit_record else '' }}"><label>Cost (₹)</label></div>
+      <div class="erp-field"><input type="date" name="completed_date" placeholder=" " value="{{ edit_record.completed_date if edit_record else '' }}"><label>Completed Date</label></div>
+      <div class="erp-field span-2"><textarea name="description" placeholder=" ">{{ edit_record.description if edit_record else '' }}</textarea><label>Work Description</label></div>
+      <div class="erp-field span-2"><textarea name="remarks" placeholder=" ">{{ edit_record.remarks if edit_record else '' }}</textarea><label>Remarks</label></div>
+    </div>
+    <button type="submit" class="erp-btn erp-btn-primary">Save Job Card</button>
+    {% if edit_record %}
+    <button type="submit" name="form_action" value="delete" class="erp-btn erp-btn-ghost" onclick="return confirm('Delete this job card?');">Delete</button>
+    {% endif %}
+  </form>
+</div>
+{% endif %}
+
+<form method="get" style="margin-bottom:0.75rem;display:flex;gap:0.5rem;flex-wrap:wrap;">
+  <input name="q" value="{{ search }}" placeholder="Search job / equipment…" style="max-width:200px;">
+  <select name="plant_id" onchange="this.form.submit()"><option value="">All plants</option>{% for pl in plants %}<option value="{{ pl.id }}" {% if plant_filter == pl.id %}selected{% endif %}>{{ pl.plant_name }}</option>{% endfor %}</select>
+  <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Filter</button>
+</form>
+<div class="erp-table-panel" data-erp-table>
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead><tr><th>Job #</th><th>Date</th><th>Plant</th><th>Equipment</th><th>Type</th><th>Status</th><th>Cost</th><th></th></tr></thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>{{ row.job_number }}</td>
+          <td>{{ row.job_date or '—' }}</td>
+          <td>{{ row.plant_name }}</td>
+          <td>{{ row.equipment_name or '—' }}</td>
+          <td>{{ row.job_type or '—' }}</td>
+          <td>{{ row.status or '—' }}</td>
+          <td>₹{{ '%.0f'|format(row.cost or 0) }}</td>
+          <td><a href="{{ url_for('plant_maintenance', view=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">View</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8">No maintenance jobs yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

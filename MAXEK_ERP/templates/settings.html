@@ -7,7 +7,9 @@
     <h3 class="erp-form-title">Workflow Administration</h3>
     <p>Configure module assignments, employee designations, and audit reporting for the MAXEK 3-step approval standard.</p>
     <div class="erp-form-actions">
-      <a class="erp-btn erp-btn-primary" href="{{ url_for('user_settings') }}"><i class="fa-solid fa-user-gear"></i> User Settings</a>
+      <a class="erp-btn erp-btn-primary" href="{{ url_for('company_master') }}"><i class="fa-solid fa-building"></i> Company Master</a>
+      <a class="erp-btn erp-btn-primary" href="{{ url_for('user_management') }}"><i class="fa-solid fa-user-plus"></i> User Management</a>
+      <a class="erp-btn erp-btn-primary" href="{{ url_for('user_settings') }}"><i class="fa-solid fa-user-gear"></i> User Access Settings</a>
       <a class="erp-btn erp-btn-primary" href="{{ url_for('workflow_settings') }}"><i class="fa-solid fa-table"></i> Workflow Assignment Matrix</a>
       <a class="erp-btn erp-btn-ghost" href="{{ url_for('staff') }}"><i class="fa-solid fa-users"></i> Employee Designation Mapping</a>
       <a class="erp-btn erp-btn-ghost" href="{{ url_for('workflow_audit_report') }}"><i class="fa-solid fa-clipboard-list"></i> Workflow Audit Report</a>
@@ -15,9 +17,46 @@
     </div>
   </div>
 
+  <div class="erp-form-card" id="company-settings">
+    <h3 class="erp-form-title">Company &amp; Regional Settings</h3>
+    <p class="erp-form-hint">Current server time: <strong>{{ app_now_display }}</strong></p>
+    <form method="post" class="erp-form-grid">
+      <input type="hidden" name="form_type" value="company">
+      <div class="erp-field span-2">
+        <select name="timezone" class="has-value">
+          {% for tz_value, tz_label in timezone_options %}
+          <option value="{{ tz_value }}"{% if tz_value == current_timezone %} selected{% endif %}>{{ tz_label }}</option>
+          {% endfor %}
+        </select>
+        <label>Application Timezone</label>
+      </div>
+      <div class="erp-form-actions span-2">
+        <button class="erp-btn erp-btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Save Company Settings</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="erp-form-card" id="dashboard-display">
+    <h3 class="erp-form-title">Dashboard Display</h3>
+    <p class="erp-form-hint">Control which widgets appear on the home dashboard for all users.</p>
+    <form method="post" class="erp-form-grid dash-display-form">
+      <input type="hidden" name="form_type" value="dashboard_display">
+      <div class="dash-display-toggles span-2">
+        {% for key, label in dashboard_display_options %}
+        <label><input type="checkbox" name="dash_{{ key }}"{% if dashboard_display[key] %} checked{% endif %}> {{ label }}</label>
+        {% endfor %}
+      </div>
+      <div class="erp-form-actions span-2">
+        <button class="erp-btn erp-btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Save Dashboard Display</button>
+        <a class="erp-btn erp-btn-ghost" href="{{ url_for('dashboard') }}"><i class="fa-solid fa-gauge-high"></i> Open Dashboard</a>
+      </div>
+    </form>
+  </div>
+
   <div class="erp-form-card" id="department-master">
     <h3 class="erp-form-title">Department Creation</h3>
     <form method="post" class="erp-form-grid">
+      <input type="hidden" name="form_type" value="department">
       <div class="erp-field span-2"><input name="department_name" placeholder=" " required><label>Department Name</label></div>
       <div class="erp-field span-2"><input name="description" placeholder=" "><label>Description</label></div>
       <div class="erp-field"><select name="status" class="has-value"><option selected>Active</option><option>Inactive</option></select><label>Status</label></div>

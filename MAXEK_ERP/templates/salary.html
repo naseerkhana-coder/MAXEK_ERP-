@@ -3,6 +3,7 @@
 {% set page_title = 'HR & Payroll' %}
 {% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; HR &gt; Payroll' %}
 {% block page_actions %}
+<a href="{{ url_for('payroll') }}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-calculator"></i> Payroll Module</a>
 <a href="#add-salary" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> New Payroll Entry</a>
 {% endblock %}
 {% block content %}

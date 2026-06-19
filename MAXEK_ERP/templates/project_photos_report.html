@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{{ title }} — MAXEK ERP</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: Arial, Helvetica, sans-serif; margin: 1.5rem; color: #111; font-size: 0.85rem; }
+    h1 { margin: 0 0 0.25rem; font-size: 1.35rem; }
+    .meta { color: #555; margin-bottom: 1rem; }
+    .photo-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; }
+    .photo-item { border: 1px solid #ddd; border-radius: 6px; padding: 0.5rem; break-inside: avoid; page-break-inside: avoid; }
+    .photo-item img { width: 100%; max-height: 220px; object-fit: cover; border-radius: 4px; }
+    .photo-item .pdf-box { height: 120px; display: flex; align-items: center; justify-content: center; background: #f3f4f6; color: #b91c1c; font-size: 2rem; }
+    .photo-item h4 { margin: 0.5rem 0 0.25rem; font-size: 0.9rem; }
+    .photo-item p { margin: 0.15rem 0; color: #444; }
+    .no-print { margin-bottom: 1rem; }
+    @media print {
+      .no-print { display: none; }
+      body { margin: 0.5rem; }
+      .photo-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+  <div class="no-print">
+    <button type="button" onclick="window.print()">Print / Save as PDF</button>
+    <a href="{{ url_for('project_photos_reports') }}">Back to Reports</a>
+  </div>
+
+  <h1>{{ title }}</h1>
+  <p class="meta">
+    Project: {{ meta.project_label }} ·
+    {{ meta.photo_count }} photo(s) ·
+    Generated {{ meta.generated_at }}
+    {% if meta.period %} · Period: {{ meta.period }}{% endif %}
+    {% if meta.categories %} · Categories: {{ meta.categories }}{% endif %}
+    {% if meta.category %} · Category: {{ meta.category }}{% endif %}
+  </p>
+
+  <div class="photo-grid">
+    {% for photo in photos %}
+    <div class="photo-item">
+      {% if photo.file_type == 'image' %}
+      <img src="{{ url_for('project_photos_file', photo_id=photo.id) }}" alt="">
+      {% else %}
+      <div class="pdf-box">PDF Document</div>
+      {% endif %}
+      <h4>{{ photo.category }} — {{ photo.photo_date or 'Undated' }}</h4>
+      <p><strong>{{ photo.project_code or '' }} {{ photo.project_name }}</strong></p>
+      {% if photo.location %}<p>Location: {{ photo.location }}</p>{% endif %}
+      {% if photo.description %}<p>{{ photo.description }}</p>{% endif %}
+      <p>Uploaded by {{ photo.uploaded_by or '—' }}</p>
+    </div>
+    {% else %}
+    <p>No photos found for this report.</p>
+    {% endfor %}
+  </div>
+</body>
+</html>

@@ -1,0 +1,136 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Material Master' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('store') ~ '">Store</a> &gt; Materials' %}
+{% block page_actions %}
+<a href="{{ url_for('store_materials', export='excel') }}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-file-excel"></i> Export</a>
+<button type="button" class="erp-btn erp-btn-primary" data-mat-open="new"><i class="fa-solid fa-plus"></i> Add Material</button>
+{% endblock %}
+{% block content %}
+<div class="erp-form-card" id="mat-form-panel" hidden style="margin-bottom:1.25rem;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:0.75rem;">
+    <h3 class="erp-form-title" id="mat-form-title" style="margin:0;">Add Material</h3>
+    <div style="display:flex;gap:0.75rem;">
+      <button type="submit" form="mat-form" class="erp-btn erp-btn-primary">Save</button>
+      <button type="button" class="erp-btn erp-btn-ghost" data-mat-close>Cancel</button>
+    </div>
+  </div>
+  <form method="post" class="erp-form-grid" id="mat-form">
+    <input type="hidden" name="form_action" value="save_material">
+    <input type="hidden" name="material_id" id="mat_id" value="">
+    <div class="erp-field"><input name="code" id="mat_code" required placeholder=" "><label>Code *</label></div>
+    <div class="erp-field"><input name="name" id="mat_name" required placeholder=" "><label>Name *</label></div>
+    <div class="erp-field">
+      <select name="category" id="mat_category">
+        <option value="">—</option>
+        {% for c in categories %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+      </select>
+      <label>Category</label>
+    </div>
+    <div class="erp-field">
+      <select name="unit" id="mat_unit">
+        {% for u in units %}<option value="{{ u }}">{{ u }}</option>{% endfor %}
+      </select>
+      <label>Unit</label>
+    </div>
+    <div class="erp-field"><input name="hsn_code" id="mat_hsn" placeholder=" "><label>HSN Code</label></div>
+    <div class="erp-field">
+      <select name="gst_percent" id="mat_gst">
+        {% for g in gst_rates %}<option value="{{ g }}">{{ g }}%</option>{% endfor %}
+      </select>
+      <label>GST %</label>
+    </div>
+    <div class="erp-field"><input type="number" step="0.01" name="reorder_level" id="mat_reorder" placeholder=" " value="0"><label>Reorder Level</label></div>
+    <div class="erp-field"><input type="number" step="0.01" name="min_stock" id="mat_min" placeholder=" " value="0"><label>Min Stock</label></div>
+    <div class="erp-field"><input type="number" step="0.01" name="max_stock" id="mat_max" placeholder=" " value="0"><label>Max Stock</label></div>
+    <div class="erp-field">
+      <select name="preferred_vendor_id" id="mat_vendor">
+        <option value="">—</option>
+        {% for v in vendors %}<option value="{{ v.id }}">{{ v.code }} — {{ v.name }}</option>{% endfor %}
+      </select>
+      <label>Preferred Vendor</label>
+    </div>
+    <div class="span-2"><label class="coa-check"><input type="checkbox" name="is_active" id="mat_active" value="1" checked> Active</label></div>
+  </form>
+</div>
+
+<div class="erp-form-card" style="margin-bottom:1.25rem;">
+  <h3 class="erp-form-title">Import from Excel</h3>
+  <form method="post" enctype="multipart/form-data" class="erp-form-grid">
+    <input type="hidden" name="form_action" value="import_materials">
+    <div class="erp-field span-2">
+      <input type="file" name="import_file" accept=".xlsx,.xls" required>
+      <label>Excel file (columns: code, name, category, unit, hsn_code, gst_percent, reorder_level, min_stock, max_stock)</label>
+    </div>
+    <div><button type="submit" class="erp-btn erp-btn-primary">Import</button></div>
+  </form>
+</div>
+
+<div class="erp-table-panel" data-erp-table>
+  <div class="erp-table-toolbar"><h3 class="erp-table-title">Materials</h3></div>
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead>
+        <tr><th>Code</th><th>Name</th><th>Category</th><th>Unit</th><th>HSN</th><th>GST%</th><th>Reorder</th><th>Vendor</th><th>Status</th><th>Actions</th></tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>{{ row.code }}</td>
+          <td>{{ row.name }}</td>
+          <td>{{ row.category or '—' }}</td>
+          <td>{{ row.unit or '—' }}</td>
+          <td>{{ row.hsn_code or '—' }}</td>
+          <td>{{ row.gst_percent or 0 }}</td>
+          <td>{{ row.reorder_level or 0 }}</td>
+          <td>{{ row.preferred_vendor_name or '—' }}</td>
+          <td>{{ 'Active' if row.is_active else 'Inactive' }}</td>
+          <td>
+            <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-mat-open="{{ row.id }}"
+              data-code="{{ row.code }}" data-name="{{ row.name }}" data-category="{{ row.category or '' }}"
+              data-unit="{{ row.unit or 'Nos' }}" data-hsn="{{ row.hsn_code or '' }}"
+              data-gst="{{ row.gst_percent or 0 }}" data-reorder="{{ row.reorder_level or 0 }}"
+              data-min="{{ row.min_stock or 0 }}" data-max="{{ row.max_stock or 0 }}"
+              data-vendor="{{ row.preferred_vendor_id or '' }}" data-active="{{ row.is_active or 1 }}">Edit</button>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="10">No materials yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  var panel = document.getElementById('mat-form-panel');
+  if (!panel) return;
+  function closePanel() { panel.hidden = true; }
+  function openPanel(btn) {
+    var isNew = btn.getAttribute('data-mat-open') === 'new';
+    document.getElementById('mat-form-title').textContent = isNew ? 'Add Material' : 'Edit Material';
+    document.getElementById('mat_id').value = isNew ? '' : btn.getAttribute('data-mat-open');
+    document.getElementById('mat_code').value = isNew ? '' : (btn.getAttribute('data-code') || '');
+    document.getElementById('mat_name').value = isNew ? '' : (btn.getAttribute('data-name') || '');
+    document.getElementById('mat_category').value = isNew ? '' : (btn.getAttribute('data-category') || '');
+    document.getElementById('mat_unit').value = isNew ? 'Nos' : (btn.getAttribute('data-unit') || 'Nos');
+    document.getElementById('mat_hsn').value = isNew ? '' : (btn.getAttribute('data-hsn') || '');
+    document.getElementById('mat_gst').value = isNew ? '0' : (btn.getAttribute('data-gst') || '0');
+    document.getElementById('mat_reorder').value = isNew ? '0' : (btn.getAttribute('data-reorder') || '0');
+    document.getElementById('mat_min').value = isNew ? '0' : (btn.getAttribute('data-min') || '0');
+    document.getElementById('mat_max').value = isNew ? '0' : (btn.getAttribute('data-max') || '0');
+    document.getElementById('mat_vendor').value = isNew ? '' : (btn.getAttribute('data-vendor') || '');
+    document.getElementById('mat_active').checked = isNew || btn.getAttribute('data-active') !== '0';
+    panel.hidden = false;
+    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  document.querySelectorAll('[data-mat-open]').forEach(function (btn) {
+    btn.addEventListener('click', function () { openPanel(btn); });
+  });
+  document.querySelectorAll('[data-mat-close]').forEach(function (btn) {
+    btn.addEventListener('click', closePanel);
+  });
+})();
+</script>
+{% endblock %}

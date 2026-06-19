@@ -1,0 +1,89 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Precast Dispatch' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('precast_yard') ~ '">Precast Yard</a> &gt; Dispatch' %}
+{% block page_actions %}
+<a href="{{ url_for('plant_precast_dispatch', new=1) }}#record-form" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> New Dispatch</a>
+{% endblock %}
+{% block content %}
+{% if view_record %}
+<div class="erp-form-card" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">{{ view_record.dispatch_number }}</h3>
+  <p><strong>Date:</strong> {{ view_record.dispatch_date }} | <strong>Yard:</strong> {{ view_record.plant_name }}</p>
+  <p><strong>Product:</strong> {{ view_record.product_type }} | <strong>Qty:</strong> {{ '%.0f'|format(view_record.qty or 0) }} Nos</p>
+  <p><strong>Vehicle:</strong> {{ view_record.vehicle_number or '—' }} | <strong>Project:</strong> {{ view_record.project_name or '—' }}</p>
+  <a href="{{ url_for('plant_precast_dispatch', edit=view_record.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Edit</a>
+</div>
+{% endif %}
+
+{% if show_form %}
+<div class="erp-form-card" id="record-form" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">{% if edit_record %}Edit Precast Dispatch{% else %}Precast Dispatch{% endif %}</h3>
+  <form method="post">
+    {% if edit_record %}<input type="hidden" name="record_id" value="{{ edit_record.id }}">{% endif %}
+    <div class="erp-form-grid">
+      <div class="erp-field"><input type="date" name="dispatch_date" required value="{{ edit_record.dispatch_date if edit_record else default_date }}"><label>Date *</label></div>
+      <div class="erp-field"><select name="plant_id" required><option value="">Select Yard</option>{% for pl in plants %}<option value="{{ pl.id }}" {% if edit_record and edit_record.plant_id == pl.id %}selected{% endif %}>{{ pl.plant_name }} ({{ pl.plant_id }})</option>{% endfor %}</select><label>Precast Yard *</label></div>
+      <div class="erp-field"><select name="project_id"><option value="">—</option>{% for p in projects %}<option value="{{ p.id }}" {% if edit_record and edit_record.project_id == p.id %}selected{% endif %}>{{ p.project_name }}</option>{% endfor %}</select><label>Project</label></div>
+      <div class="erp-field"><select name="product_type">{% for pt in product_types %}<option value="{{ pt }}" {% if edit_record and edit_record.product_type == pt %}selected{% endif %}>{{ pt }}</option>{% endfor %}</select><label>Product Type</label></div>
+      <div class="erp-field"><input type="number" step="1" name="qty" required placeholder=" " value="{{ edit_record.qty if edit_record else '' }}"><label>Qty (Nos) *</label></div>
+      <div class="erp-field"><input name="vehicle_number" placeholder="Vehicle reg no" list="fleet-vehicles" value="{{ edit_record.vehicle_number if edit_record else '' }}"><label>Vehicle</label></div>
+      <datalist id="fleet-vehicles">{% for v in vehicles %}<option value="{{ v.registration_number }}">{% endfor %}</datalist>
+      <div class="erp-field span-2"><textarea name="remarks" placeholder=" ">{{ edit_record.remarks if edit_record else '' }}</textarea><label>Remarks</label></div>
+    </div>
+    <button type="submit" class="erp-btn erp-btn-primary">Save Dispatch</button>
+    {% if edit_record %}
+    <button type="submit" name="form_action" value="delete" class="erp-btn erp-btn-ghost" onclick="return confirm('Delete this dispatch? Yard stock will be adjusted.');">Delete</button>
+    {% endif %}
+  </form>
+</div>
+{% endif %}
+
+<form method="get" style="margin-bottom:0.75rem;display:flex;gap:0.5rem;flex-wrap:wrap;">
+  <input name="q" value="{{ search }}" placeholder="Search dispatch / vehicle…" style="max-width:200px;">
+  <select name="plant_id" onchange="this.form.submit()"><option value="">All yards</option>{% for pl in plants %}<option value="{{ pl.id }}" {% if plant_filter == pl.id %}selected{% endif %}>{{ pl.plant_name }}</option>{% endfor %}</select>
+  <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Filter</button>
+</form>
+
+{% if stock_rows %}
+<div class="erp-form-card" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title" style="font-size:0.95rem;">Yard Stock Balance</h3>
+  <div class="erp-table-scroll">
+    <table class="erp-table erp-table-compact">
+      <thead><tr><th>Yard</th><th>Product</th><th>Balance (Nos)</th></tr></thead>
+      <tbody>
+        {% for s in stock_rows %}
+        <tr>
+          <td>{{ s.plant_name }}</td>
+          <td>{{ (s.material_type or '')|replace('PRECAST:', '') }}</td>
+          <td><strong>{{ '%.0f'|format(s.closing or 0) }}</strong></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<div class="erp-table-panel" data-erp-table>
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead><tr><th>Dispatch No</th><th>Date</th><th>Yard</th><th>Product</th><th>Qty</th><th>Vehicle</th><th></th></tr></thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>{{ row.dispatch_number }}</td>
+          <td>{{ row.dispatch_date or '—' }}</td>
+          <td>{{ row.plant_name }}</td>
+          <td>{{ row.product_type or '—' }}</td>
+          <td>{{ '%.0f'|format(row.qty or 0) }}</td>
+          <td>{{ row.vehicle_number or '—' }}</td>
+          <td><a href="{{ url_for('plant_precast_dispatch', view=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">View</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7">No precast dispatch records yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

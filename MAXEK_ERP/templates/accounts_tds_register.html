@@ -1,0 +1,49 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'TDS Register' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('accounts_hub') ~ '">Accounts</a> &gt; TDS Register' %}
+{% block content %}
+<div class="erp-validation" style="margin-bottom:1rem;">TDS from expenses and payment vouchers. Alerts: 7 / 3 / 1 day before due (7th of following month).</div>
+<div class="erp-table-panel" data-erp-table>
+  <div class="erp-table-toolbar"><h3 class="erp-table-title">TDS Register</h3></div>
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead>
+        <tr>
+          <th>Date</th><th>Source</th><th>Vendor</th><th>Section</th><th>Rate</th><th>Gross</th><th>TDS</th><th>Due</th><th>Alert</th><th>Filing</th><th>Update</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>{{ row.entry_date or '—' }}</td>
+          <td>{{ row.source_type }} #{{ row.source_id }}</td>
+          <td>{{ row.vendor_name or '—' }}</td>
+          <td>{{ row.tds_section or '—' }}</td>
+          <td>{{ row.tds_rate or 0 }}%</td>
+          <td>₹{{ '%.2f'|format(row.gross_amount or 0) }}</td>
+          <td>₹{{ '%.2f'|format(row.tds_amount or 0) }}</td>
+          <td>{{ row.due_date or '—' }}</td>
+          <td>{% if row.due_alert %}<span class="erp-badge erp-badge-warning">{{ row.due_alert }}</span>{% else %}—{% endif %}</td>
+          <td>{{ row.filing_status or 'Pending' }}</td>
+          <td>
+            <form method="post" style="display:flex;gap:0.25rem;flex-wrap:wrap;">
+              <input type="hidden" name="form_action" value="update_filing">
+              <input type="hidden" name="tds_id" value="{{ row.id }}">
+              <select name="filing_status">
+                {% for st in filing_statuses %}
+                <option value="{{ st }}" {% if row.filing_status == st %}selected{% endif %}>{{ st }}</option>
+                {% endfor %}
+              </select>
+              <input type="date" name="filed_date" value="{{ row.filed_date or '' }}">
+              <button type="submit" class="erp-btn erp-btn-sm erp-btn-ghost">Save</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="11">No TDS entries yet. Enable TDS on expenses or payment vouchers.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

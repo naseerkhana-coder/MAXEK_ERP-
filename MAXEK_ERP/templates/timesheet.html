@@ -1,11 +1,14 @@
 {% extends 'base_maxek.html' %}
-{% from 'macros/erp_ui.html' import role_status_badge, maker_row_actions, erp_pagination %}
+{% from 'macros/erp_ui.html' import role_status_badge, maker_row_actions, workflow_modals, erp_pagination %}
 {% set page_title = 'Timesheet' %}
 {% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; HR &gt; Timesheet' %}
 {% block page_actions %}
 <a href="{{ url_for('attendance') }}" class="erp-btn erp-btn-primary"><i class="fa-solid fa-calendar-check"></i> Mark Attendance</a>
 {% endblock %}
 {% block content %}
+<div class="erp-validation" style="margin-bottom: 1rem;">
+  <strong>Read-only view.</strong> Timesheet entries come from Attendance. Use <a href="{{ url_for('attendance') }}">Attendance</a> to add or edit records (maker / checker / approver workflow).
+</div>
 <div class="erp-table-panel" data-erp-table>
   <div class="erp-table-toolbar">
     <h3 class="erp-table-title">Time Sheet Entries</h3>
@@ -19,29 +22,38 @@
     <table class="erp-table erp-table-module">
       <thead>
         <tr>
-          <th>Worker</th><th>Project</th><th>Date</th><th>Start</th><th>End</th>
-          <th>Break</th><th>Worked</th><th>OT</th><th>Status</th>
+          <th>#</th>
+          <th>Worker</th><th>Worker ID</th><th>Project No.</th><th>Project</th><th>Trade</th><th>Designation</th><th>Date</th>
+          <th>Start</th><th>End</th><th>Break</th><th>Worked</th><th>OT</th><th>Status</th><th>Actions</th>
         </tr>
       </thead>
       <tbody>
         {% for row in rows %}
         <tr>
+          <td>{{ row.id }}</td>
           <td>{{ row.worker_name or '—' }}</td>
+          <td>{{ row.worker_code or '—' }}</td>
+          <td>{{ row.project_code or '—' }}</td>
           <td>{{ row.project_name or '—' }}</td>
+          <td>{{ row.trade_name or '—' }}</td>
+          <td>{{ row.designation_name or '—' }}</td>
           <td>{{ row.attendance_date }}</td>
           <td>{{ row.start_time }}</td>
           <td>{{ row.end_time }}</td>
-          <td>{{ row.break_hours }}</td>
-          <td>{{ row.worked_hours }}</td>
-          <td>{{ row.overtime }}</td>
+          <td>{{ format_decimal_hours(row.break_hours) }}</td>
+          <td>{{ format_decimal_hours(row.worked_hours) }}</td>
+          <td>{{ format_decimal_hours(row.overtime) }}</td>
           <td>{{ role_status_badge(row.approval_status or 'Pending Checker', 'maker') }}</td>
+          <td>{{ maker_row_actions('attendance', 'attendance', row.id, row.approval_status, 'daily_timesheet', 'timesheet') }}</td>
         </tr>
         {% else %}
-        <tr><td colspan="9">No timesheet records yet. Add attendance entries to populate this view.</td></tr>
+        <tr><td colspan="15">No timesheet records yet. Add attendance entries to populate this view.</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
   {{ erp_pagination(rows|length) }}
 </div>
+{{ workflow_modals() }}
+<script src="{{ url_for('static', filename='js/workflow.js') }}"></script>
 {% endblock %}

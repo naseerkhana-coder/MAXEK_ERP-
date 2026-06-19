@@ -1,0 +1,305 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Company Master' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('settings') ~ '">Settings</a> &gt; Company Master' %}
+{% block page_actions %}
+<a href="{{ url_for('company_master', new=1) }}#company-form" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> New Company</a>
+<a href="{{ url_for('settings') }}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-gear"></i> Settings</a>
+{% endblock %}
+{% block content %}
+{% if expiry_alerts.total_alerts %}
+<div class="erp-alert erp-alert-warning" style="margin-bottom:1rem;">
+  <strong><i class="fa-solid fa-triangle-exclamation"></i> Document expiry alerts ({{ expiry_alerts.total_alerts }})</strong>
+  <ul style="margin:0.5rem 0 0 1rem;">
+    {% for item in expiry_alerts.expiring_overdue %}
+    <li>Expired: {{ item.doc_type }} — {{ item.company_name }} ({{ item.expiry_date }})</li>
+    {% endfor %}
+    {% for days in expiry_alerts.alert_days %}
+      {% for item in expiry_alerts.expiring[days|string] %}
+    <li>Within {{ days }} days: {{ item.doc_type }} — {{ item.company_name }} ({{ item.expiry_date }})</li>
+      {% endfor %}
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<div class="module-layout">
+  <div class="erp-table-panel" data-erp-table style="margin-bottom:1rem;">
+    <div class="erp-table-toolbar">
+      <h3 class="erp-table-title">Registered Companies</h3>
+      <form method="get" class="erp-table-controls" style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+        <input name="q" value="{{ search }}" placeholder="Search…" style="max-width:180px;">
+        <select name="country" onchange="this.form.submit()">
+          <option value="">All countries</option>
+          {% for c in company_countries %}
+          <option value="{{ c }}" {% if country_filter == c %}selected{% endif %}>{{ c }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Filter</button>
+      </form>
+    </div>
+    <div class="erp-table-scroll">
+      <table class="erp-table">
+        <thead><tr><th>Code</th><th>Legal Name</th><th>Country</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+          {% for row in companies %}
+          <tr>
+            <td>{{ row.company_code }}</td>
+            <td>{{ row.legal_name }}{% if row.trade_name %} <small>({{ row.trade_name }})</small>{% endif %}</td>
+            <td>{{ row.country }}</td>
+            <td>{{ row.status }}</td>
+            <td><a href="{{ url_for('company_master', company_id=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Open</a></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5">No companies registered yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% if show_company_form or selected_company %}
+  <div class="erp-form-card" id="company-form">
+    <h3 class="erp-form-title">{% if selected_company %}Edit {{ selected_company.company_code }}{% else %}New Company{% endif %}</h3>
+    <form method="post" class="erp-form-grid">
+      <input type="hidden" name="form_action" value="save_company">
+      {% if selected_company %}<input type="hidden" name="company_id" value="{{ selected_company.id }}">{% endif %}
+      <div class="erp-field"><input name="legal_name" required placeholder=" " value="{{ selected_company.legal_name if selected_company else '' }}"><label>Legal Name *</label></div>
+      <div class="erp-field"><input name="trade_name" placeholder=" " value="{{ selected_company.trade_name if selected_company else '' }}"><label>Trade Name</label></div>
+      <div class="erp-field">
+        <select name="country" id="company-country" class="has-value">
+          {% for c in company_countries %}
+          <option value="{{ c }}" {% if selected_company and selected_company.country == c %}selected{% elif not selected_company and c == 'India' %}selected{% endif %}>{{ c }}</option>
+          {% endfor %}
+        </select>
+        <label>Country *</label>
+      </div>
+      <div class="erp-field"><select name="status" class="has-value">{% for s in company_statuses %}<option value="{{ s }}" {% if selected_company and selected_company.status == s %}selected{% elif not selected_company and s == 'Active' %}selected{% endif %}>{{ s }}</option>{% endfor %}</select><label>Status</label></div>
+      <div class="erp-field span-2"><input name="address_line1" placeholder=" " value="{{ selected_company.address_line1 if selected_company else '' }}"><label>Address Line 1</label></div>
+      <div class="erp-field span-2"><input name="address_line2" placeholder=" " value="{{ selected_company.address_line2 if selected_company else '' }}"><label>Address Line 2</label></div>
+      <div class="erp-field"><input name="city" placeholder=" " value="{{ selected_company.city if selected_company else '' }}"><label>City</label></div>
+      <div class="erp-field"><input name="state_region" placeholder=" " value="{{ selected_company.state_region if selected_company else '' }}"><label>State / Region</label></div>
+      <div class="erp-field"><input name="postal_code" placeholder=" " value="{{ selected_company.postal_code if selected_company else '' }}"><label>Postal Code</label></div>
+      <div class="erp-field"><input name="phone" placeholder=" " value="{{ selected_company.phone if selected_company else '' }}"><label>Phone</label></div>
+      <div class="erp-field"><input name="email" type="email" placeholder=" " value="{{ selected_company.email if selected_company else '' }}"><label>Email</label></div>
+      <div class="erp-field span-2"><input name="website" placeholder=" " value="{{ selected_company.website if selected_company else '' }}"><label>Website</label></div>
+      <div class="span-2"><h4 style="margin:0.5rem 0;">Country-specific registration</h4></div>
+      <div id="company-country-fields" class="erp-form-grid span-2" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:1rem;"></div>
+      <div class="erp-form-actions span-2">
+        <button type="submit" class="erp-btn erp-btn-primary"><i class="fa-solid fa-floppy-disk"></i> Save Company</button>
+        {% if selected_company %}
+        <button type="submit" formaction="{{ url_for('company_master') }}" name="form_action" value="delete_company" class="erp-btn erp-btn-ghost" onclick="return confirm('Delete this company and all branches, directors, documents?');">Delete</button>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+  {% endif %}
+
+  {% if selected_company %}
+  <div class="erp-tabs" style="margin:1rem 0;display:flex;gap:0.5rem;flex-wrap:wrap;">
+    <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm is-active" data-company-tab="branches">Branches</button>
+    <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-company-tab="directors">Directors / Partners</button>
+    <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-company-tab="documents">Documents</button>
+    <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-company-tab="gst" id="gst-registrations-panel" {% if selected_company.country != 'India' %}style="display:none;"{% endif %}>GST Registrations</button>
+  </div>
+
+  <div data-company-panel="branches">
+    <div class="erp-form-card" style="margin-bottom:1rem;">
+      <h3 class="erp-form-title">{% if edit_branch %}Edit Branch{% else %}Add Branch{% endif %}</h3>
+      <form method="post" class="erp-form-grid" enctype="multipart/form-data">
+        <input type="hidden" name="form_action" value="save_branch">
+        <input type="hidden" name="company_id" value="{{ selected_company.id }}">
+        {% if edit_branch %}<input type="hidden" name="branch_id" value="{{ edit_branch.id }}">{% endif %}
+        <div class="erp-field"><input name="branch_code" placeholder=" " value="{{ edit_branch.branch_code if edit_branch else '' }}"><label>Branch Code</label></div>
+        <div class="erp-field"><input name="branch_name" required placeholder=" " value="{{ edit_branch.branch_name if edit_branch else '' }}"><label>Branch Name *</label></div>
+        <div class="erp-field">
+          <select name="branch_country" id="branch-country" class="has-value">
+            {% for c in company_countries %}
+            <option value="{{ c }}" {% if edit_branch and edit_branch.country == c %}selected{% elif not edit_branch and c == selected_company.country %}selected{% endif %}>{{ c }}</option>
+            {% endfor %}
+          </select>
+          <label>Country</label>
+        </div>
+        <div class="erp-field"><label style="position:static;"><input type="checkbox" name="is_head_office" {% if edit_branch and edit_branch.is_head_office %}checked{% endif %}> Head Office</label></div>
+        <div class="erp-field span-2"><input name="branch_address_line1" placeholder=" " value="{{ edit_branch.address_line1 if edit_branch else '' }}"><label>Address</label></div>
+        <div class="erp-field"><input name="branch_city" placeholder=" " value="{{ edit_branch.city if edit_branch else '' }}"><label>City</label></div>
+        <div class="erp-field"><input name="tax_registration" placeholder=" " value="{{ edit_branch.tax_registration if edit_branch else '' }}"><label>Tax Registration</label></div>
+        <div id="branch-country-fields" class="erp-form-grid span-2" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:1rem;"></div>
+        <div class="erp-form-actions span-2"><button type="submit" class="erp-btn erp-btn-primary">Save Branch</button></div>
+      </form>
+    </div>
+    <div class="erp-table-panel">
+      <table class="erp-table">
+        <thead><tr><th>Code</th><th>Name</th><th>Country</th><th>City</th><th>HO</th><th></th></tr></thead>
+        <tbody>
+          {% for b in branches %}
+          <tr>
+            <td>{{ b.branch_code or '—' }}</td>
+            <td>{{ b.branch_name }}</td>
+            <td>{{ b.country }}</td>
+            <td>{{ b.city or '—' }}</td>
+            <td>{% if b.is_head_office %}Yes{% else %}—{% endif %}</td>
+            <td>
+              <a href="{{ url_for('company_master', company_id=selected_company.id, edit_branch=b.id) }}#company-form" class="erp-btn erp-btn-ghost erp-btn-sm">Edit</a>
+              <form method="post" style="display:inline;" onsubmit="return confirm('Delete branch?');">
+                <input type="hidden" name="form_action" value="delete_branch">
+                <input type="hidden" name="branch_id" value="{{ b.id }}">
+                <input type="hidden" name="company_id" value="{{ selected_company.id }}">
+                <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Delete</button>
+              </form>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6">No branches yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div data-company-panel="directors" hidden>
+    <div class="erp-form-card" style="margin-bottom:1rem;">
+      <h3 class="erp-form-title">{% if edit_director %}Edit Director / Partner{% else %}Add Director / Partner{% endif %}</h3>
+      <form method="post" class="erp-form-grid">
+        <input type="hidden" name="form_action" value="save_director">
+        <input type="hidden" name="company_id" value="{{ selected_company.id }}">
+        {% if edit_director %}<input type="hidden" name="director_id" value="{{ edit_director.id }}">{% endif %}
+        <div class="erp-field"><select name="person_type" class="has-value">{% for t in director_types %}<option value="{{ t }}" {% if edit_director and edit_director.person_type == t %}selected{% endif %}>{{ t }}</option>{% endfor %}</select><label>Type</label></div>
+        <div class="erp-field"><input name="director_full_name" required placeholder=" " value="{{ edit_director.full_name if edit_director else '' }}"><label>Full Name *</label></div>
+        <div class="erp-field"><input name="designation" placeholder=" " value="{{ edit_director.designation if edit_director else '' }}"><label>Designation</label></div>
+        <div class="erp-field">
+          <select name="director_country" id="director-country" class="has-value">
+            {% for c in company_countries %}
+            <option value="{{ c }}" {% if edit_director and edit_director.country == c %}selected{% elif not edit_director and c == selected_company.country %}selected{% endif %}>{{ c }}</option>
+            {% endfor %}
+          </select>
+          <label>ID Country</label>
+        </div>
+        <div id="director-id-fields" class="erp-form-grid span-2" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:1rem;"></div>
+        <div class="erp-field"><input name="share_percentage" type="number" step="0.01" placeholder=" " value="{{ edit_director.share_percentage if edit_director and edit_director.share_percentage is not none else '' }}"><label>Share %</label></div>
+        <div class="erp-field"><label style="position:static;"><input type="checkbox" name="director_active" {% if not edit_director or edit_director.is_active %}checked{% endif %}> Active</label></div>
+        <div class="erp-form-actions span-2"><button type="submit" class="erp-btn erp-btn-primary">Save</button></div>
+      </form>
+    </div>
+    <div class="erp-table-panel">
+      <table class="erp-table">
+        <thead><tr><th>Name</th><th>Type</th><th>Country</th><th>Share %</th><th></th></tr></thead>
+        <tbody>
+          {% for d in directors %}
+          <tr>
+            <td>{{ d.full_name }}</td>
+            <td>{{ d.person_type }}</td>
+            <td>{{ d.country or '—' }}</td>
+            <td>{{ d.share_percentage if d.share_percentage is not none else '—' }}</td>
+            <td>
+              <a href="{{ url_for('company_master', company_id=selected_company.id, edit_director=d.id) }}#company-form" class="erp-btn erp-btn-ghost erp-btn-sm">Edit</a>
+              <form method="post" style="display:inline;" onsubmit="return confirm('Remove director/partner?');">
+                <input type="hidden" name="form_action" value="delete_director">
+                <input type="hidden" name="director_id" value="{{ d.id }}">
+                <input type="hidden" name="company_id" value="{{ selected_company.id }}">
+                <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Delete</button>
+              </form>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5">No directors or partners yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div data-company-panel="documents" hidden>
+    <div class="erp-form-card" style="margin-bottom:1rem;">
+      <h3 class="erp-form-title">{% if edit_document %}Edit Document{% else %}Upload Document{% endif %}</h3>
+      <form method="post" enctype="multipart/form-data" class="erp-form-grid">
+        <input type="hidden" name="form_action" value="save_document">
+        <input type="hidden" name="company_id" value="{{ selected_company.id }}">
+        {% if edit_document %}<input type="hidden" name="document_id" value="{{ edit_document.id }}">{% endif %}
+        <div class="erp-field"><select name="doc_type" class="has-value">{% for t in company_doc_types %}<option value="{{ t }}" {% if edit_document and edit_document.doc_type == t %}selected{% endif %}>{{ t }}</option>{% endfor %}</select><label>Document Type</label></div>
+        <div class="erp-field"><input name="doc_number" placeholder=" " value="{{ edit_document.doc_number if edit_document else '' }}"><label>Document Number</label></div>
+        <div class="erp-field"><input name="issue_date" type="date" placeholder=" " value="{{ edit_document.issue_date if edit_document else '' }}"><label>Issue Date</label></div>
+        <div class="erp-field"><input name="expiry_date" type="date" placeholder=" " value="{{ edit_document.expiry_date if edit_document else '' }}"><label>Expiry Date</label></div>
+        <div class="erp-field"><select name="doc_branch_id"><option value="">— Company level —</option>{% for b in branches %}<option value="{{ b.id }}" {% if edit_document and edit_document.branch_id == b.id %}selected{% endif %}>{{ b.branch_name }}</option>{% endfor %}</select><label>Branch (optional)</label></div>
+        <div class="erp-field"><input type="file" name="document_file"><label>Attachment</label></div>
+        <div class="erp-field span-2"><textarea name="remarks" placeholder=" ">{{ edit_document.remarks if edit_document else '' }}</textarea><label>Remarks</label></div>
+        <div class="erp-form-actions span-2"><button type="submit" class="erp-btn erp-btn-primary">Save Document</button></div>
+      </form>
+    </div>
+    <div class="erp-table-panel">
+      <table class="erp-table">
+        <thead><tr><th>Type</th><th>Number</th><th>Expiry</th><th>Alert</th><th>Branch</th><th></th></tr></thead>
+        <tbody>
+          {% for doc in documents %}
+          <tr class="{% if doc.alert_bucket == 'overdue' %}erp-row-danger{% elif doc.alert_bucket %}erp-row-warning{% endif %}">
+            <td>{{ doc.doc_type }}</td>
+            <td>{{ doc.doc_number or '—' }}</td>
+            <td>{{ doc.expiry_date or '—' }}</td>
+            <td>{% if doc.alert_bucket == 'overdue' %}Expired{% elif doc.alert_bucket %}≤ {{ doc.alert_bucket }}d{% else %}—{% endif %}</td>
+            <td>{{ doc.branch_name or '—' }}</td>
+            <td>
+              {% if doc.attachment %}<a href="{{ url_for('company_document_download', filename=doc.attachment) }}" class="erp-btn erp-btn-ghost erp-btn-sm"><i class="fa-solid fa-download"></i></a>{% endif %}
+              <a href="{{ url_for('company_master', company_id=selected_company.id, edit_document=doc.id) }}#company-form" class="erp-btn erp-btn-ghost erp-btn-sm">Edit</a>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6">No documents uploaded.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div data-company-panel="gst" hidden>
+    <div class="erp-form-card" style="margin-bottom:1rem;">
+      <h3 class="erp-form-title">{% if edit_gst %}Edit GST Registration{% else %}Add GST Registration (India){% endif %}</h3>
+      <form method="post" class="erp-form-grid">
+        <input type="hidden" name="form_action" value="save_gst">
+        <input type="hidden" name="company_id" value="{{ selected_company.id }}">
+        {% if edit_gst %}<input type="hidden" name="gst_id" value="{{ edit_gst.id }}">{% endif %}
+        <div class="erp-field"><input name="state_code" placeholder=" " value="{{ edit_gst.state_code if edit_gst else '' }}"><label>State Code</label></div>
+        <div class="erp-field"><input name="state_name" placeholder=" " value="{{ edit_gst.state_name if edit_gst else '' }}"><label>State Name</label></div>
+        <div class="erp-field"><input name="gstin" required placeholder=" " value="{{ edit_gst.gstin if edit_gst else '' }}"><label>GSTIN *</label></div>
+        <div class="erp-field"><input name="registration_date" type="date" value="{{ edit_gst.registration_date if edit_gst else '' }}"><label>Registration Date</label></div>
+        <div class="erp-field"><select name="gst_branch_id"><option value="">—</option>{% for b in branches %}<option value="{{ b.id }}" {% if edit_gst and edit_gst.branch_id == b.id %}selected{% endif %}>{{ b.branch_name }}</option>{% endfor %}</select><label>Branch</label></div>
+        <div class="erp-form-actions span-2"><button type="submit" class="erp-btn erp-btn-primary">Save GST</button></div>
+      </form>
+    </div>
+    <div class="erp-table-panel">
+      <table class="erp-table">
+        <thead><tr><th>State</th><th>GSTIN</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+          {% for g in gst_regs %}
+          <tr>
+            <td>{{ g.state_name or g.state_code or '—' }}</td>
+            <td>{{ g.gstin }}</td>
+            <td>{{ g.status }}</td>
+            <td>
+              <a href="{{ url_for('company_master', company_id=selected_company.id, edit_gst=g.id) }}#company-form" class="erp-btn erp-btn-ghost erp-btn-sm">Edit</a>
+              <form method="post" style="display:inline;" onsubmit="return confirm('Delete GST registration?');">
+                <input type="hidden" name="form_action" value="delete_gst">
+                <input type="hidden" name="gst_id" value="{{ g.id }}">
+                <input type="hidden" name="company_id" value="{{ selected_company.id }}">
+                <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Delete</button>
+              </form>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4">No GST registrations (add for multi-state billing).</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<script>
+window.COMPANY_GCC_FIELD_CONFIG = {{ gcc_field_config_json|safe }};
+window.COMPANY_MASTER_BOOT = {
+  countryFields: {{ (selected_company.country_fields if selected_company else {})|tojson }},
+  branchCountryFields: {{ (edit_branch.country_fields if edit_branch else {})|tojson }},
+  directorIdFields: {{ (edit_director.id_fields if edit_director else {})|tojson }}
+};
+</script>
+<script src="{{ url_for('static', filename='js/company-master.js') }}"></script>
+{% endblock %}

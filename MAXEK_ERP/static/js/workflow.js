@@ -102,6 +102,26 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
+  var deleteModal = document.getElementById('delete-modal');
+  var deleteForm = document.getElementById('delete-form');
+  var deleteRecordId = document.getElementById('delete-record-id');
+  var deleteTable = document.getElementById('delete-table');
+  var deleteModuleId = document.getElementById('delete-module-id');
+  var deleteRedirect = document.getElementById('delete-redirect-to');
+
+  bindModal(deleteModal, 'delete-form', 'delete-cancel');
+
+  document.querySelectorAll('.js-delete-record').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      if (!deleteModal) return;
+      deleteRecordId.value = btn.getAttribute('data-record-id') || '';
+      deleteTable.value = btn.getAttribute('data-delete-table') || '';
+      deleteModuleId.value = btn.getAttribute('data-module-id') || '';
+      deleteRedirect.value = btn.getAttribute('data-redirect-to') || 'dashboard';
+      deleteModal.hidden = false;
+    });
+  });
+
   document.querySelectorAll('[data-transaction-tabs]').forEach(function (wrap) {
     wrap.querySelectorAll('.transaction-tab').forEach(function (tab) {
       tab.addEventListener('click', function () {

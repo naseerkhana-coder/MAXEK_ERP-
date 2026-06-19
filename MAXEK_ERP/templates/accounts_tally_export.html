@@ -1,0 +1,15 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Tally XML Export' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('accounts_hub') ~ '">Accounts</a> &gt; Tally Export' %}
+{% block content %}
+<div class="erp-form-card">
+  <p>Export approved journal entries as Tally-importable XML (common voucher format).</p>
+  <p><strong>{{ journal_count }}</strong> journal entries in system.</p>
+  <form method="get" style="display:flex;gap:1rem;flex-wrap:wrap;align-items:end;margin-top:1rem;">
+    <div class="erp-field"><input type="date" name="from_date" value="{{ from_date }}"><label>From</label></div>
+    <div class="erp-field"><input type="date" name="to_date" value="{{ to_date }}"><label>To</label></div>
+    <input type="hidden" name="download" value="1">
+    <button type="submit" class="erp-btn erp-btn-primary"><i class="fa-solid fa-download"></i> Download Tally XML</button>
+  </form>
+</div>
+{% endblock %}

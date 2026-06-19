@@ -1,0 +1,34 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Cost Planning Reports' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; Projects &gt; <a href="' ~ url_for('cost_planning') ~ '">Cost Planning</a> &gt; Reports' %}
+{% block page_actions %}
+<a href="{{ url_for('cost_planning') }}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-arrow-left"></i> Back</a>
+{% endblock %}
+{% block content %}
+<div class="module-layout">
+  <div class="erp-form-card">
+    <h3 class="erp-form-title">Cost Planning Reports</h3>
+    <p style="margin-bottom:1rem;">MVP report routes — Excel export available for the cost plan register. Additional reports are listed for future implementation.</p>
+    <div class="erp-table-scroll">
+      <table class="erp-table erp-table-module">
+        <thead><tr><th>Report</th><th>Status</th><th>Action</th></tr></thead>
+        <tbody>
+          {% for slug, label in reports %}
+          <tr>
+            <td>{{ label }}</td>
+            <td>{% if slug in ['planned_vs_actual', 'boq_cost', 'project_cost'] %}Excel via register{% else %}Stub{% endif %}</td>
+            <td>
+              {% if slug in ['planned_vs_actual', 'boq_cost', 'project_cost'] %}
+              <a href="{{ url_for('cost_planning_export') }}" class="erp-btn erp-btn-ghost erp-btn-sm">Export Register</a>
+              {% else %}
+              <span class="workflow-hint">Coming soon</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,37 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Inventory Stock' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('store') ~ '">Store</a> &gt; Inventory' %}
+{% block content %}
+<div class="erp-summary-grid" style="margin-bottom:1.25rem;">
+  <div class="erp-stat-card"><span>Active Materials</span><strong>{{ rows|length }}</strong></div>
+  <div class="erp-stat-card"><span>Low Stock Items</span><strong>{{ low_stock_count }}</strong></div>
+</div>
+
+<div class="erp-table-panel" data-erp-table>
+  <div class="erp-table-toolbar"><h3 class="erp-table-title">Stock Balances</h3></div>
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead>
+        <tr><th>Code</th><th>Material</th><th>Category</th><th>Balance</th><th>Unit</th><th>Reorder</th><th>Min</th><th>Max</th><th>Status</th></tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr{% if row.low_stock %} style="background:#fff7ed;"{% endif %}>
+          <td>{{ row.code }}</td>
+          <td>{{ row.name }}</td>
+          <td>{{ row.category or '—' }}</td>
+          <td>{{ '%.2f'|format(row.balance or 0) }}</td>
+          <td>{{ row.unit or '—' }}</td>
+          <td>{{ row.reorder_level or 0 }}</td>
+          <td>{{ row.min_stock or 0 }}</td>
+          <td>{{ row.max_stock or 0 }}</td>
+          <td>{% if row.low_stock %}<span style="color:#b45309;font-weight:600;">Low Stock</span>{% else %}OK{% endif %}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9">No stock data. Post GRN entries to build inventory.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

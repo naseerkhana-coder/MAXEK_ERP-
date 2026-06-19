@@ -3,18 +3,36 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-    <title>{% block title %}MAXEK ERP{% endblock %}</title>
+    <meta name="description" content="MAXEK Technologies ERP — construction operations and enterprise resource planning.">
+    <title>{% block title %}MAXEK Technologies ERP{% endblock %}</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/maxek-dashboard.css') }}">
     {% block head_extra %}{% endblock %}
   </head>
   <body class="maxek-layout{% block body_class %}{% endblock %}">
+    {% from 'macros/erp_ui.html' import erp_sub_toolbar_secondary %}
     <div class="sidebar-overlay"></div>
 
     <nav class="tool-rail">
-      <div class="logo-container">
-        <a class="logo-text-main" href="{{ url_for('dashboard') }}">MAX<span>EK</span></a>
-        <div class="logo-subtext">Construction System</div>
+      <div class="rail-top-row">
+        <div class="logo-container">
+          <a class="logo-link" href="{{ url_for('dashboard') }}">
+            <img
+              src="{{ url_for('static', filename='images/maxek-logo.png') }}"
+              alt="MAXEK Technologies"
+              class="maxek-logo maxek-logo--sidebar"
+              width="48"
+              height="48"
+            >
+            <div class="logo-text-block">
+              <span class="logo-text-main">MAX<span>EK</span></span>
+              <div class="logo-subtext">Technologies</div>
+            </div>
+          </a>
+        </div>
+        <button type="button" class="rail-close" data-sidebar-close aria-label="Close sidebar">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
       </div>
 
       <div class="rail-nav-scroll">
@@ -30,8 +48,10 @@
           {% if request.endpoint in group.get('active_endpoints', []) %}
             {% set group_active.value = true %}
           {% endif %}
-          {% set primary_item = children[0] if children else group %}
-          <a class="rail-btn department-btn{% if group_active.value %} active{% endif %}" href="{{ url_for(primary_item.endpoint) }}{% if primary_item.get('anchor') %}#{{ primary_item.anchor }}{% endif %}">
+          {% if request.endpoint == 'department_hub' and request.view_args.get('slug') == group.slug %}
+            {% set group_active.value = true %}
+          {% endif %}
+          <a class="rail-btn department-btn{% if group_active.value %} active{% endif %}" href="{{ url_for('department_hub', slug=group.slug) }}">
             <i class="fa-solid {{ group.icon }}"></i>
             <span>{{ group.label }}</span>
           </a>
@@ -40,12 +60,24 @@
     </nav>
 
     <main class="main-window">
+      <div class="maxek-toolbar-stack">
       <header class="top-utility-strip">
         <div class="header-left">
-          <button type="button" class="sidebar-toggle" data-sidebar-toggle aria-label="Toggle sidebar">
+          <button type="button" class="sidebar-toggle" data-sidebar-toggle aria-label="Toggle sidebar" aria-expanded="false">
             <i class="fa-solid fa-bars"></i>
           </button>
-          <a class="header-logo" href="{{ url_for('dashboard') }}">MAX<span>EK</span></a>
+          <a class="header-brand" href="{{ url_for('dashboard') }}">
+            <img
+              src="{{ url_for('static', filename='images/maxek-logo.png') }}"
+              alt=""
+              class="maxek-logo maxek-logo--header"
+              width="28"
+              height="28"
+              aria-hidden="true"
+            >
+            <span class="header-logo">MAX<span>EK</span></span>
+            <span class="header-brand-sub">Technologies</span>
+          </a>
           <div class="search-wrapper">
             <i class="fa-solid fa-magnifying-glass"></i>
             <input type="search" placeholder="Search menu items, projects, or workforce...">
@@ -53,6 +85,13 @@
         </div>
 
         <div class="header-actions user-status-cluster">
+          <div
+            class="header-datetime"
+            id="header-datetime"
+            data-timezone="{{ app_timezone }}"
+            title="{{ app_timezone }}"
+          >{{ timestamp }}</div>
+
           <select class="branch-select" name="branch" aria-label="Branch selector">
             {% for branch in branches %}
             <option value="{{ branch }}"{% if branch == selected_branch %} selected{% endif %}>{{ branch }}</option>
@@ -81,21 +120,36 @@
         </div>
       </header>
 
-      {% if current_nav_group is defined and current_nav_group.get('items') %}
-      <div class="department-subbar" aria-label="{{ current_nav_group.label }} toolbar">
+      {% set show_department_subbar = current_nav_group and current_nav_group.get('items') and (current_nav_group.get('slug') != 'dashboard' or request.endpoint in ['dashboard', 'dashboard_choice_b']) %}
+      {% if show_department_subbar %}
+      <div class="department-subbar" id="department-subbar" data-subbar-key="{{ current_nav_group.slug }}" aria-label="{{ current_nav_group.label }} toolbar">
         <div class="department-subbar-title">
           <i class="fa-solid {{ current_nav_group.icon }}"></i>
           <span>{{ current_nav_group.label }}</span>
         </div>
         <div class="department-subbar-scroll">
           {% for item in current_nav_group.get('items') %}
-          <a class="department-subbar-link{% if request.endpoint in item.active_endpoints %} active{% endif %}" href="{{ url_for(item.endpoint) }}{% if item.get('anchor') %}#{{ item.anchor }}{% endif %}">
+          {% set item_href = safe_url_for(item.endpoint, **(item.get('query') or {})) %}
+          {% if item.get('anchor') %}{% set item_href = item_href ~ '#' ~ item.anchor %}{% endif %}
+          <a class="department-subbar-link{% if request.endpoint in item.active_endpoints and not item.get('anchor') %} active{% endif %}" href="{{ item_href }}"{% if item.get('anchor') and current_nav_group.slug == 'dashboard' %} data-dash-subbar-anchor="{{ item.anchor }}"{% elif item.get('anchor') %} data-module-anchor="{{ item.anchor }}"{% endif %}>
             {{ item.label }}
           </a>
           {% endfor %}
         </div>
+        <button type="button" class="department-subbar-close" data-subbar-close aria-label="Close department toolbar">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
       </div>
+      <button type="button" class="department-subbar-reopen" data-subbar-reopen aria-label="Show department toolbar" hidden>
+        <i class="fa-solid fa-bars-staggered"></i>
+        <span>Show toolbar</span>
+      </button>
       {% endif %}
+
+      {% if module_sub_toolbar %}
+      {{ erp_sub_toolbar_secondary(module_sub_toolbar, module_sub_toolbar_label or 'Section tools') }}
+      {% endif %}
+      </div>
 
       <div class="dashboard-body">
         {% with messages = get_flashed_messages() %}

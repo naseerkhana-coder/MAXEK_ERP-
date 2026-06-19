@@ -1,0 +1,93 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Financial Reports' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('accounts_hub') ~ '">Accounts</a> &gt; Reports' %}
+{% block content %}
+<form method="get" class="erp-form-card" style="margin-bottom:1rem;display:flex;gap:1rem;flex-wrap:wrap;align-items:end;">
+  <div class="erp-field">
+    <select name="report">
+      <option value="trial_balance" {% if report == 'trial_balance' %}selected{% endif %}>Trial Balance</option>
+      <option value="profit_loss" {% if report == 'profit_loss' %}selected{% endif %}>Profit &amp; Loss</option>
+      <option value="balance_sheet" {% if report == 'balance_sheet' %}selected{% endif %}>Balance Sheet</option>
+      <option value="cash_flow" {% if report == 'cash_flow' %}selected{% endif %}>Cash Flow (simplified)</option>
+      <option value="project_profitability" {% if report == 'project_profitability' %}selected{% endif %}>Project Profitability</option>
+    </select>
+    <label>Report</label>
+  </div>
+  {% if report == 'project_profitability' %}
+  <div class="erp-field">
+    <select name="project_id">
+      <option value="">All projects</option>
+      {% for p in projects %}
+      <option value="{{ p.id }}" {% if request.args.get('project_id')|int == p.id %}selected{% endif %}>{{ p.project_name }}</option>
+      {% endfor %}
+    </select>
+    <label>Project</label>
+  </div>
+  {% endif %}
+  <div class="erp-field"><input type="date" name="from_date" value="{{ from_date }}"><label>From</label></div>
+  <div class="erp-field"><input type="date" name="to_date" value="{{ to_date }}"><label>To / As of</label></div>
+  <button type="submit" class="erp-btn erp-btn-primary">Run Report</button>
+  <a href="{{ request.path }}?{% if request.query_string %}{{ request.query_string.decode() }}&{% endif %}export=excel" class="erp-btn erp-btn-ghost">Excel Export</a>
+  <a href="{{ request.path }}?{% if request.query_string %}{{ request.query_string.decode() }}&{% endif %}export=csv" class="erp-btn erp-btn-ghost">CSV Export</a>
+</form>
+
+{% if report == 'trial_balance' %}
+<div class="erp-table-panel"><div class="erp-table-scroll">
+  <table class="erp-table">
+    <thead><tr><th>Code</th><th>Account</th><th>Type</th><th>Debit</th><th>Credit</th></tr></thead>
+    <tbody>
+      {% for row in data.rows %}
+      <tr>
+        <td>{{ row.code }}</td><td>{{ row.name }}</td><td>{{ row.account_type }}</td>
+        <td>{{ '%.2f'|format(row.debit or 0) }}</td><td>{{ '%.2f'|format(row.credit or 0) }}</td>
+      </tr>
+      {% else %}<tr><td colspan="5">No balances — approve vouchers to post journals.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div></div>
+
+{% elif report == 'profit_loss' %}
+<div class="erp-summary-grid" style="margin-bottom:1rem;">
+  <div class="erp-stat-card"><span>Total Income</span><strong>₹{{ '%.2f'|format(data.total_income or 0) }}</strong></div>
+  <div class="erp-stat-card"><span>Total Expense</span><strong>₹{{ '%.2f'|format(data.total_expense or 0) }}</strong></div>
+  <div class="erp-stat-card"><span>Net Profit</span><strong>₹{{ '%.2f'|format(data.net_profit or 0) }}</strong></div>
+</div>
+<div class="erp-table-panel"><h4>Income</h4><table class="erp-table">{% for row in data.income %}<tr><td>{{ row.code }} {{ row.name }}</td><td>₹{{ '%.2f'|format(row.balance) }}</td></tr>{% endfor %}</table>
+<h4 style="margin-top:1rem;">Expenses</h4><table class="erp-table">{% for row in data.expenses %}<tr><td>{{ row.code }} {{ row.name }}</td><td>₹{{ '%.2f'|format(row.balance) }}</td></tr>{% endfor %}</table></div>
+
+{% elif report == 'balance_sheet' %}
+<div class="erp-summary-grid" style="margin-bottom:1rem;">
+  <div class="erp-stat-card"><span>Total Assets</span><strong>₹{{ '%.2f'|format(data.total_assets or 0) }}</strong></div>
+  <div class="erp-stat-card"><span>Total Liabilities</span><strong>₹{{ '%.2f'|format(data.total_liabilities or 0) }}</strong></div>
+  <div class="erp-stat-card"><span>Retained (P&amp;L)</span><strong>₹{{ '%.2f'|format(data.retained_earnings or 0) }}</strong></div>
+</div>
+<div class="erp-table-panel"><h4>Assets</h4><table class="erp-table">{% for row in data.assets %}<tr><td>{{ row.code }} {{ row.name }}</td><td>₹{{ '%.2f'|format(row.balance) }}</td></tr>{% endfor %}</table>
+<h4 style="margin-top:1rem;">Liabilities</h4><table class="erp-table">{% for row in data.liabilities %}<tr><td>{{ row.code }} {{ row.name }}</td><td>₹{{ '%.2f'|format(row.balance) }}</td></tr>{% endfor %}</table></div>
+
+{% elif report == 'cash_flow' %}
+<div class="erp-summary-grid" style="margin-bottom:1rem;">
+  <div class="erp-stat-card"><span>Inflow</span><strong>₹{{ '%.2f'|format(data.total_inflow or 0) }}</strong></div>
+  <div class="erp-stat-card"><span>Outflow</span><strong>₹{{ '%.2f'|format(data.total_outflow or 0) }}</strong></div>
+  <div class="erp-stat-card"><span>Net Cash Flow</span><strong>₹{{ '%.2f'|format(data.net_cash_flow or 0) }}</strong></div>
+</div>
+
+{% elif report == 'project_profitability' %}
+<div class="erp-table-panel"><div class="erp-table-scroll">
+  <table class="erp-table">
+    <thead><tr><th>Project</th><th>Account Expenses</th><th>Legacy Proj. Exp.</th><th>Total Cost</th><th>Receipts</th><th>Profit</th></tr></thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td>{{ row.project_name }}</td>
+        <td>₹{{ '%.2f'|format(row.account_expense_total or 0) }}</td>
+        <td>₹{{ '%.2f'|format(row.project_expense_legacy or 0) }}</td>
+        <td>₹{{ '%.2f'|format(row.total_cost or 0) }}</td>
+        <td>₹{{ '%.2f'|format(row.receipt_total or 0) }}</td>
+        <td>₹{{ '%.2f'|format(row.profit or 0) }}</td>
+      </tr>
+      {% else %}<tr><td colspan="6">No project data.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div></div>
+{% endif %}
+{% endblock %}

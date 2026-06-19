@@ -1,0 +1,136 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Sub-contractor Bill' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('sub_billing_register') ~ '">Sub Billing</a> &gt; Form' %}
+{% block page_actions %}
+{% if view_record %}
+<a href="{{ url_for('sub_billing_print', bill_id=view_record.id) }}" target="_blank" class="erp-btn erp-btn-ghost">Detail Print</a>
+<a href="{{ url_for('sub_billing_abstract_print', bill_id=view_record.id) }}" target="_blank" class="erp-btn erp-btn-ghost">Abstract Print</a>
+{% endif %}
+{% endblock %}
+{% block content %}
+{% if view_record %}
+<div class="erp-form-card" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">{{ view_record.bill_number }} — {{ view_record.subcontractor_name }}</h3>
+  <p>Period: {{ view_record.period_from }} to {{ view_record.period_to }} | Net: ₹ {{ '%.2f'|format(view_record.net_payment or 0) }}</p>
+</div>
+{% endif %}
+
+{% if show_form %}
+{% set rec = edit_record or form_defaults %}
+<div class="erp-form-card">
+  <h3 class="erp-form-title">{% if edit_record %}Edit{% else %}New{% endif %} Sub-contractor Bill</h3>
+  <form method="post" id="sub-bill-form">
+    {% if edit_record %}<input type="hidden" name="bill_id" value="{{ edit_record.id }}">{% endif %}
+    <div class="erp-form-grid">
+      <div class="erp-field span-2">
+        <select name="subcontractor_id" id="subcontractor_id" required {% if edit_record %}disabled{% endif %}>
+          <option value="">Select sub-contractor…</option>
+          {% for s in subcontractors %}
+          <option value="{{ s.id }}" {% if rec.subcontractor_id == s.id %}selected{% endif %}>{{ s.subcontractor_name }} ({{ s.subcontractor_code or '—' }})</option>
+          {% endfor %}
+        </select>
+        <label>Sub-contractor</label>
+        {% if edit_record %}<input type="hidden" name="subcontractor_id" value="{{ rec.subcontractor_id }}">{% endif %}
+      </div>
+      <div class="erp-field"><input name="period_from" type="date" value="{{ rec.period_from or '' }}" required><label>Date From</label></div>
+      <div class="erp-field"><input name="period_to" type="date" value="{{ rec.period_to or '' }}" required><label>Date To</label></div>
+      <div class="erp-field"><input name="bill_date" type="date" value="{{ rec.bill_date or form_defaults.bill_date }}"><label>Bill Date</label></div>
+      <div class="erp-field"><input name="invoice_no" value="{{ rec.invoice_no or '' }}" placeholder="Auto"><label>Invoice No.</label></div>
+      <div class="erp-field"><input name="payment_cycle" value="{{ rec.payment_cycle or '15 Days Cycle' }}"><label>Payment Cycle</label></div>
+      <div class="erp-field">
+        <button type="button" id="import-workers" class="erp-btn erp-btn-ghost erp-btn-sm">Import Workers</button>
+      </div>
+    </div>
+
+    <table class="erp-table" id="sub-lines" style="margin-top:1rem;font-size:0.85rem;">
+      <thead>
+        <tr><th>Code</th><th>Name</th><th>Designation</th><th>Days</th><th>Salary</th><th>OT HR</th><th>OT Amt</th><th>Total</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% set lines = rec.lines if rec.lines else [] %}
+        {% if not lines %}<tr class="sub-line"><td colspan="9" class="erp-empty">Click Import Workers or add lines manually.</td></tr>{% endif %}
+        {% for line in lines %}
+        <tr class="sub-line">
+          <td><input name="line_worker_code[]" value="{{ line.worker_code or '' }}" style="width:4rem;"><input type="hidden" name="line_worker_id[]" value="{{ line.worker_id or '' }}"></td>
+          <td><input name="line_worker_name[]" value="{{ line.worker_name or '' }}"></td>
+          <td><input name="line_designation[]" value="{{ line.designation or '' }}"></td>
+          <td><input name="line_days[]" type="number" step="0.5" value="{{ line.days_worked or 0 }}" style="width:3.5rem;" class="line-days"></td>
+          <td><input name="line_salary[]" type="number" step="0.01" value="{{ line.salary_amount or 0 }}" style="width:5rem;" class="line-salary"></td>
+          <td><input name="line_ot_hours[]" type="number" step="0.1" value="{{ line.ot_hours or 0 }}" style="width:3.5rem;"></td>
+          <td><input name="line_ot_amount[]" type="number" step="0.01" value="{{ line.ot_amount or 0 }}" style="width:5rem;" class="line-ot"></td>
+          <td><input type="number" step="0.01" class="line-total" readonly value="{{ line.total_amount or 0 }}" style="width:5rem;"></td>
+          <td><button type="button" class="erp-btn erp-btn-ghost erp-btn-sm remove-line">×</button></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <button type="button" id="add-sub-line" class="erp-btn erp-btn-ghost erp-btn-sm" style="margin-top:0.5rem;">+ Add Line</button>
+
+    <div class="erp-form-grid" style="margin-top:1rem;">
+      <div class="erp-field"><input name="old_mess_amount" type="number" step="0.01" value="{{ rec.old_mess_amount or 0 }}"><label>OLD Mess</label></div>
+      <div class="erp-field"><input name="mess_deduction" type="number" step="0.01" value="{{ rec.mess_deduction or 0 }}"><label>MESS Deduction</label></div>
+      <div class="erp-field"><input name="advance_deduction" type="number" step="0.01" value="{{ rec.advance_deduction or 0 }}"><label>ADVANCE</label></div>
+      <div class="erp-field"><input name="tds_percent" type="number" step="0.01" value="{{ rec.tds_percent or 1 }}"><label>TDS %</label></div>
+      <div class="erp-field span-3"><textarea name="declaration_text">{{ rec.declaration_text or default_declaration }}</textarea><label>Declaration</label></div>
+      <div class="erp-field"><input name="prepared_by" value="{{ rec.prepared_by or 'Maxek ENG' }}"><label>Prepared By</label></div>
+      <div class="erp-field"><input name="approved_by" value="{{ rec.approved_by or 'Maxek GM' }}"><label>Approved By</label></div>
+    </div>
+    <div class="erp-form-actions">
+      <button class="erp-btn erp-btn-primary" type="submit">Save Bill</button>
+      <a href="{{ url_for('sub_billing_register') }}" class="erp-btn erp-btn-ghost">Cancel</a>
+    </div>
+  </form>
+</div>
+<template id="sub-line-template">
+  <tr class="sub-line">
+    <td><input name="line_worker_code[]" style="width:4rem;"><input type="hidden" name="line_worker_id[]" value=""></td>
+    <td><input name="line_worker_name[]"></td>
+    <td><input name="line_designation[]"></td>
+    <td><input name="line_days[]" type="number" step="0.5" value="0" style="width:3.5rem;" class="line-days"></td>
+    <td><input name="line_salary[]" type="number" step="0.01" value="0" style="width:5rem;" class="line-salary"></td>
+    <td><input name="line_ot_hours[]" type="number" step="0.1" value="0" style="width:3.5rem;"></td>
+    <td><input name="line_ot_amount[]" type="number" step="0.01" value="0" style="width:5rem;" class="line-ot"></td>
+    <td><input type="number" class="line-total" readonly value="0" style="width:5rem;"></td>
+    <td><button type="button" class="erp-btn erp-btn-ghost erp-btn-sm remove-line">×</button></td>
+  </tr>
+</template>
+<script>
+(function () {
+  const tbody = document.querySelector('#sub-lines tbody');
+  const tpl = document.getElementById('sub-line-template');
+  function recalcRow(tr) {
+    const sal = parseFloat(tr.querySelector('.line-salary')?.value || 0);
+    const ot = parseFloat(tr.querySelector('.line-ot')?.value || 0);
+    tr.querySelector('.line-total').value = (sal + ot).toFixed(2);
+  }
+  tbody.addEventListener('input', (e) => {
+    if (e.target.closest('.sub-line')) recalcRow(e.target.closest('.sub-line'));
+  });
+  document.getElementById('add-sub-line').addEventListener('click', () => {
+    const empty = tbody.querySelector('.erp-empty');
+    if (empty) empty.closest('tr').remove();
+    tbody.appendChild(tpl.content.cloneNode(true));
+  });
+  tbody.addEventListener('click', (e) => {
+    if (e.target.classList.contains('remove-line')) e.target.closest('tr').remove();
+  });
+  document.getElementById('import-workers')?.addEventListener('click', async () => {
+    const subId = document.getElementById('subcontractor_id').value;
+    if (!subId) { alert('Select a sub-contractor first.'); return; }
+    const res = await fetch(`{{ url_for('sub_billing_import_workers') }}?subcontractor_id=${subId}`);
+    const data = await res.json();
+    if (!data.ok) { alert(data.error || 'Import failed'); return; }
+    tbody.innerHTML = '';
+    data.lines.forEach((line) => {
+      const tr = tpl.content.cloneNode(true).querySelector('tr');
+      tr.querySelector('[name="line_worker_id[]"]').value = line.worker_id || '';
+      tr.querySelector('[name="line_worker_code[]"]').value = line.worker_code || '';
+      tr.querySelector('[name="line_worker_name[]"]').value = line.worker_name || '';
+      tr.querySelector('[name="line_designation[]"]').value = line.designation || '';
+      tbody.appendChild(tr);
+    });
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

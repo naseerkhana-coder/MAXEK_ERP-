@@ -1,0 +1,54 @@
+{% extends 'base_maxek.html' %}
+{% from 'macros/erp_ui.html' import approval_badge, maker_row_actions %}
+{% set page_title = 'Monthly Timesheets' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; HR &gt; Monthly Timesheets' %}
+{% block page_actions %}
+<a href="{{ url_for('employee_timesheets_form', new=1) }}" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> New Timesheet</a>
+<a href="{{ url_for('timesheet') }}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-clock"></i> Daily View</a>
+{% endblock %}
+{% block content %}
+<form method="get" class="erp-table-toolbar" style="margin-bottom:0.75rem;display:flex;gap:0.5rem;flex-wrap:wrap;">
+  <input name="q" value="{{ search }}" placeholder="Search employee, ref…">
+  <input name="year_month" type="month" value="{{ year_month_filter }}">
+  <select name="status">
+    <option value="">All statuses</option>
+    {% for s in statuses %}
+    <option value="{{ s }}" {% if status_filter == s %}selected{% endif %}>{{ s }}</option>
+    {% endfor %}
+  </select>
+  <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Filter</button>
+</form>
+<div class="erp-table-wrap">
+  <table class="erp-table">
+    <thead>
+      <tr>
+        <th>Ref</th><th>Month</th><th>Employee</th><th>Code</th><th>Designation</th>
+        <th>Working Days</th><th>OT Hrs</th><th>Status</th><th>Workflow</th><th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td><a href="{{ url_for('employee_timesheets_form', view=row.id) }}">{{ row.timesheet_ref }}</a></td>
+        <td>{{ row.year_month }}</td>
+        <td>{{ row.employee_name }}</td>
+        <td>{{ row.employee_code or '—' }}</td>
+        <td>{{ row.designation or '—' }}</td>
+        <td>{{ row.working_days or 0 }}</td>
+        <td>{{ row.overtime_hours or 0 }}</td>
+        <td>{{ row.timesheet_status }}</td>
+        <td>{{ approval_badge(row.approval_status) }}</td>
+        <td>
+          <a href="{{ url_for('employee_timesheets_print', timesheet_id=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm" target="_blank">Print</a>
+          {% if row.timesheet_status == 'Draft' %}
+          <a href="{{ url_for('employee_timesheets_form', edit=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Edit</a>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="10" class="erp-empty">No monthly timesheets yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

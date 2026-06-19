@@ -4,43 +4,322 @@
 {% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; HR &gt; Attendance' %}
 {% block page_actions %}
 <a href="{{ url_for('timesheet') }}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-clock"></i> Timesheet</a>
-<a href="#add-attendance" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> Mark Attendance</a>
+<a href="{{ url_for('attendance', mode='daily') }}#add-attendance" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-calendar-day"></i> Daily Entry</a>
+<a href="{{ url_for('attendance', mode='monthly') }}#monthly-attendance" class="erp-btn erp-btn-primary"><i class="fa-solid fa-calendar-days"></i> Monthly Summary</a>
 {% endblock %}
 {% block content %}
 <div class="erp-validation" style="margin-bottom: 1rem;">
   <strong>Flow:</strong> Maker [Save] → Checker [Verify] → Approver [Approve]
+  · <strong>Daily</strong> = one row per day · <strong>Monthly summary</strong> = one row per monthly-salary staff per month (worked days)
 </div>
+
+<div class="erp-form-card" style="margin-bottom: 1rem; padding: 0.75rem 1rem;">
+  <div class="erp-btn-group" role="tablist" aria-label="Attendance entry mode">
+    <a href="{{ url_for('attendance', mode='daily') }}#add-attendance"
+       class="erp-btn {% if attendance_mode != 'monthly' %}erp-btn-primary{% else %}erp-btn-ghost{% endif %}">
+      <i class="fa-solid fa-calendar-day"></i> Daily Attendance
+    </a>
+    <a href="{{ url_for('attendance', mode='monthly') }}#monthly-attendance"
+       class="erp-btn {% if attendance_mode == 'monthly' %}erp-btn-primary{% else %}erp-btn-ghost{% endif %}">
+      <i class="fa-solid fa-calendar-days"></i> Monthly Summary
+    </a>
+  </div>
+</div>
+
+{% if view_monthly_record %}
+<div class="erp-form-card" style="margin-bottom: 1rem;">
+  {% call transaction_view_tabs(view_monthly_record, history, can_reopen, approval_id) %}
+  <h3 class="erp-form-title">Monthly Attendance #{{ view_monthly_record.id }}</h3>
+  <p><strong>Staff:</strong> {{ view_monthly_record.staff_name or '—' }} ({{ view_monthly_record.employee_code or '—' }})</p>
+  <p><strong>Month:</strong> {{ view_monthly_record.year_month }}</p>
+  <p><strong>Worked days:</strong> {{ view_monthly_record.worked_days or 0 }} · <strong>Half days:</strong> {{ view_monthly_record.half_days or 0 }} · <strong>Absent:</strong> {{ view_monthly_record.absent_days or 0 }} · <strong>OT hours:</strong> {{ format_decimal_hours(view_monthly_record.ot_hours) }}</p>
+  <p><strong>Project:</strong> {{ view_monthly_record.project_code or '—' }} — {{ view_monthly_record.project_name or '—' }}</p>
+  <p><strong>Remarks:</strong> {{ view_monthly_record.remarks or '—' }}</p>
+  <p><strong>Workflow:</strong> {{ role_status_badge(view_monthly_record.approval_status, 'maker') }}</p>
+  {% if view_monthly_record.approval_status in ['Pending Checker', 'Rejected by Checker', 'Rejected by Approver'] %}
+  <div class="erp-form-actions" style="margin-top: 0.75rem;">
+    <a href="{{ url_for('attendance', edit_monthly=view_monthly_record.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm"><i class="fa-solid fa-pen"></i> Edit</a>
+  </div>
+  {% endif %}
+  <div class="erp-form-actions" style="margin-top: 0.5rem;">
+    <a href="{{ url_for('attendance', mode='monthly') }}" class="erp-btn erp-btn-ghost erp-btn-sm">Back to List</a>
+  </div>
+  {{ rejection_notice(history, view_monthly_record.approval_status) }}
+  {% endcall %}
+</div>
+{% endif %}
 
 {% if view_record %}
 <div class="erp-form-card" style="margin-bottom: 1rem;">
   {% call transaction_view_tabs(view_record, history, can_reopen, approval_id) %}
   <h3 class="erp-form-title">Attendance #{{ view_record.id }}</h3>
-  <p><strong>Date:</strong> {{ view_record.attendance_date }} | <strong>Worker:</strong> {{ view_record.worker_name or '—' }}</p>
-  <p><strong>Project:</strong> {{ view_record.project_name or '—' }} | <strong>Hours:</strong> {{ '%.2f'|format(view_record.total_hours or 0) }} (OT {{ '%.2f'|format(view_record.ot_hours or 0) }})</p>
-  <p><strong>Status:</strong> {{ role_status_badge(view_record.approval_status, 'maker') }}</p>
+  <p><strong>Date:</strong> {{ view_record.attendance_date }} | <strong>Worker:</strong> {{ view_record.worker_name or '—' }} ({{ view_record.worker_code or '—' }})</p>
+  <p><strong>Project:</strong> {{ view_record.project_code or '—' }} — {{ view_record.project_name or '—' }}</p>
+  <p><strong>Time:</strong> {{ view_record.in_time or '—' }} – {{ view_record.out_time or '—' }} | Break: {{ format_decimal_hours(view_record.break_hours) }} | Status: {{ view_record.status or 'Present' }}</p>
+  <p><strong>Trade:</strong> {{ view_record.trade_name or '—' }} | <strong>Designation:</strong> {{ view_record.designation_name or '—' }}</p>
+  <p><strong>Hours:</strong> {{ format_decimal_hours(view_record.total_hours) }} (OT {{ format_decimal_hours(view_record.ot_hours) }})</p>
+  <p><strong>Workflow:</strong> {{ role_status_badge(view_record.approval_status, 'maker') }}</p>
+  {% if view_record.approval_status in ['Pending Checker', 'Rejected by Checker', 'Rejected by Approver'] %}
+  <div class="erp-form-actions" style="margin-top: 0.75rem;">
+    <a href="{{ url_for('attendance', edit=view_record.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm"><i class="fa-solid fa-pen"></i> Edit</a>
+  </div>
+  {% endif %}
+  <div class="erp-form-actions" style="margin-top: 0.5rem;">
+    <a href="{{ url_for('attendance') }}" class="erp-btn erp-btn-ghost erp-btn-sm">Back to List</a>
+  </div>
   {{ rejection_notice(history, view_record.approval_status) }}
   {% endcall %}
 </div>
 {% endif %}
 
 <div class="module-layout">
-  {% if not view_record %}
+  {% if not view_record and not view_monthly_record and attendance_mode == 'monthly' %}
+  <div class="erp-form-card" id="monthly-attendance">
+    <h3 class="erp-form-title">{% if edit_monthly_record %}Edit Monthly Attendance #{{ edit_monthly_record.id }}{% else %}Monthly Attendance Summary{% endif %}</h3>
+    <p class="erp-form-hint" style="margin-bottom: 0.75rem;">For staff on <strong>Monthly</strong> salary — enter total worked days once per staff per month. Payroll uses this when present; otherwise it falls back to daily attendance rows.</p>
+    <form method="post" class="erp-form-grid" data-monthly-attendance-form>
+      <input type="hidden" name="form_action" value="save_monthly">
+      {% if edit_monthly_record %}<input type="hidden" name="record_id" value="{{ edit_monthly_record.id }}">{% endif %}
+      <div class="erp-field span-2">
+        <select name="monthly_staff_id" id="monthly_staff_id" required class="{% if edit_monthly_record %}has-value{% endif %}">
+          <option value="">Select monthly staff</option>
+          {% for item in monthly_staff %}
+          <option value="{{ item.id }}"
+            {% if edit_monthly_record and edit_monthly_record.staff_id|string == item.id|string %}selected{% endif %}>
+            {{ item.staff_name }} ({{ item.employee_code or item.id }})
+          </option>
+          {% endfor %}
+        </select>
+        <label>Staff (Monthly salary)</label>
+      </div>
+      <div class="erp-field">
+        <input name="monthly_year_month" id="monthly_year_month" type="month" required placeholder=" "
+          value="{{ edit_monthly_record.year_month if edit_monthly_record else '' }}">
+        <label>Month</label>
+      </div>
+      <div class="erp-field">
+        <input name="monthly_worked_days" type="number" step="0.5" min="0" required placeholder=" "
+          value="{{ edit_monthly_record.worked_days if edit_monthly_record else '' }}">
+        <label>Worked Days</label>
+      </div>
+      <div class="erp-field">
+        <input name="monthly_half_days" type="number" step="0.5" min="0" placeholder=" "
+          value="{{ edit_monthly_record.half_days if edit_monthly_record else '0' }}">
+        <label>Half Days</label>
+      </div>
+      <div class="erp-field">
+        <input name="monthly_absent_days" type="number" step="0.5" min="0" placeholder=" "
+          value="{{ edit_monthly_record.absent_days if edit_monthly_record else '0' }}">
+        <label>Absent Days</label>
+      </div>
+      <div class="erp-field">
+        <input name="monthly_ot_hours" type="number" step="0.1" min="0" placeholder=" "
+          value="{{ edit_monthly_record.ot_hours if edit_monthly_record else '0' }}">
+        <label>OT Hours</label>
+      </div>
+      <div class="erp-field span-2">
+        <select name="monthly_project_id" id="monthly_project_id" class="{% if edit_monthly_record and edit_monthly_record.project_id %}has-value{% endif %}">
+          <option value="">Project (optional)</option>
+          {% for item in projects %}
+          <option value="{{ item.id }}"
+            {% if edit_monthly_record and edit_monthly_record.project_id|string == item.id|string %}selected{% endif %}>
+            {{ item.project_code or item.id }} — {{ item.project_name or '—' }}
+          </option>
+          {% endfor %}
+        </select>
+        <label>Project</label>
+      </div>
+      <div class="erp-field span-2">
+        <input name="monthly_remarks" placeholder=" " value="{{ edit_monthly_record.remarks if edit_monthly_record else '' }}">
+        <label>Remarks</label>
+      </div>
+      <div class="erp-form-actions">
+        <button class="erp-btn erp-btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Save Monthly Summary</button>
+        {% if edit_monthly_record %}<a href="{{ url_for('attendance', mode='monthly') }}" class="erp-btn erp-btn-ghost">Cancel</a>{% endif %}
+      </div>
+    </form>
+  </div>
+  {% endif %}
+
+  {% if not view_record and not view_monthly_record and attendance_mode != 'monthly' %}
   <div class="erp-form-card" id="add-attendance">
     <h3 class="erp-form-title">{% if edit_record %}Edit Attendance #{{ edit_record.id }}{% if edit_role %} ({{ edit_role|title }}){% endif %}{% else %}Add Attendance{% endif %}</h3>
-    <form method="post" class="erp-form-grid">
+    <form method="post" class="erp-form-grid" data-attendance-form data-photos-base="{{ url_for('static', filename='photos/') }}"
+      {% if edit_record %}
+      data-edit-worker-ref="{{ ('s:' ~ edit_record.worker_id|string) if edit_record.worker_source == 'staff' else ('w:' ~ edit_record.worker_id|string) }}"
+      data-edit-staff-type="{{ edit_staff_type }}"
+      data-edit-subcontractor-id="{{ edit_subcontractor_id }}"
+      {% endif %}>
       {% if edit_record %}<input type="hidden" name="record_id" value="{{ edit_record.id }}">{% endif %}
-      <div class="erp-field span-2"><select name="worker_id" required>
-        <option value="">Select worker</option>
-        {% for item in workers %}
-        <option value="{{ item.id }}" {% if edit_record and edit_record.worker_id|string == item.id|string %}selected{% endif %}>{{ item.worker_name }}</option>
-        {% endfor %}
-      </select><label>Worker</label></div>
-      <div class="erp-field span-2"><select name="project_id">
-        <option value="">Select project</option>
-        {% for item in projects %}
-        <option value="{{ item.id }}" {% if edit_record and edit_record.project_id|string == item.id|string %}selected{% endif %}>{{ item.project_name }}</option>
-        {% endfor %}
-      </select><label>Project</label></div>
+      <div class="erp-field span-2">
+        <select id="attendance_staff_type">
+          <option value="">Select staff type</option>
+          <option value="Company Staff" {% if edit_staff_type == 'Company Staff' %}selected{% endif %}>Company Staff</option>
+          <option value="Sub Contractor Staff" {% if edit_staff_type == 'Sub Contractor Staff' %}selected{% endif %}>Sub Contractor Staff</option>
+        </select>
+        <label>Staff Type</label>
+      </div>
+      <div class="erp-field span-2" id="attendance_company_worker_name_row" hidden>
+        <select id="attendance_company_worker_name">
+          <option value="">Select worker name</option>
+          {% for item in company_staff %}
+          {% set worker_ref = item.ref %}
+          {% set worker_label = item.worker_name or item.worker_code or ('Worker #' ~ item.id) %}
+          <option value="{{ worker_ref }}"
+            data-worker-code="{{ item.worker_code or '' }}"
+            data-worker-photo="{{ item.photo or '' }}"
+            data-worker-label="{{ worker_label }}"
+            data-designation-id="{{ item.designation_id or '' }}"
+            data-trade-id="{{ item.trade_id or '' }}">
+            {{ worker_label }}
+          </option>
+          {% endfor %}
+        </select>
+        <label>Worker Name</label>
+      </div>
+      <div class="erp-field" id="attendance_company_worker_id_row" hidden>
+        <select id="attendance_company_worker_id">
+          <option value="">Select worker ID</option>
+          {% for item in company_staff %}
+          {% set worker_ref = item.ref %}
+          {% set worker_label = item.worker_name or item.worker_code or ('Worker #' ~ item.id) %}
+          <option value="{{ worker_ref }}"
+            data-worker-code="{{ item.worker_code or '' }}"
+            data-worker-photo="{{ item.photo or '' }}"
+            data-worker-label="{{ worker_label }}"
+            data-designation-id="{{ item.designation_id or '' }}"
+            data-trade-id="{{ item.trade_id or '' }}">
+            {{ item.worker_code or '—' }}
+          </option>
+          {% endfor %}
+        </select>
+        <label>ID Number</label>
+      </div>
+      <div class="erp-field span-2" id="attendance_subcontractor_name_row" hidden>
+        <select id="attendance_subcontractor_name">
+          <option value="">Select subcontractor name</option>
+          {% for item in subcontractors %}
+          <option value="{{ item.id }}"
+            data-subcontractor-code="{{ item.subcontractor_code or '' }}"
+            data-subcontractor-label="{{ item.subcontractor_name }}">
+            {{ item.subcontractor_name }}
+          </option>
+          {% endfor %}
+        </select>
+        <label>Subcontractor Name</label>
+      </div>
+      <div class="erp-field" id="attendance_subcontractor_id_row" hidden>
+        <select id="attendance_subcontractor_id">
+          <option value="">Select subcontractor ID</option>
+          {% for item in subcontractors %}
+          <option value="{{ item.id }}"
+            data-subcontractor-code="{{ item.subcontractor_code or '' }}"
+            data-subcontractor-label="{{ item.subcontractor_name }}">
+            {{ item.subcontractor_code or '—' }}
+          </option>
+          {% endfor %}
+        </select>
+        <label>Subcontractor ID</label>
+      </div>
+      <div class="erp-field span-2" id="attendance_sub_worker_name_row" hidden>
+        <select id="attendance_sub_worker_name">
+          <option value="">Select worker name</option>
+          {% for item in subcontractor_workers %}
+          {% set worker_ref = item.ref %}
+          {% set worker_label = item.worker_name or item.worker_code or ('Worker #' ~ item.id) %}
+          <option value="{{ worker_ref }}"
+            data-subcontractor-id="{{ item.subcontractor_id }}"
+            data-worker-code="{{ item.worker_code or '' }}"
+            data-worker-photo="{{ item.photo or '' }}"
+            data-worker-label="{{ worker_label }}"
+            data-designation-id="{{ item.designation_id or '' }}"
+            data-trade-id="{{ item.trade_id or '' }}">
+            {{ worker_label }}
+          </option>
+          {% endfor %}
+        </select>
+        <label>Worker Name</label>
+      </div>
+      <div class="erp-field" id="attendance_sub_worker_id_row" hidden>
+        <select id="attendance_sub_worker_id">
+          <option value="">Select worker ID</option>
+          {% for item in subcontractor_workers %}
+          {% set worker_ref = item.ref %}
+          {% set worker_label = item.worker_name or item.worker_code or ('Worker #' ~ item.id) %}
+          <option value="{{ worker_ref }}"
+            data-subcontractor-id="{{ item.subcontractor_id }}"
+            data-worker-code="{{ item.worker_code or '' }}"
+            data-worker-photo="{{ item.photo or '' }}"
+            data-worker-label="{{ worker_label }}"
+            data-designation-id="{{ item.designation_id or '' }}"
+            data-trade-id="{{ item.trade_id or '' }}">
+            {{ item.worker_code or '—' }}
+          </option>
+          {% endfor %}
+        </select>
+        <label>ID Number</label>
+      </div>
+      <input type="hidden" name="worker_id" id="attendance_worker_ref" value="">
+      <div class="erp-field span-2 attendance-worker-verify" id="attendance_worker_verify" hidden>
+        <div class="attendance-worker-verify-panel">
+          <img id="attendance_worker_photo" class="employee-detail-photo" alt="Worker photo" hidden>
+          <div id="attendance_worker_photo_empty" class="employee-detail-photo employee-detail-photo-empty" hidden>
+            <i class="fa-regular fa-user"></i>
+          </div>
+          <div class="attendance-worker-verify-meta">
+            <strong id="attendance_worker_verify_name"></strong>
+            <span id="attendance_worker_verify_code"></span>
+            <p class="attendance-worker-verify-hint">Confirm this is the correct worker before saving.</p>
+          </div>
+        </div>
+        <label>Worker Verification</label>
+      </div>
+      <div class="erp-field">
+        <select id="attendance_project_number">
+          <option value="">Select project number</option>
+          {% for item in projects %}
+          <option value="{{ item.id }}"
+            data-project-name="{{ item.project_name or '' }}"
+            {% if edit_record and edit_record.project_id|string == item.id|string %}selected{% endif %}>
+            {{ item.project_code or item.id }}
+          </option>
+          {% endfor %}
+        </select>
+        <label>Project Number</label>
+      </div>
+      <div class="erp-field span-2">
+        <select name="project_id" id="attendance_project_name">
+          <option value="">Select project name</option>
+          {% for item in projects %}
+          <option value="{{ item.id }}"
+            data-project-code="{{ item.project_code or item.id }}"
+            {% if edit_record and edit_record.project_id|string == item.id|string %}selected{% endif %}>
+            {{ item.project_name or '—' }}
+          </option>
+          {% endfor %}
+        </select>
+        <label>Project Name</label>
+      </div>
+      <div class="erp-field span-2 erp-field-with-action" id="attendance_trade_row" hidden>
+        <select name="trade_id" id="attendance_trade_id" class="{% if edit_record and edit_record.trade_id %}has-value{% elif select_trade %}has-value{% endif %}">
+          <option value="">Select trade</option>
+          {% for item in trades %}
+          <option value="{{ item.id }}"{% if (edit_record and edit_record.trade_id|string == item.id|string) or select_trade == item.id %} selected{% endif %}>{{ item.trade_name }}</option>
+          {% endfor %}
+        </select>
+        <label>Trade</label>
+        <button type="button" class="erp-inline-action" id="open-new-trade-modal"><i class="fa-solid fa-plus"></i> Add new</button>
+      </div>
+      <div class="erp-field span-2 erp-field-with-action" id="attendance_designation_row" hidden>
+        <select name="designation_id" id="attendance_designation_id" class="{% if edit_record and edit_record.designation_id %}has-value{% elif select_designation %}has-value{% endif %}">
+          <option value="">Select designation</option>
+          {% for item in designations %}
+          <option value="{{ item.id }}"{% if (edit_record and edit_record.designation_id|string == item.id|string) or select_designation == item.id %} selected{% endif %}>{{ item.designation_name }}</option>
+          {% endfor %}
+        </select>
+        <label>Designation</label>
+        <button type="button" class="erp-inline-action" id="open-new-designation-modal"><i class="fa-solid fa-plus"></i> Add new</button>
+      </div>
       <div class="erp-field"><input name="attendance_date" type="date" placeholder=" " required value="{{ edit_record.attendance_date if edit_record else '' }}"><label>Date</label></div>
       <div class="erp-field"><select name="status">
         <option {% if not edit_record or edit_record.status == 'Present' %}selected{% endif %}>Present</option>
@@ -57,9 +336,9 @@
   </div>
   {% endif %}
 
-  <div class="erp-table-panel" data-erp-table>
+  <div class="erp-table-panel" data-erp-table {% if attendance_mode == 'monthly' %}hidden{% endif %}>
     <div class="erp-table-toolbar">
-      <h3 class="erp-table-title">Attendance Records</h3>
+      <h3 class="erp-table-title">Daily Attendance Records</h3>
       <div class="erp-table-controls">
         <div class="erp-table-search"><i class="fa-solid fa-magnifying-glass"></i><input type="search" data-table-search placeholder="Search attendance..."></div>
         <button type="button" class="erp-btn erp-btn-ghost" data-table-filter><i class="fa-solid fa-filter"></i> Filter</button>
@@ -68,28 +347,141 @@
     </div>
     <div class="erp-table-scroll">
       <table class="erp-table erp-table-module">
-        <thead><tr><th>#</th><th>Date</th><th>Worker</th><th>Project</th><th>Total Hrs</th><th>OT Hrs</th><th>Workflow</th><th>Actions</th></tr></thead>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Worker</th><th>Worker ID</th><th>Project No.</th><th>Project</th><th>Trade</th><th>Designation</th><th>Date</th>
+            <th>Start</th><th>End</th><th>Break</th><th>Worked</th><th>OT</th><th>Workflow</th><th>Actions</th>
+          </tr>
+        </thead>
         <tbody>
           {% for row in rows %}
           <tr>
             <td>{{ row.id }}</td>
-            <td>{{ row.attendance_date }}</td>
             <td>{{ row.worker_name or '—' }}</td>
+            <td>{{ row.worker_code or '—' }}</td>
+            <td>{{ row.project_code or '—' }}</td>
             <td>{{ row.project_name or '—' }}</td>
-            <td>{{ '%.2f'|format(row.total_hours or 0) }}</td>
-            <td>{{ '%.2f'|format(row.ot_hours or 0) }}</td>
+            <td>{{ row.trade_name or '—' }}</td>
+            <td>{{ row.designation_name or '—' }}</td>
+            <td>{{ row.attendance_date }}</td>
+            <td>{{ row.in_time or '—' }}</td>
+            <td>{{ row.out_time or '—' }}</td>
+            <td>{{ format_decimal_hours(row.break_hours) }}</td>
+            <td>{{ format_decimal_hours(row.total_hours) }}</td>
+            <td>{{ format_decimal_hours(row.ot_hours) }}</td>
             <td>{{ role_status_badge(row.approval_status, 'maker') }}</td>
-            <td>{{ maker_row_actions('attendance', 'attendance', row.id, row.approval_status) }}</td>
+            <td>{{ maker_row_actions('attendance', 'attendance', row.id, row.approval_status, 'daily_timesheet') }}</td>
           </tr>
           {% else %}
-          <tr><td colspan="8">No attendance records yet.</td></tr>
+          <tr><td colspan="15">No attendance records yet.</td></tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
     {{ erp_pagination(rows|length) }}
   </div>
+
+  <div class="erp-table-panel" data-erp-table {% if attendance_mode != 'monthly' %}hidden{% endif %}>
+    <div class="erp-table-toolbar">
+      <h3 class="erp-table-title">Monthly Attendance Summaries</h3>
+      <div class="erp-table-controls">
+        <div class="erp-table-search"><i class="fa-solid fa-magnifying-glass"></i><input type="search" data-table-search placeholder="Search monthly attendance..."></div>
+      </div>
+    </div>
+    <div class="erp-table-scroll">
+      <table class="erp-table erp-table-module">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Staff</th>
+            <th>Employee ID</th>
+            <th>Month</th>
+            <th>Worked</th>
+            <th>Half</th>
+            <th>Absent</th>
+            <th>OT</th>
+            <th>Project</th>
+            <th>Workflow</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in monthly_rows %}
+          <tr>
+            <td>{{ row.id }}</td>
+            <td>{{ row.staff_name or '—' }}</td>
+            <td>{{ row.employee_code or '—' }}</td>
+            <td>{{ row.year_month }}</td>
+            <td>{{ row.worked_days or 0 }}</td>
+            <td>{{ row.half_days or 0 }}</td>
+            <td>{{ row.absent_days or 0 }}</td>
+            <td>{{ format_decimal_hours(row.ot_hours) }}</td>
+            <td>{{ row.project_code or '—' }}</td>
+            <td>{{ role_status_badge(row.approval_status, 'maker') }}</td>
+            <td>
+              <div class="workflow-row-actions">
+                <a href="{{ url_for('attendance', view_monthly=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">View</a>
+                {% if (row.approval_status or 'Pending Checker') in ['Pending Checker', 'Rejected by Checker', 'Rejected by Approver'] %}
+                <a href="{{ url_for('attendance', edit_monthly=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Edit</a>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="11">No monthly attendance summaries yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {{ erp_pagination(monthly_rows|length) }}
+  </div>
 </div>
 {{ workflow_modals() }}
+
+<div class="erp-modal" id="new-trade-modal" hidden aria-hidden="true">
+  <div class="erp-modal-backdrop" data-modal-close></div>
+  <div class="erp-modal-card" role="dialog" aria-modal="true" aria-labelledby="new-trade-title">
+    <div class="erp-modal-header">
+      <div>
+        <h3 id="new-trade-title">Add Trade</h3>
+        <p>Add a trade, then continue marking attendance.</p>
+      </div>
+      <button type="button" class="erp-modal-close" data-modal-close aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <form method="post" class="erp-form-grid" action="{{ url_for('attendance') }}#add-attendance">
+      <input type="hidden" name="form_action" value="add_trade">
+      <div class="erp-field span-2"><input name="trade_name" placeholder=" " required><label>Trade Name</label></div>
+      <div class="erp-form-actions">
+        <button type="button" class="erp-btn erp-btn-ghost" data-modal-close>Cancel</button>
+        <button class="erp-btn erp-btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Save Trade</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="erp-modal" id="new-designation-modal" hidden aria-hidden="true">
+  <div class="erp-modal-backdrop" data-modal-close></div>
+  <div class="erp-modal-card" role="dialog" aria-modal="true" aria-labelledby="new-designation-title">
+    <div class="erp-modal-header">
+      <div>
+        <h3 id="new-designation-title">Add Designation</h3>
+        <p>Add a designation, then continue marking attendance.</p>
+      </div>
+      <button type="button" class="erp-modal-close" data-modal-close aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <form method="post" class="erp-form-grid" action="{{ url_for('attendance') }}#add-attendance">
+      <input type="hidden" name="form_action" value="add_designation">
+      <div class="erp-field span-2"><input name="designation_name" placeholder=" " required><label>Designation Name</label></div>
+      <div class="erp-form-actions">
+        <button type="button" class="erp-btn erp-btn-ghost" data-modal-close>Cancel</button>
+        <button class="erp-btn erp-btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Save Designation</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <script src="{{ url_for('static', filename='js/workflow.js') }}"></script>
+<script src="{{ url_for('static', filename='js/attendance-form.js') }}"></script>
+<script src="{{ url_for('static', filename='js/attendance-monthly.js') }}"></script>
 {% endblock %}

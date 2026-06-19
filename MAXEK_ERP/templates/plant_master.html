@@ -1,0 +1,67 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Plant Master' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('plant_dashboard') ~ '">Plant</a> &gt; Master' %}
+{% block page_actions %}
+<a href="{{ url_for('plant_plants', new=1) }}#record-form" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> New Plant</a>
+{% endblock %}
+{% block content %}
+{% if view_record %}
+<div class="erp-form-card" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">{{ view_record.plant_id }} — {{ view_record.plant_name }}</h3>
+  <p><strong>Type:</strong> {{ view_record.plant_type or '—' }} | <strong>Status:</strong> {{ view_record.status }}</p>
+  <p><strong>Capacity:</strong> {{ view_record.capacity or '—' }} | <strong>Location:</strong> {{ view_record.location or '—' }}</p>
+  <p><strong>In-charge:</strong> {{ view_record.incharge or '—' }} | <strong>Project:</strong> {{ view_record.project_name or '—' }}</p>
+  <a href="{{ url_for('plant_plants', edit=view_record.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Edit</a>
+</div>
+{% endif %}
+
+{% if show_form %}
+<div class="erp-form-card" id="record-form" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">{% if edit_record %}Edit {{ edit_record.plant_id }}{% else %}New Plant{% endif %}</h3>
+  <form method="post">
+    {% if edit_record %}<input type="hidden" name="record_id" value="{{ edit_record.id }}">{% endif %}
+    <div class="erp-form-grid">
+      {% if edit_record %}
+      <div class="erp-field"><input readonly value="{{ edit_record.plant_id }}" placeholder=" "><label>Plant ID</label></div>
+      {% endif %}
+      <div class="erp-field"><input name="plant_name" required placeholder=" " value="{{ edit_record.plant_name if edit_record else '' }}"><label>Plant Name *</label></div>
+      <div class="erp-field"><select name="plant_type">{% for t in plant_types %}<option value="{{ t }}" {% if edit_record and edit_record.plant_type == t %}selected{% elif not edit_record and t == 'Asphalt' %}selected{% endif %}>{{ t }}</option>{% endfor %}</select><label>Plant Type</label></div>
+      <div class="erp-field"><input name="capacity" placeholder=" " value="{{ edit_record.capacity if edit_record else '' }}"><label>Capacity</label></div>
+      <div class="erp-field"><input name="location" placeholder=" " value="{{ edit_record.location if edit_record else '' }}"><label>Location</label></div>
+      <div class="erp-field"><select name="project_id"><option value="">—</option>{% for p in projects %}<option value="{{ p.id }}" {% if edit_record and edit_record.project_id == p.id %}selected{% endif %}>{{ p.project_name }}</option>{% endfor %}</select><label>Project</label></div>
+      <div class="erp-field"><input name="incharge" placeholder=" " value="{{ edit_record.incharge if edit_record else '' }}"><label>In-charge</label></div>
+      <div class="erp-field"><select name="status">{% for s in plant_statuses %}<option value="{{ s }}" {% if edit_record and edit_record.status == s %}selected{% elif not edit_record and s == 'Active' %}selected{% endif %}>{{ s }}</option>{% endfor %}</select><label>Status</label></div>
+      <div class="erp-field span-2"><textarea name="remarks" placeholder=" ">{{ edit_record.remarks if edit_record else '' }}</textarea><label>Remarks</label></div>
+    </div>
+    <button type="submit" class="erp-btn erp-btn-primary">Save</button>
+  </form>
+</div>
+{% endif %}
+
+<form method="get" style="margin-bottom:0.75rem;display:flex;gap:0.5rem;flex-wrap:wrap;">
+  <input name="q" value="{{ search }}" placeholder="Search plants…" style="max-width:220px;">
+  <select name="plant_type" onchange="this.form.submit()"><option value="">All types</option>{% for t in plant_types %}<option value="{{ t }}" {% if plant_type_filter == t %}selected{% endif %}>{{ t }}</option>{% endfor %}</select>
+  <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Search</button>
+</form>
+<div class="erp-table-panel" data-erp-table>
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead><tr><th>Plant ID</th><th>Name</th><th>Type</th><th>Location</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>{{ row.plant_id }}</td>
+          <td>{{ row.plant_name }}</td>
+          <td>{{ row.plant_type or '—' }}</td>
+          <td>{{ row.location or '—' }}</td>
+          <td>{{ row.status or '—' }}</td>
+          <td><a href="{{ url_for('plant_plants', view=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">View</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6">No plants yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

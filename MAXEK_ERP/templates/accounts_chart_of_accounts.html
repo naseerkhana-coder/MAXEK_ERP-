@@ -1,0 +1,143 @@
+{% extends 'base_maxek.html' %}
+{% from 'macros/erp_ui.html' import erp_table_toolbar %}
+{% set page_title = 'Chart of Accounts' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('accounts_hub') ~ '">Accounts</a> &gt; Chart of Accounts' %}
+{% block page_actions %}
+<button type="button" class="erp-btn erp-btn-primary" data-coa-open="new"><i class="fa-solid fa-plus"></i> Add Head</button>
+{% endblock %}
+{% block content %}
+<div class="erp-form-card coa-entry-panel" id="coa-form-panel" hidden style="margin-bottom: 1.25rem; border: 1px solid var(--erp-primary, #2563eb);">
+  <div class="coa-form-header" style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1rem;">
+    <h3 class="erp-form-title" id="coa-modal-title" style="margin:0;">Add Head of Account</h3>
+    <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
+      <button type="submit" form="coa-form" class="erp-btn erp-btn-primary">Save</button>
+      <button type="button" class="erp-btn erp-btn-ghost" data-coa-close>Cancel</button>
+    </div>
+  </div>
+  <form method="post" class="erp-form-grid" id="coa-form">
+    <input type="hidden" name="form_action" value="save_head">
+    <input type="hidden" name="account_id" id="coa_account_id" value="">
+    <div class="erp-field">
+      <input name="code" id="coa_code" required placeholder=" ">
+      <label>Code</label>
+    </div>
+    <div class="erp-field">
+      <input name="name" id="coa_name" required placeholder=" ">
+      <label>Name</label>
+    </div>
+    <div class="erp-field">
+      <select name="account_type" id="coa_type" required>
+        {% for t in account_types %}
+        <option value="{{ t }}">{{ t }}</option>
+        {% endfor %}
+      </select>
+      <label>Account Type</label>
+    </div>
+    <div class="erp-field">
+      <input name="category" id="coa_category" placeholder=" ">
+      <label>Category</label>
+    </div>
+    <div class="erp-field">
+      <input name="subcategory" id="coa_subcategory" placeholder=" ">
+      <label>Subcategory</label>
+    </div>
+    <div class="erp-field">
+      <input name="sort_order" id="coa_sort" type="number" placeholder=" " value="0">
+      <label>Sort Order</label>
+    </div>
+    <div class="coa-options-row span-2">
+      <label class="coa-check"><input type="checkbox" name="requires_project" id="coa_req_project" value="1"> Requires Project</label>
+      <label class="coa-check"><input type="checkbox" name="requires_vendor" id="coa_req_vendor" value="1"> Requires Vendor</label>
+      <label class="coa-check"><input type="checkbox" name="default_gst_applicable" id="coa_gst" value="1"> Default GST</label>
+      <label class="coa-check"><input type="checkbox" name="is_active" id="coa_active" value="1" checked> Active</label>
+    </div>
+  </form>
+</div>
+
+{% for acct_type, heads in grouped.items() %}
+{% if heads %}
+<div class="erp-table-panel" data-erp-table style="margin-bottom: 1.25rem;">
+  <div class="erp-table-toolbar">
+    <h3 class="erp-table-title">{{ acct_type }}</h3>
+  </div>
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead>
+        <tr>
+          <th>Code</th>
+          <th>Name</th>
+          <th>Category</th>
+          <th>Project</th>
+          <th>Vendor</th>
+          <th>GST</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in heads %}
+        <tr>
+          <td>{{ row.code }}</td>
+          <td>{{ row.name }}</td>
+          <td>{{ row.category or '—' }}{% if row.subcategory %} / {{ row.subcategory }}{% endif %}</td>
+          <td>{{ 'Yes' if row.requires_project else '—' }}</td>
+          <td>{{ 'Yes' if row.requires_vendor else '—' }}</td>
+          <td>{{ 'Yes' if row.default_gst_applicable else '—' }}</td>
+          <td>{{ 'Active' if row.is_active else 'Inactive' }}</td>
+          <td>
+            <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-coa-open="{{ row.id }}"
+              data-code="{{ row.code }}" data-name="{{ row.name }}" data-type="{{ row.account_type }}"
+              data-category="{{ row.category or '' }}" data-subcategory="{{ row.subcategory or '' }}"
+              data-sort="{{ row.sort_order or 0 }}"
+              data-req-project="{{ row.requires_project or 0 }}"
+              data-req-vendor="{{ row.requires_vendor or 0 }}"
+              data-gst="{{ row.default_gst_applicable or 0 }}"
+              data-active="{{ row.is_active or 1 }}">Edit</button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endfor %}
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  var panel = document.getElementById('coa-form-panel');
+  if (!panel) return;
+
+  function closePanel() {
+    panel.hidden = true;
+  }
+
+  function openPanel(btn) {
+    var isNew = btn.getAttribute('data-coa-open') === 'new';
+    document.getElementById('coa-modal-title').textContent = isNew ? 'Add Head of Account' : 'Edit Head of Account';
+    document.getElementById('coa_account_id').value = isNew ? '' : btn.getAttribute('data-coa-open');
+    document.getElementById('coa_code').value = isNew ? '' : (btn.getAttribute('data-code') || '');
+    document.getElementById('coa_name').value = isNew ? '' : (btn.getAttribute('data-name') || '');
+    document.getElementById('coa_type').value = isNew ? 'Expense' : (btn.getAttribute('data-type') || 'Expense');
+    document.getElementById('coa_category').value = isNew ? '' : (btn.getAttribute('data-category') || '');
+    document.getElementById('coa_subcategory').value = isNew ? '' : (btn.getAttribute('data-subcategory') || '');
+    document.getElementById('coa_sort').value = isNew ? '0' : (btn.getAttribute('data-sort') || '0');
+    document.getElementById('coa_req_project').checked = !isNew && btn.getAttribute('data-req-project') === '1';
+    document.getElementById('coa_req_vendor').checked = !isNew && btn.getAttribute('data-req-vendor') === '1';
+    document.getElementById('coa_gst').checked = !isNew && btn.getAttribute('data-gst') === '1';
+    document.getElementById('coa_active').checked = isNew || btn.getAttribute('data-active') !== '0';
+    panel.hidden = false;
+    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.getElementById('coa_code').focus();
+  }
+
+  document.querySelectorAll('[data-coa-open]').forEach(function (btn) {
+    btn.addEventListener('click', function () { openPanel(btn); });
+  });
+  document.querySelectorAll('[data-coa-close]').forEach(function (btn) {
+    btn.addEventListener('click', closePanel);
+  });
+})();
+</script>
+{% endblock %}

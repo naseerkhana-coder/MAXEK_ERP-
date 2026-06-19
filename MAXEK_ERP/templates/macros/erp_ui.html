@@ -30,19 +30,26 @@
 {% endif %}
 {% endmacro %}
 
-{% macro maker_row_actions(module_endpoint, delete_table, record_id, approval_status) %}
+{% macro maker_row_actions(module_endpoint, delete_table, record_id, approval_status, module_id='', redirect_endpoint='') %}
 {% set s = approval_status or 'Pending Checker' %}
-{% set editable = s in ['Rejected by Checker', 'Rejected by Approver'] %}
+{% set editable = s in ['Rejected by Checker', 'Rejected by Approver', 'Pending Checker'] %}
+{% set deletable = editable and module_id %}
+{% set redirect = redirect_endpoint or module_endpoint %}
 <div class="workflow-row-actions">
   <a href="{{ url_for(module_endpoint, view=record_id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">View</a>
   {% if editable %}
   <a href="{{ url_for(module_endpoint, edit=record_id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Edit</a>
-  {% elif s == 'Pending Checker' %}
-  <span class="workflow-hint">Waiting for Verification</span>
   {% elif s == 'Pending Approval' %}
   <span class="workflow-hint">Waiting for Approval</span>
   {% elif s == 'Approved' %}
   <span class="workflow-hint">Approved</span>
+  {% endif %}
+  {% if deletable %}
+  <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm js-delete-record"
+    data-record-id="{{ record_id }}"
+    data-delete-table="{{ delete_table }}"
+    data-module-id="{{ module_id }}"
+    data-redirect-to="{{ redirect }}">Delete</button>
   {% endif %}
 </div>
 {% endmacro %}
@@ -145,6 +152,52 @@
 {% endif %}
 {% endmacro %}
 
+{% macro erp_sub_toolbar(items, aria_label='Module tools') %}
+<nav class="erp-sub-toolbar" aria-label="{{ aria_label }}">
+  {% for item in items %}
+  {% set item_href = url_for(item.endpoint, **(item.get('query') or {})) %}
+  {% if item.get('anchor') %}{% set item_href = item_href ~ '#' ~ item.anchor %}{% endif %}
+  <a class="erp-sub-toolbar-link{% if request.endpoint in item.get('active_endpoints', []) %} active{% endif %}" href="{{ item_href }}">
+    {% if item.get('icon') %}<i class="fa-solid {{ item.icon }}" aria-hidden="true"></i>{% endif %}
+    <span>{{ item.label }}</span>
+  </a>
+  {% endfor %}
+</nav>
+{% endmacro %}
+
+{% macro erp_sub_toolbar_secondary(items, aria_label='Section tools') %}
+<nav class="erp-sub-toolbar erp-sub-toolbar--secondary" aria-label="{{ aria_label }}">
+  {% for item in items %}
+  {% set item_href = url_for(item.endpoint, **(item.get('query') or {})) %}
+  {% if item.get('anchor') %}{% set item_href = item_href ~ '#' ~ item.anchor %}{% endif %}
+  <a class="erp-sub-toolbar-link{% if request.endpoint in item.get('active_endpoints', []) %} active{% endif %}" href="{{ item_href }}">
+    {% if item.get('icon') %}<i class="fa-solid {{ item.icon }}" aria-hidden="true"></i>{% endif %}
+    <span>{{ item.label }}</span>
+  </a>
+  {% endfor %}
+</nav>
+{% endmacro %}
+
+{% macro erp_module_grid(modules, section_title='Modules') %}
+<section class="erp-module-section">
+  <h3 class="erp-module-section-title">{{ section_title }}</h3>
+  <div class="erp-module-grid">
+    {% for mod in modules %}
+    <a href="{{ url_for(mod.endpoint) }}" class="erp-module-tile">
+      <span class="erp-module-tile-icon"><i class="fa-solid {{ mod.icon }}" aria-hidden="true"></i></span>
+      <span class="erp-module-tile-body">
+        <span class="erp-module-tile-label">{{ mod.label }}</span>
+        {% if mod.get('description') %}
+        <span class="erp-module-tile-desc">{{ mod.description }}</span>
+        {% endif %}
+      </span>
+      <i class="fa-solid fa-chevron-right erp-module-tile-chevron" aria-hidden="true"></i>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endmacro %}
+
 {% macro erp_table_toolbar(title, export_name='export') %}
 <div class="erp-table-toolbar">
   <h3 class="erp-table-title">{{ title }}</h3>
@@ -185,6 +238,24 @@
       <div class="erp-form-actions">
         <button type="button" class="erp-btn erp-btn-ghost" id="action-cancel">Cancel</button>
         <button type="submit" class="erp-btn erp-btn-primary" id="action-submit">Confirm</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="delete-modal" class="reject-modal" hidden>
+  <div class="reject-modal-backdrop"></div>
+  <div class="reject-modal-card">
+    <h3>Delete Record</h3>
+    <p class="workflow-hint">This cannot be undone. Only records pending verification or rejected may be deleted.</p>
+    <form method="post" action="{{ url_for('workflow_delete_record') }}" id="delete-form">
+      <input type="hidden" name="record_id" id="delete-record-id">
+      <input type="hidden" name="table" id="delete-table">
+      <input type="hidden" name="module_id" id="delete-module-id">
+      <input type="hidden" name="redirect_to" id="delete-redirect-to">
+      <div class="erp-form-actions">
+        <button type="button" class="erp-btn erp-btn-ghost" id="delete-cancel">Cancel</button>
+        <button type="submit" class="erp-btn erp-btn-primary">Delete</button>
       </div>
     </form>
   </div>

@@ -1,0 +1,66 @@
+{% extends 'base_maxek.html' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('accounts_hub') ~ '">Accounts</a> &gt; ' ~ page_title %}
+{% block content %}
+<form method="get" class="erp-form-card" style="margin-bottom:1rem;display:flex;gap:1rem;flex-wrap:wrap;align-items:end;">
+  {% if chart_heads is defined %}
+  <div class="erp-field">
+    <select name="account_id">
+      <option value="">All accounts</option>
+      {% for h in chart_heads %}
+      <option value="{{ h.id }}" {% if selected_account_id == h.id %}selected{% endif %}>{{ h.code }} — {{ h.name }}</option>
+      {% endfor %}
+    </select>
+    <label>Account Head</label>
+  </div>
+  {% endif %}
+  <div class="erp-field">
+    <input type="date" name="from_date" value="{{ from_date }}">
+    <label>From</label>
+  </div>
+  <div class="erp-field">
+    <input type="date" name="to_date" value="{{ to_date }}">
+    <label>To</label>
+  </div>
+  <button type="submit" class="erp-btn erp-btn-primary">Apply</button>
+  {% if show_exports %}
+  <a href="{{ request.path }}?{% if request.query_string %}{{ request.query_string.decode() }}&{% endif %}export=excel" class="erp-btn erp-btn-ghost">Excel</a>
+  <a href="{{ request.path }}?{% if request.query_string %}{{ request.query_string.decode() }}&{% endif %}export=csv" class="erp-btn erp-btn-ghost">CSV</a>
+  {% endif %}
+</form>
+
+<div class="erp-summary-grid" style="margin-bottom: 1rem;">
+  <div class="erp-stat-card"><span>Total Debit</span><strong>{{ '%.2f'|format(receipts) }}</strong></div>
+  <div class="erp-stat-card"><span>Total Credit</span><strong>{{ '%.2f'|format(payments) }}</strong></div>
+  <div class="erp-stat-card"><span>Net ({{ account_label }})</span><strong>{{ '%.2f'|format(balance) }}</strong></div>
+</div>
+
+<div class="erp-table-panel" data-erp-table>
+  <div class="erp-table-toolbar"><h3 class="erp-table-title">{{ page_title }}</h3></div>
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead>
+        <tr>
+          <th>Date</th><th>JE#</th><th>Type</th><th>Account</th><th>Project</th><th>Party</th><th>Narration</th><th>Debit</th><th>Credit</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>{{ row.entry_date or '—' }}</td>
+          <td>{{ row.entry_number or '—' }}</td>
+          <td>{{ row.entry_type or '—' }}</td>
+          <td>{{ row.account_code }} — {{ row.account_name }}</td>
+          <td>{{ row.project_name or '—' }}</td>
+          <td>{{ row.party_name or '—' }}</td>
+          <td>{{ row.line_narration or row.narration or '—' }}</td>
+          <td>{{ '%.2f'|format(row.debit or 0) }}</td>
+          <td>{{ '%.2f'|format(row.credit or 0) }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9">No journal entries in this period. Approve expenses/vouchers to post journals.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

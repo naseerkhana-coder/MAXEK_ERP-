@@ -1,0 +1,182 @@
+{% extends 'base_maxek.html' %}
+{% from 'macros/erp_ui.html' import workflow_badge, erp_pagination %}
+{% set page_title = 'User Management' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('settings') ~ '">Settings</a> &gt; User Management' %}
+{% block page_actions %}
+<a href="{{ url_for('user_settings') }}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-user-gear"></i> User Access Settings</a>
+{% endblock %}
+{% block content %}
+<div class="erp-validation" style="margin-bottom: 1rem;">
+  Create login accounts for staff, guests, and external users without linking to the employee master.
+  For staff-linked users and maker module assignments, use
+  <a href="{{ url_for('user_settings') }}">User Access Settings</a>.
+</div>
+
+<div class="module-layout">
+  <div class="erp-form-card" style="margin-bottom: 1rem;">
+    <div class="erp-form-actions" style="margin-bottom: 0; gap: 0.5rem;">
+      <a href="{{ url_for('user_management', tab='create') }}"
+         class="erp-btn {% if active_tab == 'create' %}erp-btn-primary{% else %}erp-btn-ghost{% endif %}">
+        <i class="fa-solid fa-user-plus"></i> Create User
+      </a>
+      <a href="{{ url_for('user_management', tab='list') }}"
+         class="erp-btn {% if active_tab == 'list' %}erp-btn-primary{% else %}erp-btn-ghost{% endif %}">
+        <i class="fa-solid fa-users"></i> User List
+      </a>
+    </div>
+  </div>
+
+  {% if active_tab == 'create' %}
+  <div class="erp-form-card" id="create-user-form">
+    <h3 class="erp-form-title">Create User</h3>
+    <form method="post" class="erp-form-grid" id="user-create-form" novalidate>
+      <input type="hidden" name="action" value="create">
+
+      <div class="erp-field">
+        <input name="username" id="username" placeholder=" " required autocomplete="off">
+        <label>Username (Login ID)</label>
+      </div>
+      <div class="erp-field">
+        <input name="display_name" placeholder=" " autocomplete="off">
+        <label>Display Name (optional)</label>
+      </div>
+      <div class="erp-field">
+        <input type="password" name="password" id="password" placeholder=" " required autocomplete="new-password">
+        <label>Password</label>
+      </div>
+      <div class="erp-field">
+        <input type="password" name="confirm_password" id="confirm_password" placeholder=" " required autocomplete="new-password">
+        <label>Confirm Password</label>
+      </div>
+      <div class="erp-field">
+        <select name="workflow_role" id="workflow_role" class="has-value" required>
+          {% for wr in workflow_roles %}
+          <option value="{{ wr }}"{% if wr == 'Maker' %} selected{% endif %}>{{ wr }}</option>
+          {% endfor %}
+        </select>
+        <label>Workflow Role</label>
+      </div>
+      <div class="erp-field">
+        <select name="system_role" id="system_role" class="has-value" required>
+          {% for sr in system_roles %}
+          <option value="{{ sr }}"{% if sr == 'User' %} selected{% endif %}>{{ sr }}</option>
+          {% endfor %}
+        </select>
+        <label>System Role</label>
+      </div>
+      <div class="erp-field">
+        <select name="status" class="has-value" required>
+          <option value="Active" selected>Active</option>
+          <option value="Inactive">Inactive</option>
+        </select>
+        <label>Status</label>
+      </div>
+
+      <div class="span-2">
+        <p class="erp-hint">
+          <strong>Guest / external users:</strong> choose System Role <em>Guest</em> or <em>User</em> and assign the workflow role they need (Maker, Checker, or Approver).
+          <strong>Administrators:</strong> select Workflow Role <em>Administrator</em> — system role is set to Admin automatically.
+        </p>
+      </div>
+
+      <div class="erp-form-actions span-2">
+        <button class="erp-btn erp-btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Create User</button>
+      </div>
+    </form>
+  </div>
+  {% else %}
+  <div class="erp-table-panel" data-erp-table>
+    <div class="erp-table-toolbar">
+      <h3 class="erp-table-title">All Users</h3>
+      <div class="erp-table-controls">
+        <div class="erp-table-search"><i class="fa-solid fa-magnifying-glass"></i><input type="search" data-table-search placeholder="Search users..."></div>
+      </div>
+    </div>
+    <div class="erp-table-scroll">
+      <table class="erp-table erp-table-module">
+        <thead>
+          <tr>
+            <th>Username</th>
+            <th>Display Name</th>
+            <th>Type</th>
+            <th>System Role</th>
+            <th>Workflow Role</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          <tr>
+            <td>{{ row.username }}</td>
+            <td>{{ row.employee_name or '—' }}</td>
+            <td>{{ row.user_type }}</td>
+            <td>{{ row.role or '—' }}</td>
+            <td>{{ workflow_badge(row.workflow_role or '—') }}</td>
+            <td><span class="status-pill {{ 'active' if row.status == 'Active' else 'pending' }}">{{ row.status }}</span></td>
+            <td>
+              <div class="workflow-row-actions">
+                {% if row.staff_id %}
+                <a href="{{ url_for('user_settings', edit=row.id) }}#user-form" class="erp-btn erp-btn-ghost erp-btn-sm">Edit Access</a>
+                {% endif %}
+                <form method="post" style="display:inline;">
+                  <input type="hidden" name="action" value="toggle">
+                  <input type="hidden" name="user_id" value="{{ row.id }}">
+                  <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">
+                    {{ 'Deactivate' if row.status == 'Active' else 'Activate' }}
+                  </button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="7">No users configured.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {{ erp_pagination(rows|length) }}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  var form = document.getElementById('user-create-form');
+  if (!form) return;
+
+  var workflowRole = document.getElementById('workflow_role');
+  var systemRole = document.getElementById('system_role');
+
+  function syncAdminRole() {
+    if (!workflowRole || !systemRole) return;
+    if (workflowRole.value === 'Administrator') {
+      systemRole.value = 'Admin';
+      systemRole.disabled = true;
+    } else {
+      systemRole.disabled = false;
+    }
+  }
+
+  workflowRole.addEventListener('change', syncAdminRole);
+  syncAdminRole();
+
+  form.addEventListener('submit', function (e) {
+    var password = document.getElementById('password').value;
+    var confirm = document.getElementById('confirm_password').value;
+    if (password !== confirm) {
+      e.preventDefault();
+      alert('Password and confirmation do not match.');
+      document.getElementById('confirm_password').focus();
+      return;
+    }
+    if (password.length < 4) {
+      e.preventDefault();
+      alert('Password must be at least 4 characters.');
+      document.getElementById('password').focus();
+    }
+  });
+})();
+</script>
+{% endblock %}

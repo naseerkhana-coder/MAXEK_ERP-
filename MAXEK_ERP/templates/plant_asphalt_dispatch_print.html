@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{{ record.dispatch_number }} — Asphalt Dispatch</title>
+  <style>
+    body { font-family: Arial, Helvetica, sans-serif; margin: 2rem; color: #111; }
+    h1 { margin: 0 0 0.5rem; font-size: 1.25rem; }
+    table { width: 100%; border-collapse: collapse; margin-top: 1rem; max-width: 640px; }
+    th, td { border: 1px solid #ccc; padding: 0.5rem; font-size: 0.9rem; text-align: left; }
+    th { width: 35%; background: #f3f4f6; }
+    .no-print { margin-bottom: 1rem; }
+    @media print { .no-print { display: none; } }
+  </style>
+  {% if autoprint %}<script>window.addEventListener('load', function () { window.print(); });</script>{% endif %}
+</head>
+<body>
+  <div class="no-print">
+    <button type="button" onclick="window.print()">Print</button>
+    <a href="{{ url_for('plant_asphalt_dispatch', view=record.id) }}">Back</a>
+  </div>
+  <h1>Asphalt Dispatch Challan</h1>
+  <p><strong>{{ record.dispatch_number }}</strong></p>
+  <table>
+    <tr><th>Date</th><td>{{ record.dispatch_date or '—' }}</td></tr>
+    <tr><th>Plant</th><td>{{ record.plant_name }} ({{ record.plant_code }})</td></tr>
+    <tr><th>Project</th><td>{{ record.project_name or '—' }}</td></tr>
+    <tr><th>Vehicle</th><td>{{ record.vehicle_number or '—' }}</td></tr>
+    <tr><th>Mix Type</th><td>{{ record.mix_type or '—' }}</td></tr>
+    <tr><th>Quantity</th><td>{{ '%.2f'|format(record.qty_ton or 0) }} Ton</td></tr>
+    <tr><th>Remarks</th><td>{{ record.remarks or '—' }}</td></tr>
+  </table>
+  <p style="font-size:0.8rem;color:#666;margin-top:2rem;">Generated {{ generated_at }}</p>
+</body>
+</html>

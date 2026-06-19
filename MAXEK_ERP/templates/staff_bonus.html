@@ -1,0 +1,179 @@
+{% extends 'base_maxek.html' %}
+{% from 'macros/erp_ui.html' import erp_pagination %}
+{% set page_title = 'Staff Bonus' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; HR &gt; Staff Bonus' %}
+{% block page_actions %}
+<a href="{{ url_for('staff_bonus', tab='calculation') }}" class="erp-btn erp-btn-primary"><i class="fa-solid fa-calculator"></i> Calculate Bonus</a>
+{% endblock %}
+{% block head_extra %}
+<style>
+  .staff-bonus-module .erp-tab-bar { display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap; }
+  .staff-bonus-module .erp-tab {
+    display: inline-flex; align-items: center; gap: 0.35rem;
+    padding: 0.5rem 1rem; border-radius: 8px; text-decoration: none;
+    border: 1px solid var(--erp-border, #e2e8f0); color: inherit; font-weight: 500;
+  }
+  .staff-bonus-module .erp-tab.active { background: var(--erp-primary, #0f766e); color: #fff; border-color: transparent; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="module-layout staff-bonus-module">
+  <div class="erp-tab-bar" role="tablist">
+    <a class="erp-tab{% if active_tab == 'calculation' %} active{% endif %}" href="{{ url_for('staff_bonus', tab='calculation') }}">
+      <i class="fa-solid fa-calculator"></i> Bonus Calculation
+    </a>
+    <a class="erp-tab{% if active_tab == 'payment' %} active{% endif %}" href="{{ url_for('staff_bonus', tab='payment') }}">
+      <i class="fa-solid fa-money-bill-wave"></i> Bonus Payment
+    </a>
+  </div>
+
+  {% if active_tab == 'calculation' %}
+  <div class="erp-form-card" id="bonus-calculation">
+    <h3 class="erp-form-title">Bonus Calculation</h3>
+    <p class="erp-form-hint">Attendance stats load from company staff records (<code>worker_source=staff</code>). Held OT is cumulative through the selected month end.</p>
+    <form method="post" class="erp-form-grid" data-staff-bonus-form>
+      <input type="hidden" name="form_action" value="save_bonus">
+      <div class="erp-field span-2">
+        <select name="staff_id" data-bonus-staff required class="has-value">
+          <option value="">Select employee</option>
+          {% for s in staff_options %}
+          <option value="{{ s.id }}">{{ s.employee_code }} — {{ s.staff_name }}</option>
+          {% endfor %}
+        </select>
+        <label>Employee</label>
+      </div>
+      <div class="erp-field">
+        <select name="bonus_month" data-bonus-month class="has-value">
+          {% for m in range(1, 13) %}
+          <option value="{{ m }}"{% if m == default_month %} selected{% endif %}>{{ '%02d'|format(m) }} — {{ ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m-1] }}</option>
+          {% endfor %}
+        </select>
+        <label>Month</label>
+      </div>
+      <div class="erp-field">
+        <input name="bonus_year" type="number" min="2000" max="2100" value="{{ default_year }}" data-bonus-year placeholder=" ">
+        <label>Year</label>
+      </div>
+      <div class="erp-field">
+        <button type="button" class="erp-btn erp-btn-ghost" data-bonus-load-stats><i class="fa-solid fa-rotate"></i> Load Attendance</button>
+      </div>
+
+      <div class="span-2 erp-form-card" style="background: var(--erp-surface-muted, #f8fafc); padding: 1rem;" data-bonus-stats-panel hidden>
+        <p><strong>Period:</strong> <span data-bonus-period-label>—</span></p>
+        <div class="erp-form-grid" style="grid-template-columns: repeat(3, 1fr); gap: 0.75rem;">
+          <div><span class="erp-form-hint">Worked Days</span><br><strong data-bonus-worked-display>0</strong></div>
+          <div><span class="erp-form-hint">Leave Days</span><br><strong data-bonus-leave-display>0</strong></div>
+          <div><span class="erp-form-hint">Held OT (hrs)</span><br><strong data-bonus-ot-display>0</strong></div>
+        </div>
+        <p class="erp-form-hint" data-bonus-existing-note hidden style="margin-top: 0.75rem; color: #b45309;"></p>
+      </div>
+
+      <input type="hidden" name="worked_days" data-bonus-worked value="0">
+      <input type="hidden" name="leave_days" data-bonus-leave value="0">
+      <input type="hidden" name="held_ot_hours" data-bonus-ot value="0">
+
+      <div class="erp-field span-2">
+        <select name="method" data-bonus-method class="has-value">
+          <option value="auto" selected>Auto (per day rate × worked days)</option>
+          <option value="manual">Manual amount</option>
+        </select>
+        <label>Calculation Method</label>
+      </div>
+      <div class="erp-field" data-bonus-per-day-wrap>
+        <input name="per_day_rate" type="number" step="0.01" min="0" data-bonus-per-day value="0" placeholder=" ">
+        <label>Per Day Rate (₹)</label>
+      </div>
+      <div class="erp-field" data-bonus-manual-wrap hidden>
+        <input name="manual_amount" type="number" step="0.01" min="0" data-bonus-manual value="0" placeholder=" ">
+        <label>Manual Amount (₹)</label>
+      </div>
+      <div class="erp-field">
+        <input name="rounded_amount" type="number" step="0.01" min="0" data-bonus-rounded value="0" placeholder=" ">
+        <label>Rounded / Final Amount (₹)</label>
+      </div>
+      <div class="erp-field span-2">
+        <input name="remarks" placeholder=" ">
+        <label>Remarks</label>
+      </div>
+      <div class="span-2">
+        <p class="erp-form-hint"><strong>Calculated:</strong> ₹ <span data-bonus-calculated-preview>0.00</span></p>
+      </div>
+      <div class="erp-form-actions span-2">
+        <button class="erp-btn erp-btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Save Bonus (Pending Payment)</button>
+      </div>
+    </form>
+  </div>
+  {% else %}
+  <div class="erp-table-panel" data-erp-table>
+    <div class="erp-table-toolbar">
+      <h3 class="erp-table-title">Bonus Payment Queue</h3>
+      <div class="erp-table-controls">
+        <a href="{{ url_for('staff_bonus', tab='payment', payment_filter='all') }}" class="erp-btn erp-btn-ghost{% if payment_filter == 'all' %} active{% endif %}">All</a>
+        <a href="{{ url_for('staff_bonus', tab='payment', payment_filter='pending') }}" class="erp-btn erp-btn-ghost{% if payment_filter == 'pending' %} active{% endif %}">Pending</a>
+        <a href="{{ url_for('staff_bonus', tab='payment', payment_filter='paid') }}" class="erp-btn erp-btn-ghost{% if payment_filter == 'paid' %} active{% endif %}">Paid</a>
+      </div>
+    </div>
+    <div class="erp-table-scroll">
+      <table class="erp-table erp-table-module">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Employee</th>
+            <th>Period</th>
+            <th>Worked</th>
+            <th>Leave</th>
+            <th>Held OT</th>
+            <th>Method</th>
+            <th>Final (₹)</th>
+            <th>Status</th>
+            <th>Created</th>
+            <th>Paid At</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in bonus_rows %}
+          <tr>
+            <td>{{ row.id }}</td>
+            <td>{{ row.employee_code }} — {{ row.staff_name }}</td>
+            <td>{{ row.bonus_period }}</td>
+            <td>{{ row.worked_days }}</td>
+            <td>{{ row.leave_days }}</td>
+            <td>{{ row.held_ot_hours }}</td>
+            <td>{{ row.method|title }}</td>
+            <td>{{ '%.2f'|format(row.final_amount or 0) }}</td>
+            <td>
+              {% if (row.payment_status or '')|lower == 'paid' %}
+              <span style="color:#15803d;font-weight:600;">Paid</span>
+              {% else %}
+              <span style="color:#b45309;font-weight:600;">Pending</span>
+              {% endif %}
+            </td>
+            <td>{{ row.created_at|app_datetime }}{% if row.created_by %}<br><small>{{ row.created_by }}</small>{% endif %}</td>
+            <td>{{ row.paid_at|app_datetime }}</td>
+            <td>
+              {% if (row.payment_status or '')|lower != 'paid' %}
+              <form method="post" style="display:inline;" onsubmit="return confirm('Mark this bonus as paid?');">
+                <input type="hidden" name="form_action" value="mark_paid">
+                <input type="hidden" name="bonus_id" value="{{ row.id }}">
+                <button type="submit" class="erp-btn erp-btn-primary erp-btn-sm"><i class="fa-solid fa-check"></i> Mark Paid</button>
+              </form>
+              {% else %}
+              —
+              {% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="12">No bonus records yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="erp-form-hint" style="padding: 0.75rem 1rem;">Server time: {{ app_now_display }}</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/staff-bonus.js') }}"></script>
+{% endblock %}

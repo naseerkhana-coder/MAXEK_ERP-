@@ -1,0 +1,64 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Letter Management' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('office_admin') ~ '">Office</a> &gt; Letters' %}
+{% block page_actions %}
+<a href="{{ url_for('office_letters', new=1) }}#record-form" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> New Letter</a>
+{% endblock %}
+{% block content %}
+{% if view_record %}
+<div class="erp-form-card" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">{{ view_record.letter_number }} — {{ view_record.letter_type }}</h3>
+  <p><strong>Date:</strong> {{ view_record.letter_date }} | <strong>To:</strong> {{ view_record.to_name }}</p>
+  <p><strong>Subject:</strong> {{ view_record.subject }}</p>
+  <div style="white-space:pre-wrap;margin:1rem 0;padding:1rem;background:#f8fafc;border-radius:8px;">{{ view_record.body or '—' }}</div>
+  <p style="font-size:0.85rem;color:#64748b;">Created {{ view_record.created_at }} · Modified {{ view_record.modified_at or '—' }}</p>
+  <a href="{{ url_for('office_letter_print', letter_id=view_record.id) }}" target="_blank" class="erp-btn erp-btn-ghost erp-btn-sm"><i class="fa-solid fa-print"></i> Print</a>
+  <a href="{{ url_for('office_letters', edit=view_record.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Edit</a>
+</div>
+{% endif %}
+
+{% if show_form %}
+<div class="erp-form-card" id="record-form" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">{% if edit_record %}Edit {{ edit_record.letter_number }}{% else %}New Letter{% endif %}</h3>
+  <form method="post">
+    {% if edit_record %}<input type="hidden" name="record_id" value="{{ edit_record.id }}">{% endif %}
+    <div class="erp-form-grid">
+      <div class="erp-field"><select name="letter_type">{% for t in letter_types %}<option value="{{ t }}" {% if edit_record and edit_record.letter_type == t %}selected{% endif %}>{{ t }}</option>{% endfor %}</select><label>Letter Type</label></div>
+      <div class="erp-field"><input type="date" name="letter_date" required value="{{ edit_record.letter_date if edit_record else default_date }}"><label>Letter Date *</label></div>
+      <div class="erp-field"><input name="to_name" required placeholder=" " value="{{ edit_record.to_name if edit_record else '' }}"><label>To *</label></div>
+      <div class="erp-field span-2"><textarea name="to_address" placeholder=" ">{{ edit_record.to_address if edit_record else '' }}</textarea><label>Address</label></div>
+      <div class="erp-field span-2"><input name="subject" required placeholder=" " value="{{ edit_record.subject if edit_record else '' }}"><label>Subject *</label></div>
+      <div class="erp-field span-2"><textarea name="body" rows="8" placeholder=" ">{{ edit_record.body if edit_record else '' }}</textarea><label>Body</label></div>
+      <div class="erp-field"><input name="reference_no" placeholder=" " value="{{ edit_record.reference_no if edit_record else '' }}"><label>Reference No</label></div>
+      <div class="erp-field"><input name="department" placeholder=" " value="{{ edit_record.department if edit_record else '' }}"><label>Department</label></div>
+      <div class="erp-field"><select name="project_id"><option value="">—</option>{% for p in projects %}<option value="{{ p.id }}" {% if edit_record and edit_record.project_id == p.id %}selected{% endif %}>{{ p.project_name }}</option>{% endfor %}</select><label>Project</label></div>
+      <div class="erp-field"><input name="signed_by" placeholder=" " value="{{ edit_record.signed_by if edit_record else '' }}"><label>Signed By</label></div>
+    </div>
+    <button type="submit" class="erp-btn erp-btn-primary">Save</button>
+  </form>
+</div>
+{% endif %}
+
+<form method="get" style="margin-bottom:0.75rem;"><input name="q" value="{{ search }}" placeholder="Search letters…" style="max-width:280px;"> <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Search</button></form>
+<div class="erp-table-panel" data-erp-table>
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead><tr><th>Letter No</th><th>Date</th><th>Type</th><th>To</th><th>Subject</th><th></th></tr></thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>{{ row.letter_number }}</td>
+          <td>{{ row.letter_date or '—' }}</td>
+          <td>{{ row.letter_type or '—' }}</td>
+          <td>{{ row.to_name }}</td>
+          <td>{{ row.subject }}</td>
+          <td><a href="{{ url_for('office_letters', view=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">View</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6">No letters yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

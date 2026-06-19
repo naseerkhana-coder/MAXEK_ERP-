@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{{ quotation.quotation_number }} — MAXEK ERP</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: Arial, Helvetica, sans-serif; margin: 2rem; color: #111; }
+    h1 { margin: 0 0 0.25rem; font-size: 1.5rem; }
+    .meta { color: #555; margin-bottom: 1.5rem; font-size: 0.9rem; }
+    table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+    th, td { border: 1px solid #ccc; padding: 0.5rem 0.65rem; text-align: left; font-size: 0.9rem; }
+    th { background: #f3f4f6; }
+    .num { text-align: right; }
+    tfoot td { font-weight: bold; background: #f9fafb; }
+    .no-print { margin-bottom: 1rem; }
+    @media print { .no-print { display: none; } body { margin: 0.5rem; } }
+  </style>
+  {% if autoprint %}<script>window.addEventListener('load', function () { window.print(); });</script>{% endif %}
+</head>
+<body>
+  <div class="no-print">
+    <button type="button" onclick="window.print()">Print</button>
+    <a href="{{ url_for('office_quotations', view=quotation.id) }}">Back</a>
+  </div>
+  <h1>Quotation — {{ quotation.quotation_number }}</h1>
+  <div class="meta">
+    <div><strong>Client:</strong> {{ quotation.client_name }}</div>
+    {% if quotation.client_address %}<div>{{ quotation.client_address }}</div>{% endif %}
+    {% if quotation.client_gstin %}<div>GSTIN: {{ quotation.client_gstin }}</div>{% endif %}
+    <div><strong>Date:</strong> {{ quotation.quotation_date or '—' }} | <strong>Valid for:</strong> {{ quotation.validity_days or 30 }} days</div>
+    {% if quotation.subject %}<div><strong>Subject:</strong> {{ quotation.subject }}</div>{% endif %}
+    <div><strong>Generated:</strong> {{ generated_at }}</div>
+  </div>
+  <table>
+    <thead>
+      <tr><th>#</th><th>Description</th><th class="num">Qty</th><th>Unit</th><th class="num">Rate</th><th class="num">GST%</th><th class="num">Total</th></tr>
+    </thead>
+    <tbody>
+      {% for line in quotation.lines %}
+      <tr>
+        <td>{{ line.line_no or loop.index }}</td>
+        <td>{{ line.description }}</td>
+        <td class="num">{{ line.quantity or 0 }}</td>
+        <td>{{ line.unit or '—' }}</td>
+        <td class="num">{{ '%.2f'|format(line.rate or 0) }}</td>
+        <td class="num">{{ line.gst_percent or 0 }}</td>
+        <td class="num">{{ '%.2f'|format(line.line_total or 0) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr><td colspan="6" class="num">Subtotal</td><td class="num">{{ '%.2f'|format(quotation.subtotal or 0) }}</td></tr>
+      <tr><td colspan="6" class="num">CGST + SGST + IGST</td><td class="num">{{ '%.2f'|format((quotation.total_cgst or 0) + (quotation.total_sgst or 0) + (quotation.total_igst or 0)) }}</td></tr>
+      <tr><td colspan="6" class="num">Grand Total</td><td class="num">{{ '%.2f'|format(quotation.grand_total or 0) }}</td></tr>
+    </tfoot>
+  </table>
+  {% if quotation.terms %}<p><strong>Terms:</strong> {{ quotation.terms }}</p>{% endif %}
+</body>
+</html>

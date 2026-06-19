@@ -1,0 +1,59 @@
+{% extends 'base_maxek.html' %}
+{% from 'macros/erp_ui.html' import approval_badge, maker_row_actions %}
+{% set page_title = 'Client Billing Register' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; Client Billing' %}
+{% block page_actions %}
+<a href="{{ url_for('client_billing_form', new=1) }}" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> New RA Bill</a>
+<a href="{{ url_for('client_billing_reports') }}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-chart-column"></i> Reports</a>
+{% endblock %}
+{% block content %}
+<form method="get" class="erp-table-toolbar" style="margin-bottom:0.75rem;display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+  <input name="q" value="{{ search }}" placeholder="Search bill no., project…" style="max-width:220px;">
+  <select name="project_id" style="max-width:200px;">
+    <option value="">All projects</option>
+    {% for p in projects %}
+    <option value="{{ p.id }}" {% if project_filter == p.id %}selected{% endif %}>{{ p.project_code }} — {{ p.project_name }}</option>
+    {% endfor %}
+  </select>
+  <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Filter</button>
+</form>
+<div class="erp-table-wrap">
+  <table class="erp-table">
+    <thead>
+      <tr>
+        <th>Bill No.</th>
+        <th>RA No.</th>
+        <th>Date</th>
+        <th>Project</th>
+        <th>Client</th>
+        <th>Period</th>
+        <th class="num">Net Payable</th>
+        <th>Bill Status</th>
+        <th>Workflow</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td><a href="{{ url_for('client_billing_form', view=row.id) }}">{{ row.bill_number }}</a></td>
+        <td>{{ row.ra_number or '—' }}</td>
+        <td>{{ row.bill_date or '—' }}</td>
+        <td>{{ row.project_code or '' }} {{ row.project_name }}</td>
+        <td>{{ row.client_display or '—' }}</td>
+        <td>{{ row.period_from or '—' }} → {{ row.period_to or '—' }}</td>
+        <td class="num">{{ '%.2f'|format(row.net_payable or 0) }}</td>
+        <td>{{ row.bill_status or '—' }}</td>
+        <td>{{ approval_badge(row.approval_status) }}</td>
+        <td>
+          {{ maker_row_actions('client_billing_form', 'client_bills', row.id, row.approval_status, 'client_billing', 'client_billing_register') }}
+          <a href="{{ url_for('client_billing_print', bill_id=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm" target="_blank">Print</a>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="10" class="erp-empty">No client bills yet. Create a new RA bill to get started.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

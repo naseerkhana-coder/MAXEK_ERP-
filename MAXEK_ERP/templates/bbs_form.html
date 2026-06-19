@@ -1,0 +1,119 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'BBS Report' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('bbs_register') ~ '">BBS</a> &gt; Form' %}
+{% block page_actions %}
+{% if view_record %}<a href="{{ url_for('bbs_print', bbs_id=view_record.id) }}" target="_blank" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-print"></i> Print</a>{% endif %}
+{% endblock %}
+{% block content %}
+{% if view_record %}
+<div class="erp-form-card" style="margin-bottom:1rem;">
+  <h3 class="erp-form-title">{{ view_record.ref_no }}</h3>
+  <p>{{ view_record.project_name }} · Building {{ view_record.building_number or '—' }} · {{ view_record.report_date }}</p>
+  <a href="{{ url_for('bbs_print', bbs_id=view_record.id) }}" class="erp-btn erp-btn-primary" target="_blank">Print BBS</a>
+  <a href="{{ url_for('bbs_form', edit=view_record.id) }}" class="erp-btn erp-btn-ghost">Edit</a>
+</div>
+{% endif %}
+
+{% if show_form %}
+{% set rec = edit_record or form_defaults %}
+<div class="erp-form-card">
+  <h3 class="erp-form-title">{% if edit_record %}Edit{% else %}New{% endif %} BBS Report</h3>
+  <form method="post" id="bbs-form">
+    {% if edit_record %}<input type="hidden" name="bbs_id" value="{{ edit_record.id }}">{% endif %}
+    <div class="erp-form-grid">
+      <div class="erp-field span-2">
+        <select name="project_id" required>
+          <option value="">Select project…</option>
+          {% for p in projects %}
+          <option value="{{ p.id }}" {% if rec.project_id == p.id %}selected{% endif %}>{{ p.project_code }} — {{ p.project_name }}</option>
+          {% endfor %}
+        </select>
+        <label>Project</label>
+      </div>
+      <div class="erp-field"><input name="building_number" value="{{ rec.building_number or '' }}" placeholder=" "><label>Building Number</label></div>
+      <div class="erp-field"><input name="ref_no" value="{{ rec.ref_no or '' }}" placeholder="Auto"><label>Ref No.</label></div>
+      <div class="erp-field"><input name="measurement_from" type="date" value="{{ rec.measurement_from or '' }}"><label>Measurement From</label></div>
+      <div class="erp-field"><input name="measurement_to" type="date" value="{{ rec.measurement_to or '' }}"><label>Measurement To</label></div>
+      <div class="erp-field"><input name="report_date" type="date" value="{{ rec.report_date or form_defaults.report_date }}"><label>Report Date</label></div>
+      <div class="erp-field"><input name="cutting_bending" value="{{ rec.cutting_bending or 'Cutting & Bending' }}"><label>Cutting & Bending</label></div>
+      <div class="erp-field"><input name="prepared_by" value="{{ rec.prepared_by or 'MAXEK SUPERVISOR' }}"><label>Prepared By</label></div>
+      <div class="erp-field"><input name="verified_by" value="{{ rec.verified_by or 'EKK Engineer QS' }}"><label>Verified By</label></div>
+      <div class="erp-field"><input name="checked_by" value="{{ rec.checked_by or 'EKK Planning Manager' }}"><label>Checked By</label></div>
+    </div>
+
+    <div style="overflow-x:auto;margin-top:1rem;">
+      <table class="erp-table" id="bbs-lines" style="min-width:1200px;font-size:0.8rem;">
+        <thead>
+          <tr>
+            <th>S.No</th><th>Description</th><th>Side</th><th>Unit</th><th>Nos</th><th>No of bars</th><th>CL</th><th>Dia</th>
+            {% for d in diameters %}<th>{{ d }}mm</th>{% endfor %}
+            <th>Total</th><th>Remarks</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% set lines = rec.lines if rec.lines else [{'description':''}] %}
+          {% for line in lines %}
+          <tr class="bbs-line">
+            <td class="line-no">{{ loop.index }}</td>
+            <td><input name="line_description[]" value="{{ line.description or '' }}"></td>
+            <td><input name="line_side[]" value="{{ line.side or '' }}" style="width:3rem;"></td>
+            <td><input name="line_unit[]" value="{{ line.unit or 'Mt' }}" style="width:3rem;"></td>
+            <td><input name="line_nos[]" type="number" step="0.01" value="{{ line.nos or '' }}" style="width:3.5rem;"></td>
+            <td><input name="line_num_bars[]" type="number" value="{{ line.num_bars or '' }}" style="width:3.5rem;"></td>
+            <td><input name="line_cl[]" type="number" step="0.01" value="{{ line.cutting_length or '' }}" style="width:4rem;"></td>
+            <td><input name="line_dia[]" type="number" step="1" value="{{ line.diameter_mm or '' }}" style="width:3rem;"></td>
+            {% for d in diameters %}
+            <td><input name="line_qty_{{ d }}[]" type="number" step="0.001" value="{{ line['steel_qty_' ~ d] or '' }}" style="width:3.5rem;"></td>
+            {% endfor %}
+            <td><input type="number" step="0.001" value="{{ line.total_qty or '' }}" class="line-total" readonly style="width:4rem;"></td>
+            <td><input name="line_remarks[]" value="{{ line.remarks or '' }}"></td>
+            <td><button type="button" class="erp-btn erp-btn-ghost erp-btn-sm remove-line">×</button></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <button type="button" id="add-bbs-line" class="erp-btn erp-btn-ghost erp-btn-sm" style="margin-top:0.5rem;">+ Add Line</button>
+    </div>
+    <div class="erp-form-actions" style="margin-top:1rem;">
+      <button class="erp-btn erp-btn-primary" type="submit">Save BBS</button>
+      <a href="{{ url_for('bbs_register') }}" class="erp-btn erp-btn-ghost">Cancel</a>
+    </div>
+  </form>
+</div>
+<template id="bbs-line-template">
+  <tr class="bbs-line">
+    <td class="line-no"></td>
+    <td><input name="line_description[]"></td>
+    <td><input name="line_side[]" style="width:3rem;"></td>
+    <td><input name="line_unit[]" value="Mt" style="width:3rem;"></td>
+    <td><input name="line_nos[]" type="number" step="0.01" style="width:3.5rem;"></td>
+    <td><input name="line_num_bars[]" type="number" style="width:3.5rem;"></td>
+    <td><input name="line_cl[]" type="number" step="0.01" style="width:4rem;"></td>
+    <td><input name="line_dia[]" type="number" step="1" style="width:3rem;"></td>
+    {% for d in diameters %}<td><input name="line_qty_{{ d }}[]" type="number" step="0.001" style="width:3.5rem;"></td>{% endfor %}
+    <td><input type="number" class="line-total" readonly style="width:4rem;"></td>
+    <td><input name="line_remarks[]"></td>
+    <td><button type="button" class="erp-btn erp-btn-ghost erp-btn-sm remove-line">×</button></td>
+  </tr>
+</template>
+<script>
+(function () {
+  const tbody = document.querySelector('#bbs-lines tbody');
+  const tpl = document.getElementById('bbs-line-template');
+  function renumber() {
+    tbody.querySelectorAll('.bbs-line').forEach((tr, i) => { tr.querySelector('.line-no').textContent = i + 1; });
+  }
+  document.getElementById('add-bbs-line').addEventListener('click', () => {
+    tbody.appendChild(tpl.content.cloneNode(true));
+    renumber();
+  });
+  tbody.addEventListener('click', (e) => {
+    if (e.target.classList.contains('remove-line')) {
+      e.target.closest('tr').remove();
+      renumber();
+    }
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

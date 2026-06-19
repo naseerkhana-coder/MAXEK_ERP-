@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Sub Bill — {{ bill.subcontractor_name }}</title>
+  <style>
+    body { font-family: Arial, Helvetica, sans-serif; margin: 1.5rem; font-size: 0.9rem; color: #111; }
+    h1 { font-size: 1.1rem; margin: 0 0 0.5rem; }
+    .meta { margin-bottom: 1rem; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 1.5rem; }
+    th, td { border: 1px solid #333; padding: 0.35rem 0.5rem; }
+    th { background: #4a4a4a; color: #fff; text-align: left; }
+    .num { text-align: right; }
+    .final-report { margin-top: 1.5rem; }
+    .final-report h2 { background: #ffc000; padding: 0.35rem 0.5rem; margin: 0 0 0.5rem; font-size: 1rem; }
+    .summary-table th { background: #4472c4; color: #fff; }
+    .summary-table td { background: #d9e2f3; }
+    .net { color: #c00; font-weight: bold; font-size: 1.05rem; }
+    .no-print { margin-bottom: 1rem; }
+    @media print { .no-print { display: none; } body { margin: 0.5rem; } }
+  </style>
+  {% if autoprint %}<script>window.addEventListener('load', function () { window.print(); });</script>{% endif %}
+</head>
+<body>
+  <div class="no-print">
+    <button onclick="window.print()">Print</button>
+    <a href="{{ url_for('sub_billing_form', view=bill.id) }}">Back</a>
+    <a href="{{ url_for('sub_billing_abstract_print', bill_id=bill.id) }}">Payment Abstract</a>
+  </div>
+
+  <div class="meta">
+    <strong>Date From:</strong> {{ bill.period_from }} &nbsp; <strong>Date To:</strong> {{ bill.period_to }}<br>
+    <strong>Subcontractor Name:</strong> {{ bill.subcontractor_name }}
+  </div>
+
+  <table>
+    <thead>
+      <tr><th>ID</th><th>Name</th><th>Designation</th><th class="num">No</th><th class="num">Salary Amount</th><th class="num">OT HR</th><th class="num">OT Amount</th><th class="num">Total Amount</th></tr>
+    </thead>
+    <tbody>
+      {% for line in bill.lines %}
+      <tr>
+        <td>{{ line.worker_code or '—' }}</td>
+        <td>{{ line.worker_name }}</td>
+        <td>{{ line.designation or '—' }}</td>
+        <td class="num">{{ line.days_worked or 0 }}</td>
+        <td class="num">{{ '%.2f'|format(line.salary_amount or 0) }}</td>
+        <td class="num">{{ line.ot_hours or 0 }}</td>
+        <td class="num">{{ '%.2f'|format(line.ot_amount or 0) }}</td>
+        <td class="num">{{ '%.2f'|format(line.total_amount or 0) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="final-report">
+    <h2>FINAL REPORT</h2>
+    <p><strong>Sub Name:</strong> {{ bill.subcontractor_name }} &nbsp; <strong>Date:</strong> {{ bill.period_from }} to {{ bill.period_to }}</p>
+    <table class="summary-table">
+      <thead><tr><th>Role</th><th class="num">Nos</th><th class="num">OT HR</th><th class="num">Amount</th></tr></thead>
+      <tbody>
+        {% for row in bill.designation_summary %}
+        <tr>
+          <td>{{ row.designation }}</td>
+          <td class="num">{{ row.mandays }}</td>
+          <td class="num">{{ row.ot_hours }}</td>
+          <td class="num">{{ '%.2f'|format(row.total_amount or 0) }}</td>
+        </tr>
+        {% endfor %}
+        {% if bill.old_mess_amount %}
+        <tr><td>OLD Mess</td><td class="num"></td><td class="num"></td><td class="num">{{ '%.2f'|format(bill.old_mess_amount) }}</td></tr>
+        {% endif %}
+        <tr><td><strong>Total Amount</strong></td><td colspan="2"></td><td class="num"><strong>{{ '%.2f'|format(bill.gross_amount or 0) }}</strong></td></tr>
+        <tr><td>TDS 1 %</td><td colspan="2"></td><td class="num">{{ '%.2f'|format(bill.tds_amount or 0) }}</td></tr>
+        <tr><td>MESS</td><td colspan="2"></td><td class="num">{{ '%.2f'|format(bill.mess_deduction or 0) }}</td></tr>
+        <tr><td>ADVANCE</td><td colspan="2"></td><td class="num">{{ '%.2f'|format(bill.advance_deduction or 0) }}</td></tr>
+        <tr><td><strong>NET PAYMENT</strong></td><td colspan="2"></td><td class="num net">{{ '%.2f'|format(bill.net_payment or 0) }}</td></tr>
+      </tbody>
+    </table>
+  </div>
+</body>
+</html>

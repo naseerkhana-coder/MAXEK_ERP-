@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{{ record.register_number }} — Security Register — MAXEK ERP</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: Arial, Helvetica, sans-serif; margin: 2rem; color: #111; }
+    h1 { margin: 0 0 0.25rem; font-size: 1.5rem; }
+    .meta { color: #555; margin-bottom: 1.5rem; font-size: 0.9rem; line-height: 1.6; }
+    table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+    th, td { border: 1px solid #ccc; padding: 0.5rem 0.65rem; text-align: left; font-size: 0.9rem; vertical-align: top; }
+    th { background: #f3f4f6; width: 32%; }
+    .no-print { margin-bottom: 1rem; }
+    @media print { .no-print { display: none; } body { margin: 0.5rem; } }
+  </style>
+  {% if autoprint %}
+  <script>window.addEventListener('load', function () { window.print(); });</script>
+  {% endif %}
+</head>
+<body>
+  <div class="no-print">
+    <button type="button" onclick="window.print()">Print</button>
+    <a href="{{ url_for('securities_guarantees', view=record.id) }}">Back to Register</a>
+  </div>
+
+  <h1>Security / Guarantee Register</h1>
+  <div class="meta">
+    <div><strong>Register No:</strong> {{ record.register_number }} · <strong>Type:</strong> {{ record.security_type }}</div>
+    <div><strong>Status:</strong> {{ record.status }}</div>
+    <div><strong>Generated:</strong> {{ generated_at }}</div>
+  </div>
+
+  <table>
+    <tr><th>Project</th><td>{{ record.project_code or '—' }} — {{ record.project_name or '—' }}</td></tr>
+    <tr><th>Client / Department</th><td>{{ record.client_name or '—' }}</td></tr>
+    <tr><th>Agreement</th><td>{{ record.agreement_number or '—' }} ({{ record.agreement_date or '—' }})</td></tr>
+    <tr><th>Work Order</th><td>{{ record.work_order_number or '—' }}</td></tr>
+    <tr><th>Contract Value</th><td>₹{{ '%.2f'|format(record.contract_value or 0) }}</td></tr>
+    <tr><th>Deposit / Guarantee Amount</th><td>₹{{ '%.2f'|format(record.deposit_amount or 0) }}</td></tr>
+    {% if record.interest_amount %}
+    <tr><th>Interest</th><td>{{ record.interest_rate or 0 }}% · ₹{{ '%.2f'|format(record.interest_amount) }}</td></tr>
+    <tr><th>Total Recoverable</th><td>₹{{ '%.2f'|format(record.total_recoverable or 0) }}</td></tr>
+    {% endif %}
+    <tr><th>Bank / Issuer</th><td>{{ record.bank_name or record.issuing_bank or '—' }} {% if record.branch_name %}({{ record.branch_name }}){% endif %}</td></tr>
+    <tr><th>Account / Instrument</th><td>{{ record.account_number or record.bg_number or record.instrument_number or record.challan_number or '—' }}</td></tr>
+    {% if record.claim_period %}<tr><th>Claim Period</th><td>{{ record.claim_period }}</td></tr>{% endif %}
+    <tr><th>Deposit / Issue Date</th><td>{{ record.deposit_date or record.issue_date or '—' }}</td></tr>
+    <tr><th>Expiry / Maturity</th><td>{{ record.expiry_date or record.maturity_date or '—' }}</td></tr>
+    {% if record.release_date %}<tr><th>Release Date</th><td>{{ record.release_date }}</td></tr>{% endif %}
+    {% if record.security_type == 'EMD' %}
+    <tr><th>Tender</th><td>{{ record.tender_number or '—' }} ({{ record.tender_date or '—' }}) — {{ record.tender_authority or '—' }}</td></tr>
+    <tr><th>EMD Mode</th><td>{{ record.emd_mode or '—' }}</td></tr>
+    {% endif %}
+    {% if record.security_type == 'Pending Bill Retention' %}
+    <tr><th>Bill</th><td>{{ record.bill_number or '—' }} ({{ record.bill_date or '—' }}) — ₹{{ '%.2f'|format(record.bill_amount or 0) }}</td></tr>
+    <tr><th>Retention</th><td>{{ record.retention_percent or 0 }}% · ₹{{ '%.2f'|format(record.retention_amount or 0) }}</td></tr>
+    {% endif %}
+    <tr><th>Remarks</th><td>{{ record.remarks or '—' }}</td></tr>
+    <tr><th>Created</th><td>{{ record.created_by or '—' }} · {{ record.created_at or '—' }}</td></tr>
+    <tr><th>Modified</th><td>{{ record.modified_by or '—' }} · {{ record.modified_at or '—' }}</td></tr>
+    {% if record.released_by %}<tr><th>Released By</th><td>{{ record.released_by }}</td></tr>{% endif %}
+  </table>
+
+  {% if attachments %}
+  <h3 style="margin-top:1.5rem;font-size:1rem;">Attachments</h3>
+  <ul>
+    {% for att in attachments %}
+    <li>{{ att.original_filename or att.stored_filename }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</body>
+</html>

@@ -1,5 +1,5 @@
 {% extends 'base_maxek.html' %}
-{% from 'macros/erp_ui.html' import workflow_badge, role_status_badge, checker_row_actions, approver_row_actions, maker_row_actions, approval_history_panel, reject_modal %}
+{% from 'macros/erp_ui.html' import workflow_badge, role_status_badge, checker_row_actions, approver_row_actions, maker_row_actions, reject_modal %}
 {% set page_title = 'Pending Approvals' %}
 {% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; Approvals' %}
 {% block content %}
@@ -22,49 +22,65 @@
   <div class="erp-table-toolbar">
     <h3 class="erp-table-title">
       {% if role == 'maker' %}My Transactions
-      {% elif role == 'checker' %}Checker Queue — Verify or Reject
-      {% elif role == 'approver' %}Approver Queue — Approve or Reject
+      {% elif role == 'checker' %}Checker Queue
+      {% elif role == 'approver' %}Approver Queue
       {% else %}All Items{% endif %}
     </h3>
+    <div class="approval-tab-bar">
+      <a class="erp-btn erp-btn-sm {% if tab == 'pending' %}erp-btn-primary{% else %}erp-btn-ghost{% endif %}"
+         href="{{ url_for('approvals', role=role, tab='pending') }}">
+        Pending ({{ pending_items|length }})
+      </a>
+      <a class="erp-btn erp-btn-sm {% if tab == 'history' %}erp-btn-primary{% else %}erp-btn-ghost{% endif %}"
+         href="{{ url_for('approvals', role=role, tab='history') }}">
+        History ({{ history_items|length }})
+      </a>
+    </div>
   </div>
   <div class="erp-table-scroll">
-    <table class="erp-table erp-table-module">
+    <table class="erp-table erp-table-module approvals-compact-table">
       <thead>
         <tr>
-          <th>#</th>
-          <th>Module</th>
-          <th>Record</th>
+          <th>Module / Type</th>
+          <th>Reference No</th>
+          <th>Maker</th>
+          <th>Date</th>
           <th>Status</th>
-          <th>Created</th>
           <th>Actions</th>
         </tr>
       </thead>
       <tbody>
         {% for item in items %}
         <tr>
-          <td>{{ item.id }}</td>
           <td>{{ item.module_name }}</td>
-          <td>#{{ item.record_id }}</td>
+          <td><strong>{{ item.reference_no }}</strong></td>
+          <td>{{ item.maker_name }}</td>
+          <td>{{ item.created_at|app_datetime('%d %b %Y') if item.created_at else '—' }}</td>
           <td>{{ role_status_badge(item.record_status, role) }}</td>
-          <td>{{ item.created_at }}</td>
           <td>
-            {% set mod_route = module_routes.get(item.module_id, 'dashboard') %}
-            {% if role == 'checker' %}
-              {{ checker_row_actions(item.id, mod_route, item.record_id, item.record_status) }}
-            {% elif role == 'approver' %}
-              {{ approver_row_actions(item.id, mod_route, item.record_id, item.record_status) }}
-            {% else %}
-              {{ maker_row_actions(mod_route, item.record_table, item.record_id, item.record_status) }}
+            <a href="{{ url_for('approval_detail', approval_id=item.id, role=role) }}" class="erp-btn erp-btn-ghost erp-btn-sm">View</a>
+            {% if tab == 'pending' %}
+              {% if role == 'checker' and item.record_status == 'Pending Checker' %}
+              <button type="button" class="erp-btn erp-btn-primary erp-btn-sm js-action-btn"
+                data-approval-id="{{ item.id }}" data-role="checker" data-action="verify">Verify</button>
+              <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm js-action-btn"
+                data-approval-id="{{ item.id }}" data-role="checker" data-action="reject">Reject</button>
+              {% elif role == 'approver' and item.record_status == 'Pending Approval' %}
+              <button type="button" class="erp-btn erp-btn-primary erp-btn-sm js-action-btn"
+                data-approval-id="{{ item.id }}" data-role="approver" data-action="approve">Approve</button>
+              <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm js-action-btn"
+                data-approval-id="{{ item.id }}" data-role="approver" data-action="reject">Reject</button>
+              {% elif role == 'maker' %}
+                {% set mod_route = module_routes.get(item.module_id, 'dashboard') %}
+                {% if item.record_status in ['Rejected by Checker', 'Rejected by Approver', 'Pending Checker'] %}
+                <a href="{{ url_for(mod_route, edit=item.record_id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Edit</a>
+                {% endif %}
+              {% endif %}
             {% endif %}
           </td>
         </tr>
-        {% if item.history %}
-        <tr class="history-row">
-          <td colspan="6">{{ approval_history_panel(item.history) }}</td>
-        </tr>
-        {% endif %}
         {% else %}
-        <tr><td colspan="6">No items for this role.</td></tr>
+        <tr><td colspan="6">No items in this tab.</td></tr>
         {% endfor %}
       </tbody>
     </table>

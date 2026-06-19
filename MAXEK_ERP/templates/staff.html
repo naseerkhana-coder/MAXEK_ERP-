@@ -5,12 +5,15 @@
 {% set form_employee = editing_staff %}
 {% block page_actions %}
 <a href="{{ url_for('staff') }}#add-staff" class="erp-btn erp-btn-primary"><i class="fa-solid fa-user-plus"></i> Add Employee</a>
+<a href="{{ url_for('staff_bonus', tab='calculation') }}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-gift"></i> Staff Bonus</a>
 {% endblock %}
 {% block content %}
 <div class="module-layout">
   <div class="erp-form-card" id="add-staff">
     <h3 class="erp-form-title">{{ 'Edit Employee' if form_employee else 'Employee Data Entry' }}</h3>
-    <form method="post" enctype="multipart/form-data" class="erp-form-grid">
+    <form method="post" enctype="multipart/form-data" class="erp-form-grid" data-staff-form
+          data-initial-components='{{ editing_components | tojson }}'
+          data-initial-travel='{{ editing_travel_tiers | tojson }}'>
       {% if form_employee %}<input type="hidden" name="staff_id" value="{{ form_employee.id }}">{% endif %}
       <div class="erp-field"><input value="{{ form_employee.employee_code if form_employee else next_employee_code }}" readonly placeholder=" "><label>Employee Code (Auto)</label></div>
       <div class="erp-field"><input name="staff_name" value="{{ form_employee.staff_name if form_employee else '' }}" placeholder=" " required><label>Employee Name</label></div>
@@ -54,9 +57,97 @@
         </select>
         <label>Workflow Role</label>
       </div>
-      <div class="erp-field"><select name="salary_type" class="has-value"><option{% if not form_employee or form_employee.salary_type == 'Monthly' %} selected{% endif %}>Monthly</option><option{% if form_employee and form_employee.salary_type == 'Daily' %} selected{% endif %}>Daily</option></select><label>Salary Type</label></div>
-      <div class="erp-field"><input name="salary_amount" type="number" step="0.01" value="{{ form_employee.salary_amount if form_employee else '' }}" placeholder=" "><label>Salary Amount</label></div>
+      <div class="erp-field"><select name="salary_type" data-staff-salary-type class="has-value"><option{% if not form_employee or form_employee.salary_type == 'Monthly' %} selected{% endif %}>Monthly</option><option{% if form_employee and form_employee.salary_type == 'Daily' %} selected{% endif %}>Daily</option></select><label>Salary Type</label></div>
+      <div class="erp-field" data-staff-basic-salary-field hidden>
+        <input name="basic_salary" type="number" step="0.01" min="0" data-staff-basic-salary placeholder=" ">
+        <label>Basic Salary</label>
+      </div>
+      <div class="erp-field">
+        <input name="salary_amount" type="number" step="0.01" data-staff-salary-total value="{{ form_employee.salary_amount if form_employee else '' }}" placeholder=" ">
+        <label>Total Salary Amount</label>
+      </div>
+
+      <div class="span-2" data-staff-salary-split hidden>
+        <h4 class="erp-form-subtitle">Salary Split-up</h4>
+        <p class="erp-form-hint">Enter basic salary above. Optionally add allowance split-up rows — total updates automatically.</p>
+        <div data-staff-components></div>
+        <button type="button" class="erp-btn erp-btn-ghost" data-staff-add-component><i class="fa-solid fa-plus"></i> Add Split-up</button>
+        <p class="erp-form-hint" style="margin-top: 0.5rem;"><strong>Split Total:</strong> ₹ <span data-staff-salary-total-display>0.00</span></p>
+        <template data-staff-component-template>
+          <div class="erp-form-grid staff-component-row" data-staff-component-row style="margin-bottom: 0.5rem; align-items: end;">
+            <div class="erp-field">
+              <select data-component-name class="has-value">
+                {% for opt in salary_component_options %}
+                <option value="{{ opt }}">{{ opt }}</option>
+                {% endfor %}
+              </select>
+              <label>Component</label>
+            </div>
+            <div class="erp-field staff-component-custom-field" data-component-custom-wrap hidden>
+              <input type="text" data-component-custom placeholder=" ">
+              <label>Custom Name</label>
+            </div>
+            <div class="erp-field">
+              <input type="number" min="0" step="0.01" data-component-amount placeholder="0">
+              <label>Amount</label>
+            </div>
+            <div class="erp-field">
+              <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-staff-remove-component><i class="fa-solid fa-trash"></i></button>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <div class="erp-field">
+        <select name="company_room_provided" class="has-value">
+          <option value="No"{% if not form_employee or form_employee.company_room_provided != 'Yes' %} selected{% endif %}>No</option>
+          <option value="Yes"{% if form_employee and form_employee.company_room_provided == 'Yes' %} selected{% endif %}>Yes — Company Provides Room</option>
+        </select>
+        <label>Company Room</label>
+      </div>
+      <div class="erp-field">
+        <select name="company_food_provided" class="has-value">
+          <option value="No"{% if not form_employee or form_employee.company_food_provided != 'Yes' %} selected{% endif %}>No</option>
+          <option value="Yes"{% if form_employee and form_employee.company_food_provided == 'Yes' %} selected{% endif %}>Yes — Company Provides Food</option>
+        </select>
+        <label>Company Food</label>
+      </div>
+
+      <div class="span-2" data-staff-travel-panel hidden>
+        <h4 class="erp-form-subtitle">Travel Expense Eligibility</h4>
+        <p class="erp-form-hint">Set continuous working months for travel eligibility. Example: 3 months → One Side, 6 months → Both Side.</p>
+        <div data-staff-travel-tiers></div>
+        <button type="button" class="erp-btn erp-btn-ghost" data-staff-add-travel><i class="fa-solid fa-plus"></i> Add Travel Rule</button>
+        <template data-staff-travel-template>
+          <div class="erp-form-grid staff-travel-row" data-staff-travel-row style="margin-bottom: 0.5rem; align-items: end;">
+            <div class="erp-field">
+              <input type="number" min="1" step="1" data-travel-months placeholder="e.g. 3">
+              <label>Continuous Months</label>
+            </div>
+            <div class="erp-field">
+              <select data-travel-mode class="has-value">
+                <option value="One Side">One Side Travel</option>
+                <option value="Both Side">Both Side Travel</option>
+              </select>
+              <label>Travel Mode</label>
+            </div>
+            <div class="erp-field">
+              <input type="number" min="0" step="0.01" data-travel-amount placeholder="0">
+              <label>Allowance (₹)</label>
+            </div>
+            <div class="erp-field">
+              <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-staff-remove-travel><i class="fa-solid fa-trash"></i></button>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <input type="hidden" name="salary_components_payload" data-staff-components-payload value="[]">
+      <input type="hidden" name="travel_tiers_payload" data-staff-travel-payload value="[]">
+
       <div class="erp-field"><select name="ot_applicable" class="has-value"><option{% if form_employee and form_employee.ot_applicable == 'Yes' %} selected{% endif %}>Yes</option><option{% if not form_employee or form_employee.ot_applicable != 'Yes' %} selected{% endif %}>No</option></select><label>OT Applicable</label></div>
+      <div class="erp-field"><input name="ot_rate_per_hour" type="number" step="0.01" value="{{ form_employee.ot_rate_per_hour if form_employee else '' }}" placeholder="0"><label>OT Rate / Hour (₹)</label></div>
+      <div class="erp-field"><select name="holiday_pay_applicable" class="has-value"><option value="No"{% if not form_employee or form_employee.holiday_pay_applicable != 'Yes' %} selected{% endif %}>No</option><option value="Yes"{% if form_employee and form_employee.holiday_pay_applicable == 'Yes' %} selected{% endif %}>Yes</option></select><label>Holiday Pay Applicable</label></div>
       <div class="erp-field"><input name="working_hours" type="number" step="0.1" value="{{ form_employee.working_hours if form_employee else '' }}" placeholder=" "><label>Working Hours</label></div>
       <div class="erp-field"><input name="joining_date" type="date" value="{{ form_employee.joining_date if form_employee else '' }}" placeholder=" "><label>Joining Date</label></div>
       <div class="erp-field"><input name="bank_account" value="{{ form_employee.bank_account if form_employee else '' }}" placeholder=" "><label>Bank Account Number</label></div>
@@ -74,6 +165,63 @@
       </div>
     </form>
   </div>
+
+  {% if form_employee %}
+  <div class="erp-form-card staff-increment-card" id="salary-increment">
+    <h3 class="erp-form-title">Salary Increment</h3>
+    <p class="erp-form-hint">Record a new total salary. Current salary: <strong>₹ {{ '%.2f'|format(form_employee.salary_amount or 0) }}</strong></p>
+
+    {% if editing_salary_increments %}
+    <div class="staff-increment-history">
+      <h4 class="erp-form-subtitle">Increment History</h4>
+      <table class="erp-table erp-table-module">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Previous (₹)</th>
+            <th>New (₹)</th>
+            <th>Increment (₹)</th>
+            <th>Remarks</th>
+            <th>Recorded</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for inc in editing_salary_increments %}
+          <tr>
+            <td>{{ inc.effective_date or '—' }}</td>
+            <td>{{ '%.2f'|format(inc.previous_amount or 0) }}</td>
+            <td>{{ '%.2f'|format(inc.new_amount or 0) }}</td>
+            <td>{{ '%.2f'|format(inc.increment_amount or 0) }}</td>
+            <td>{{ inc.remarks or '—' }}</td>
+            <td>{{ inc.created_at|app_datetime }}{% if inc.created_by %}<br><small>{{ inc.created_by }}</small>{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+    <form method="post" class="erp-form-grid staff-increment-form">
+      <input type="hidden" name="form_action" value="add_increment">
+      <input type="hidden" name="staff_id" value="{{ form_employee.id }}">
+      <div class="erp-field">
+        <input type="date" name="effective_date" required>
+        <label>Effective Date</label>
+      </div>
+      <div class="erp-field">
+        <input type="number" step="0.01" name="new_salary_amount" min="0" placeholder=" " required>
+        <label>New Total Salary (₹)</label>
+      </div>
+      <div class="erp-field span-2">
+        <input type="text" name="increment_remarks" placeholder=" ">
+        <label>Remarks</label>
+      </div>
+      <div class="erp-form-actions span-2">
+        <button type="submit" class="erp-btn erp-btn-primary"><i class="fa-solid fa-arrow-trend-up"></i> Save Increment</button>
+      </div>
+    </form>
+  </div>
+  {% endif %}
 
   <div class="erp-table-panel" data-erp-table>
     <div class="erp-table-toolbar">
@@ -110,6 +258,7 @@
             <td>
               <div class="workflow-row-actions">
                 <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-modal-open="staff-detail-{{ row.id }}"><i class="fa-regular fa-eye"></i> View</button>
+                <a href="{{ url_for('employee_profile', employee_type='staff', employee_id=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm"><i class="fa-solid fa-id-card"></i> Profile</a>
                 <a href="{{ url_for('staff', edit=row.id) }}#add-staff" class="erp-btn erp-btn-ghost erp-btn-sm"><i class="fa-solid fa-pen-to-square"></i> Edit</a>
               </div>
             </td>
@@ -150,6 +299,8 @@
         <div><span>Workflow Role</span><strong>{{ row.workflow_access or '—' }}</strong></div>
         <div><span>Salary Type</span><strong>{{ row.salary_type or '—' }}</strong></div>
         <div><span>Salary Amount</span><strong>{{ row.salary_amount if row.salary_amount is not none else '—' }}</strong></div>
+        <div><span>Company Room</span><strong>{{ row.company_room_provided or 'No' }}</strong></div>
+        <div><span>Company Food</span><strong>{{ row.company_food_provided or 'No' }}</strong></div>
         <div><span>OT Applicable</span><strong>{{ row.ot_applicable or '—' }}</strong></div>
         <div><span>Working Hours</span><strong>{{ row.working_hours if row.working_hours is not none else '—' }}</strong></div>
         <div><span>Joining Date</span><strong>{{ row.joining_date or '—' }}</strong></div>
@@ -161,6 +312,64 @@
         <div><span>Branch</span><strong>{{ row.branch_name or '—' }}</strong></div>
       </div>
     </div>
+
+    {% if row.salary_components %}
+    <div style="margin-top: 1rem;">
+      <h4 class="erp-form-subtitle">Salary Split-up</h4>
+      <table class="erp-table erp-table-module">
+        <thead><tr><th>Component</th><th>Amount (₹)</th></tr></thead>
+        <tbody>
+          {% for c in row.salary_components %}
+          <tr><td>{{ c.component_name }}</td><td>{{ '%.2f'|format(c.amount or 0) }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+    {% if row.travel_tiers %}
+    <div style="margin-top: 1rem;">
+      <h4 class="erp-form-subtitle">Travel Expense Rules</h4>
+      <table class="erp-table erp-table-module">
+        <thead><tr><th>After Continuous Months</th><th>Travel Mode</th><th>Allowance (₹)</th></tr></thead>
+        <tbody>
+          {% for t in row.travel_tiers %}
+          <tr>
+            <td>{{ t.continuous_months }}</td>
+            <td>{{ t.travel_mode }}</td>
+            <td>{{ '%.2f'|format(t.allowance_amount or 0) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+    {% if row.salary_increments %}
+    <div style="margin-top: 1rem;">
+      <h4 class="erp-form-subtitle">Salary Increment History</h4>
+      <table class="erp-table erp-table-module">
+        <thead><tr><th>Date</th><th>Previous</th><th>New</th><th>Increment</th><th>Remarks</th><th>Recorded</th></tr></thead>
+        <tbody>
+          {% for inc in row.salary_increments %}
+          <tr>
+            <td>{{ inc.effective_date or '—' }}</td>
+            <td>{{ '%.2f'|format(inc.previous_amount or 0) }}</td>
+            <td>{{ '%.2f'|format(inc.new_amount or 0) }}</td>
+            <td>{{ '%.2f'|format(inc.increment_amount or 0) }}</td>
+            <td>{{ inc.remarks or '—' }}</td>
+            <td>{{ inc.created_at|app_datetime }}{% if inc.created_by %}<br><small>{{ inc.created_by }}</small>{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+    {% if not row.salary_increments %}
+    <p class="erp-form-hint" style="margin-top: 1rem;">No salary increments recorded yet.</p>
+    {% endif %}
+
     <div class="employee-document-links">
       {% if row.id_proof %}<a href="{{ url_for('static', filename='uploads/staff/' ~ row.id_proof) }}" target="_blank" rel="noopener"><i class="fa-solid fa-id-card"></i> ID Proof</a>{% endif %}
       {% if row.aadhaar_document %}<a href="{{ url_for('static', filename='uploads/staff/' ~ row.aadhaar_document) }}" target="_blank" rel="noopener"><i class="fa-solid fa-file-lines"></i> Aadhaar</a>{% endif %}
@@ -169,8 +378,13 @@
     </div>
     <div class="employee-detail-actions">
       <a href="{{ url_for('staff', edit=row.id) }}#add-staff" class="erp-btn erp-btn-primary"><i class="fa-solid fa-pen-to-square"></i> Edit Employee</a>
+      <a href="{{ url_for('staff', edit=row.id) }}#salary-increment" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-arrow-trend-up"></i> Add Increment</a>
+      <a href="{{ url_for('staff_bonus', tab='calculation') }}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-gift"></i> Staff Bonus</a>
     </div>
   </div>
 </div>
 {% endfor %}
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/staff-forms.js') }}"></script>
 {% endblock %}

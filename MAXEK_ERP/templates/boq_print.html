@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>BOQ {{ boq.boq_number }} — MAXEK ERP</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: Arial, Helvetica, sans-serif; margin: 2rem; color: #111; }
+    h1 { margin: 0 0 0.25rem; font-size: 1.5rem; }
+    .meta { color: #555; margin-bottom: 1.5rem; font-size: 0.9rem; }
+    table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+    th, td { border: 1px solid #ccc; padding: 0.5rem 0.65rem; text-align: left; font-size: 0.9rem; }
+    th { background: #f3f4f6; }
+    .num { text-align: right; }
+    tfoot td { font-weight: bold; background: #f9fafb; }
+    .no-print { margin-bottom: 1rem; }
+    @media print {
+      .no-print { display: none; }
+      body { margin: 0.5rem; }
+    }
+  </style>
+  {% if autoprint %}
+  <script>window.addEventListener('load', function () { window.print(); });</script>
+  {% endif %}
+</head>
+<body>
+  <div class="no-print">
+    <button type="button" onclick="window.print()">Print</button>
+    <a href="{{ url_for('boq_management', view=boq.id) }}">Back to BOQ</a>
+  </div>
+
+  <h1>Bill of Quantities — {{ boq.boq_number }}</h1>
+  <div class="meta">
+    <div><strong>Project:</strong> {{ boq.project_code or '—' }} — {{ boq.project_name or '—' }}</div>
+    <div><strong>Status:</strong> {{ boq.approval_status or '—' }}</div>
+    <div><strong>Created:</strong> {{ boq.created_by or '—' }} · {{ boq.created_at or '—' }}</div>
+    <div><strong>Generated:</strong> {{ generated_at }}</div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Item No.</th>
+        <th>Description</th>
+        <th class="num">Qty</th>
+        <th>Unit</th>
+        <th class="num">Rate</th>
+        <th class="num">Amount</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for line in lines %}
+      <tr>
+        <td>{{ line.item_code or ('BOQ' ~ (line.line_no or loop.index)) }}</td>
+        <td>{{ line.item_description or '—' }}</td>
+        <td class="num">{{ line.quantity or 0 }}</td>
+        <td>{{ line.unit or '—' }}</td>
+        <td class="num">{{ '%.2f'|format(line.rate or 0) }}</td>
+        <td class="num">{{ '%.2f'|format(line.amount or 0) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr>
+        <td colspan="5" class="num">Grand Total</td>
+        <td class="num">{{ '%.2f'|format(boq.total_amount or 0) }}</td>
+      </tr>
+    </tfoot>
+  </table>
+</body>
+</html>

@@ -1,0 +1,236 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Corporate DMS' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('settings') ~ '">Settings</a> &gt; Corporate DMS' %}
+{% block page_actions %}
+<button type="button" class="erp-btn erp-btn-primary" onclick="document.getElementById('dms-upload-panel').classList.add('is-open')"><i class="fa-solid fa-file-arrow-up"></i> Upload Document</button>
+<a href="{{ url_for('settings') }}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-gear"></i> Settings</a>
+{% endblock %}
+{% block content %}
+<style>
+  .dms-layout { display: grid; grid-template-columns: 220px 1fr; gap: 1rem; align-items: start; }
+  @media (max-width: 900px) { .dms-layout { grid-template-columns: 1fr; } }
+  .dms-folder-tree { border: 1px solid var(--erp-border, #e5e7eb); border-radius: 8px; padding: 0.75rem; background: #fafafa; }
+  .dms-folder-tree ul { list-style: none; margin: 0; padding-left: 0.75rem; }
+  .dms-folder-tree > ul { padding-left: 0; }
+  .dms-folder-link { display: block; padding: 0.35rem 0.5rem; border-radius: 6px; text-decoration: none; color: #374151; font-size: 0.9rem; }
+  .dms-folder-link.is-active, .dms-folder-link:hover { background: #e0e7ff; color: #1e40af; }
+  .dms-upload-panel { display: none; margin-bottom: 1rem; padding: 1rem; border: 1px solid var(--erp-border, #e5e7eb); border-radius: 8px; background: #fafafa; }
+  .dms-upload-panel.is-open { display: block; }
+  .dms-stats { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.75rem; font-size: 0.9rem; color: #4b5563; }
+  .expiry-badge { font-size: 0.75rem; padding: 0.15rem 0.45rem; border-radius: 999px; }
+  .expiry-overdue { background: #fee2e2; color: #991b1b; }
+  .expiry-soon { background: #fef3c7; color: #92400e; }
+  .expiry-valid { background: #dcfce7; color: #166534; }
+</style>
+
+{% if expiry_alerts.total_alerts %}
+<div class="erp-alert erp-alert-warning" style="margin-bottom:1rem;">
+  <strong><i class="fa-solid fa-triangle-exclamation"></i> Document expiry alerts ({{ expiry_alerts.total_alerts }})</strong>
+  <ul style="margin:0.5rem 0 0 1rem;">
+    {% for item in expiry_alerts.expiring_overdue %}
+    <li>Expired: {{ item.title }} — {{ item.folder_name }} ({{ item.expiry_date }})</li>
+    {% endfor %}
+    {% for days in expiry_alerts.alert_days %}
+      {% for item in expiry_alerts.expiring[days|string] %}
+    <li>Within {{ days }} days: {{ item.title }} — {{ item.folder_name }} ({{ item.expiry_date }})</li>
+      {% endfor %}
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<div id="dms-upload-panel" class="dms-upload-panel {% if show_upload or edit_document %}is-open{% endif %}">
+  <h3 style="margin:0 0 0.75rem;font-size:1rem;">{% if edit_document %}Edit {{ edit_document.title }}{% else %}Upload corporate document{% endif %}</h3>
+  <form method="post" enctype="multipart/form-data" class="erp-form-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:0.75rem;">
+    <input type="hidden" name="form_action" value="save_document">
+    {% if edit_document %}<input type="hidden" name="document_id" value="{{ edit_document.id }}">{% endif %}
+    <label>Folder *
+      <select name="folder_id" required>
+        <option value="">Select folder</option>
+        {% for f in folders %}
+        <option value="{{ f.id }}" {% if (edit_document and edit_document.folder_id == f.id) or folder_filter == f.id %}selected{% endif %}>{{ f.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Title *
+      <input type="text" name="title" required value="{{ edit_document.title if edit_document else '' }}">
+    </label>
+    <label>Document Type
+      <select name="doc_type">
+        {% for t in document_types %}
+        <option value="{{ t }}" {% if edit_document and edit_document.doc_type == t %}selected{% endif %}>{{ t }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Issue Date
+      <input type="date" name="issue_date" value="{{ edit_document.issue_date if edit_document else default_date }}">
+    </label>
+    <label>Expiry Date
+      <input type="date" name="expiry_date" value="{{ edit_document.expiry_date if edit_document else '' }}">
+    </label>
+    <label>Tags
+      <input type="text" name="tags" placeholder="Comma-separated" value="{{ edit_document.tags if edit_document else '' }}">
+    </label>
+    <label style="grid-column:1/-1;">Notes
+      <textarea name="notes" rows="2">{{ edit_document.notes if edit_document else '' }}</textarea>
+    </label>
+    <label>File {% if not edit_document %}*{% else %}(leave blank to keep current){% endif %}
+      <input type="file" name="document_file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx" {% if not edit_document %}required{% endif %}>
+    </label>
+    {% if edit_document %}
+    <label>Version notes
+      <input type="text" name="change_notes" placeholder="What changed in this version?">
+    </label>
+    {% endif %}
+    <div style="grid-column:1/-1;">
+      <button type="submit" class="erp-btn erp-btn-primary">{% if edit_document %}Save &amp; New Version{% else %}Upload{% endif %}</button>
+      {% if edit_document %}
+      <a href="{{ url_for('corporate_dms', folder_id=folder_filter or none) }}" class="erp-btn erp-btn-ghost">Cancel</a>
+      {% endif %}
+    </div>
+  </form>
+</div>
+
+<div class="dms-layout">
+  <aside class="dms-folder-tree">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
+      <strong>Folders</strong>
+    </div>
+    <ul>
+      <li><a href="{{ url_for('corporate_dms') }}" class="dms-folder-link {% if not folder_filter %}is-active{% endif %}">All documents</a></li>
+      {% for node in folder_tree %}
+      <li>
+        <a href="{{ url_for('corporate_dms', folder_id=node.id) }}" class="dms-folder-link {% if folder_filter == node.id %}is-active{% endif %}">{{ node.name }}</a>
+        {% if node.children %}
+        <ul>
+          {% for child in node.children %}
+          <li><a href="{{ url_for('corporate_dms', folder_id=child.id) }}" class="dms-folder-link {% if folder_filter == child.id %}is-active{% endif %}">{{ child.name }}</a></li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    <details style="margin-top:1rem;font-size:0.85rem;">
+      <summary style="cursor:pointer;font-weight:600;">Manage folders</summary>
+      <form method="post" style="margin-top:0.5rem;display:flex;flex-direction:column;gap:0.35rem;">
+        <input type="hidden" name="form_action" value="save_folder">
+        <input type="text" name="folder_name" placeholder="New folder name" required>
+        <select name="parent_id">
+          <option value="">Top level</option>
+          {% for f in folders %}
+          <option value="{{ f.id }}">{{ f.name }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Add folder</button>
+      </form>
+    </details>
+  </aside>
+
+  <section>
+    <form method="get" class="erp-table-toolbar" style="margin-bottom:0.75rem;display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+      {% if folder_filter %}<input type="hidden" name="folder_id" value="{{ folder_filter }}">{% endif %}
+      <input name="q" value="{{ search }}" placeholder="Search title, tags, notes…" style="max-width:220px;">
+      <select name="doc_type" style="max-width:160px;">
+        <option value="">All types</option>
+        {% for t in document_types %}
+        <option value="{{ t }}" {% if doc_type_filter == t %}selected{% endif %}>{{ t }}</option>
+        {% endfor %}
+      </select>
+      <select name="expiry_status" style="max-width:160px;">
+        <option value="">Any expiry</option>
+        <option value="expiring" {% if expiry_status_filter == 'expiring' %}selected{% endif %}>Expiring soon</option>
+        <option value="expired" {% if expiry_status_filter == 'expired' %}selected{% endif %}>Expired</option>
+        <option value="no_expiry" {% if expiry_status_filter == 'no_expiry' %}selected{% endif %}>No expiry date</option>
+      </select>
+      <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Filter</button>
+    </form>
+
+    <div class="dms-stats">
+      <span><strong>{{ stats.total }}</strong> documents</span>
+      {% for t, cnt in stats.by_type.items() %}
+      <span>{{ t }}: {{ cnt }}</span>
+      {% endfor %}
+    </div>
+
+    <div class="erp-table-panel" data-erp-table>
+      <div class="erp-table-scroll">
+        <table class="erp-table">
+          <thead>
+            <tr>
+              <th>Title</th>
+              <th>Folder</th>
+              <th>Type</th>
+              <th>Issue</th>
+              <th>Expiry</th>
+              <th>Ver.</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for doc in documents %}
+            <tr>
+              <td>
+                <strong>{{ doc.title }}</strong>
+                {% if doc.tags %}<br><small>{{ doc.tags }}</small>{% endif %}
+              </td>
+              <td>{{ doc.folder_name }}</td>
+              <td>{{ doc.doc_type or '—' }}</td>
+              <td>{{ doc.issue_date or '—' }}</td>
+              <td>
+                {{ doc.expiry_date or '—' }}
+                {% if doc.expiry_bucket == 'overdue' %}
+                <span class="expiry-badge expiry-overdue">{{ doc.expiry_status }}</span>
+                {% elif doc.expiry_bucket %}
+                <span class="expiry-badge expiry-soon">{{ doc.expiry_status }}</span>
+                {% elif doc.expiry_date %}
+                <span class="expiry-badge expiry-valid">{{ doc.expiry_status }}</span>
+                {% endif %}
+              </td>
+              <td>v{{ doc.current_version }}</td>
+              <td style="white-space:nowrap;">
+                {% if doc.file_path %}
+                <a href="{{ url_for('corporate_dms_file', document_id=doc.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm" target="_blank">View</a>
+                <a href="{{ url_for('corporate_dms_download', document_id=doc.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Download</a>
+                {% endif %}
+                <a href="{{ url_for('corporate_dms', edit_document=doc.id, folder_id=folder_filter or none) }}#dms-upload-panel" class="erp-btn erp-btn-ghost erp-btn-sm">Edit</a>
+                <a href="{{ url_for('corporate_dms', view_document=doc.id, folder_id=folder_filter or none) }}" class="erp-btn erp-btn-ghost erp-btn-sm">History</a>
+                <form method="post" style="display:inline;" onsubmit="return confirm('Delete this document?');">
+                  <input type="hidden" name="form_action" value="delete_document">
+                  <input type="hidden" name="document_id" value="{{ doc.id }}">
+                  <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm" style="color:#b91c1c;">Delete</button>
+                </form>
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="7">No documents found.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {% if view_document %}
+    <div class="erp-form-card" style="margin-top:1rem;">
+      <h3 class="erp-form-title">Version history — {{ view_document.title }}</h3>
+      <table class="erp-table">
+        <thead><tr><th>Ver.</th><th>File</th><th>Notes</th><th>Uploaded</th><th></th></tr></thead>
+        <tbody>
+          {% for v in view_document.versions %}
+          <tr>
+            <td>v{{ v.version_no }}</td>
+            <td>{{ v.original_filename or v.file_path }}</td>
+            <td>{{ v.change_notes or '—' }}</td>
+            <td>{{ v.uploaded_by or '—' }} · {{ v.uploaded_at or '—' }}</td>
+            <td>
+              <a href="{{ url_for('corporate_dms_download', document_id=view_document.id, version_id=v.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Download</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}
