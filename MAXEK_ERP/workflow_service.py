@@ -302,6 +302,30 @@ DEFAULT_MODULES = [
         "checker": "Accounts Manager",
         "approver": "Managing Director",
     },
+    {
+        "module_id": "subcontractor_billing",
+        "module_name": "Subcontractor Bills",
+        "workflow_role_mapping": "Project Staff → Accounts Manager → Managing Director",
+        "maker": "Project Staff",
+        "checker": "Accounts Manager",
+        "approver": "Managing Director",
+    },
+    {
+        "module_id": "employee_timesheet",
+        "module_name": "Employee Monthly Timesheet",
+        "workflow_role_mapping": "Supervisor → Project Manager → Managing Director",
+        "maker": "Supervisor",
+        "checker": "Project Manager",
+        "approver": "Managing Director",
+    },
+    {
+        "module_id": "cost_planning",
+        "module_name": "Cost Planning",
+        "workflow_role_mapping": "Project Engineer → Project Manager → Managing Director",
+        "maker": "Project Engineer",
+        "checker": "Project Manager",
+        "approver": "Managing Director",
+    },
 ]
 
 ALLOWED_RECORD_TABLES = {
@@ -341,6 +365,9 @@ ALLOWED_RECORD_TABLES = {
     "materials",
     "vendors",
     "client_bills",
+    "subcontractor_bills",
+    "employee_monthly_timesheets",
+    "cost_plans",
     "bank_accounts",
     "bank_payments",
     "bank_receipts",

@@ -78,6 +78,7 @@ def ensure_cost_planning_tables(db) -> None:
             boq_quantity REAL DEFAULT 0,
             boq_unit TEXT,
             plan_status TEXT DEFAULT 'Draft',
+            approval_status TEXT DEFAULT 'Pending Checker',
             remarks TEXT,
             created_by TEXT,
             created_at TEXT,
@@ -95,6 +96,7 @@ def ensure_cost_planning_tables(db) -> None:
         ("boq_quantity", "REAL DEFAULT 0"),
         ("boq_unit", "TEXT"),
         ("plan_status", "TEXT DEFAULT 'Draft'"),
+        ("approval_status", "TEXT DEFAULT 'Pending Checker'"),
         ("remarks", "TEXT"),
         ("created_by", "TEXT"),
         ("created_at", "TEXT"),
@@ -829,11 +831,11 @@ def save_cost_plan_from_form(db, form, username: str) -> tuple[int | None, str |
             return None, "Cost plan already exists for this BOQ item. Edit the existing plan."
         cur = db.execute(
             "INSERT INTO cost_plans(project_id, boq_master_id, boq_item_id, boq_quantity, boq_unit, "
-            "plan_status, remarks, created_by, created_at, modified_by, modified_at) "
-            "VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+            "plan_status, approval_status, remarks, created_by, created_at, modified_by, modified_at) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 project_id, boq_master_id, boq_item_id, boq_qty, boq_unit,
-                plan_status, remarks, username, now, username, now,
+                plan_status, "Pending Checker", remarks, username, now, username, now,
             ),
         )
         plan_id = cur.lastrowid

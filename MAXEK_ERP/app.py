@@ -129,7 +129,30 @@ from treasury_service import (
 )
 from budget_service import ensure_budget_schema, seed_budget_demo_data
 from profitability_service import ensure_profitability_schema, seed_profitability_demo_data
+from contract_service import ensure_contract_schema, seed_contract_demo_data
+from claims_service import ensure_claims_schema, seed_claims_demo_data
+from equipment_costing_service import (
+    ensure_equipment_costing_schema,
+    seed_equipment_costing_demo_data,
+)
+from labour_productivity_service import (
+    ensure_labour_productivity_schema,
+    seed_labour_productivity_demo_data,
+)
 from treasury_routes import register_treasury_routes
+from alert_engine_service import (
+    ensure_alert_engine_schema,
+    generate_alerts,
+    get_alert_counts_by_severity,
+)
+from document_numbering_service import (
+    ensure_document_numbering_schema,
+    seed_default_sequences,
+)
+from backup_service import (
+    ensure_backup_schema,
+    run_scheduled_backup_if_due,
+)
 
 from office_fleet_service import (
     INWARD_MODES,
@@ -4369,6 +4392,7 @@ def ensure_notifications_schema(db):
 
 
 _SCHEMA_BOOTSTRAPPED = False
+_BACKUP_SCHEDULE_CHECKED = False
 
 
 def ensure_runtime_schema(db=None, force=False):
@@ -4444,10 +4468,20 @@ def ensure_runtime_schema(db=None, force=False):
         "store_issues",
     ):
         _ensure_column(db, table, "approval_status", "TEXT DEFAULT 'Pending Checker'")
+    _ensure_column(db, "material_requests", "request_date", "TEXT")
+    _ensure_column(db, "material_requests", "material_id", "INTEGER")
     ensure_petty_cash_tables(db)
     ensure_security_guarantees_tables(db)
     ensure_treasury_schema(db)
     ensure_budget_schema(db)
+    ensure_contract_schema(db)
+    ensure_claims_schema(db)
+    ensure_equipment_costing_schema(db)
+    ensure_labour_productivity_schema(db)
+    ensure_alert_engine_schema(db)
+    ensure_document_numbering_schema(db)
+    seed_default_sequences(db)
+    ensure_backup_schema(db)
     ensure_cost_planning_tables(db)
     ensure_payroll_tables(db)
     ensure_attendance_master_schema(db)
@@ -4475,6 +4509,27 @@ def ensure_runtime_schema(db=None, force=False):
         pass
     db.commit()
     _SCHEMA_BOOTSTRAPPED = True
+    _run_startup_backup_schedule(db)
+
+
+def _run_startup_backup_schedule(db=None):
+    """Lightweight scheduled backup check once per process after schema is ready."""
+    global _BACKUP_SCHEDULE_CHECKED
+    if _BACKUP_SCHEDULE_CHECKED:
+        return
+    if db is None:
+        db = get_db()
+    try:
+        ensure_backup_schema(db)
+        result = run_scheduled_backup_if_due(db, DB_PATH)
+        _BACKUP_SCHEDULE_CHECKED = True
+        if result.get("created"):
+            app.logger.info(
+                "Scheduled backups created on startup: %s",
+                result.get("created"),
+            )
+    except Exception:
+        app.logger.exception("Startup backup schedule check failed")
 
 
 def _create_transaction_tables(cursor):
@@ -4922,6 +4977,14 @@ def init_db():
     ensure_treasury_schema(db)
     ensure_budget_schema(db)
     ensure_profitability_schema(db)
+    ensure_contract_schema(db)
+    ensure_claims_schema(db)
+    ensure_equipment_costing_schema(db)
+    ensure_labour_productivity_schema(db)
+    ensure_alert_engine_schema(db)
+    ensure_document_numbering_schema(db)
+    seed_default_sequences(db)
+    ensure_backup_schema(db)
     ensure_cost_planning_tables(db)
     ensure_staff_hr_tables(db)
     ensure_staff_bonus_table(db)
@@ -4962,7 +5025,15 @@ def init_db():
         seed_treasury_demo_data(db)
         seed_budget_demo_data(db)
         seed_profitability_demo_data(db)
+        seed_contract_demo_data(db)
+        seed_claims_demo_data(db)
+        seed_equipment_costing_demo_data(db)
+        seed_labour_productivity_demo_data(db)
         db.commit()
+    try:
+        generate_alerts(db)
+    except Exception:
+        pass
 
 
 def query_db(query, args=(), one=False):
@@ -5047,14 +5118,18 @@ MODULE_ROUTES = {
     "payroll": "payroll",
     "daily_timesheet": "attendance",
     "monthly_staff_attendance": "attendance",
+    "employee_timesheet": "employee_timesheets_form",
     "project_expenses": "project_expenses",
     "head_office_expenses": "head_office_expenses",
     "subcontract": "subcontract_request",
     "subcontract_payments": "subcontract_payments",
+    "subcontractor_billing": "sub_billing_form",
     "boq": "boq_management",
     "boq_bulk": "boq_multiple_entry",
     "dpr": "dpr_entry",
     "project_creation": "projects",
+    "cost_planning": "cost_planning",
+    "project_documents": "project_documents",
     "manager_tool": "manager_tool",
     "account_expense": "accounts_expenses",
     "payment_voucher": "accounts_payments",
@@ -5072,6 +5147,57 @@ MODULE_ROUTES = {
     "bank_receipt": "treasury_receipts",
     "bank_guarantee": "treasury_bank_guarantees",
 }
+
+
+CLIENT_BILLING_NAV_ACTIVE = [
+    "client_billing_register",
+    "client_billing_form",
+    "client_billing_reports",
+    "client_billing_print",
+    "client_billing_import_dpr",
+    "client_billing_attachment",
+]
+
+PROJECT_PHOTOS_NAV_ACTIVE = [
+    "project_photos_register",
+    "project_photos_timeline",
+    "project_photos_reports",
+    "project_photos_report_print",
+    "project_photos_file",
+]
+
+FLEET_NAV_ACTIVE = [
+    "fleet_dashboard",
+    "fleet_vehicles",
+    "fleet_vehicle_print",
+    "fleet_vehicle_documents",
+    "fleet_running_log",
+    "fleet_diesel_purchase",
+    "fleet_diesel_stock",
+    "fleet_diesel_issue",
+    "fleet_document_download",
+]
+
+PLANT_NAV_ACTIVE = [
+    "plant_dashboard",
+    "plant_plants",
+    "plant_asphalt_production",
+    "plant_asphalt_dispatch",
+    "plant_asphalt_dispatch_print",
+    "plant_rmc_production",
+    "plant_rmc_dispatch",
+    "plant_rmc_dispatch_print",
+    "plant_wetmix_production",
+    "plant_precast_production",
+    "precast_yard",
+    "precast_yard_yards",
+    "plant_precast_dispatch",
+    "plant_crusher_production",
+    "plant_qc",
+    "plant_maintenance",
+    "plant_costing",
+    "plant_360",
+]
 
 
 def _workflow_view_context(module_id, record_id, record_table, approval_status):
@@ -5107,11 +5233,30 @@ def _history_for_record(module_id, record_id, record_table):
 
 
 APPROVAL_MODULE_GROUPS = {
-    "purchase": ("purchase_request", "purchase_order"),
+    "purchase": (
+        "purchase_request",
+        "purchase_order",
+        "cost_planning",
+        "boq",
+        "project_creation",
+        "dpr",
+    ),
     "store": ("material_request", "store_issue", "store_receipt", "material_transfer"),
-    "timesheet": ("daily_timesheet", "monthly_staff_attendance"),
-    "payroll": ("payroll",),
-    "payment": ("account_payment", "payment_voucher", "petty_cash"),
+    "timesheet": ("daily_timesheet", "monthly_staff_attendance", "employee_timesheet"),
+    "payroll": ("payroll", "leave_request"),
+    "payment": (
+        "account_payment",
+        "payment_voucher",
+        "petty_cash",
+        "client_billing",
+        "subcontractor_billing",
+        "subcontract_payments",
+        "bank_guarantee",
+        "bank_payment",
+        "bank_receipt",
+        "account_receipt",
+        "receipt_voucher",
+    ),
 }
 
 NAV_GROUPS = [
@@ -5147,7 +5292,7 @@ NAV_GROUPS = [
             {
                 "endpoint": "boq_multiple_entry",
                 "label": "BOQ Multiple Item Entry",
-                "active_endpoints": ["boq_multiple_entry"],
+                "active_endpoints": ["boq_multiple_entry", "boq_print"],
             },
             {
                 "endpoint": "cost_planning",
@@ -5157,6 +5302,19 @@ NAV_GROUPS = [
                     "cost_planning_export",
                     "cost_planning_print",
                     "cost_planning_reports",
+                    "wbs_redirect",
+                ],
+            },
+            {
+                "endpoint": "cost_planning",
+                "label": "WBS",
+                "anchor": "wbs-view",
+                "active_endpoints": [
+                    "cost_planning",
+                    "cost_planning_export",
+                    "cost_planning_print",
+                    "cost_planning_reports",
+                    "wbs_redirect",
                 ],
             },
             {
@@ -5174,6 +5332,26 @@ NAV_GROUPS = [
                 "endpoint": "project_expenses",
                 "label": "Project Costing",
                 "active_endpoints": ["project_expenses"],
+            },
+            {
+                "endpoint": "client_billing_register",
+                "label": "Client Billing",
+                "active_endpoints": CLIENT_BILLING_NAV_ACTIVE,
+            },
+            {
+                "endpoint": "project_photos_register",
+                "label": "Project Photos",
+                "active_endpoints": PROJECT_PHOTOS_NAV_ACTIVE,
+            },
+            {
+                "endpoint": "project_documents",
+                "label": "Project Documents",
+                "active_endpoints": ["project_documents", "project_document_download", "projects"],
+            },
+            {
+                "endpoint": "qc_master",
+                "label": "QC Master",
+                "active_endpoints": ["qc_master", "plant_qc"],
             },
             {
                 "endpoint": "reports",
@@ -5194,9 +5372,24 @@ NAV_GROUPS = [
             },
             {"endpoint": "attendance", "label": "Attendance", "active_endpoints": ["attendance"]},
             {
+                "endpoint": "employee_timesheets",
+                "label": "Monthly Timesheets",
+                "active_endpoints": [
+                    "employee_timesheets",
+                    "employee_timesheets_form",
+                    "employee_timesheets_submit",
+                    "employee_timesheets_print",
+                ],
+            },
+            {
                 "endpoint": "timesheet",
-                "label": "Timesheet",
-                "active_endpoints": ["timesheet", "employee_timesheets", "employee_timesheets_form"],
+                "label": "Daily Timesheet Register",
+                "active_endpoints": ["timesheet"],
+            },
+            {
+                "endpoint": "leave_request",
+                "label": "Leave Management",
+                "active_endpoints": ["leave_request"],
             },
             {
                 "endpoint": "payroll",
@@ -5206,9 +5399,13 @@ NAV_GROUPS = [
                     "payroll_payments",
                     "payroll_print_slip",
                     "payroll_export_register",
-                    "payroll_revisions",
                     "payroll_holidays",
                 ],
+            },
+            {
+                "endpoint": "payroll_revisions",
+                "label": "Rate Revisions",
+                "active_endpoints": ["payroll_revisions"],
             },
             {"endpoint": "salary", "label": "Salary Processing", "active_endpoints": ["salary"]},
         ],
@@ -5287,6 +5484,23 @@ NAV_GROUPS = [
                 "active_endpoints": ["material_transfer"],
             },
             {"endpoint": "inventory", "label": "Inventory Stock", "active_endpoints": ["inventory"]},
+            {
+                "endpoint": "fleet_dashboard",
+                "label": "Fleet Management",
+                "active_endpoints": FLEET_NAV_ACTIVE,
+            },
+        ],
+    },
+    {
+        "label": "Plant Operations",
+        "icon": "fa-industry",
+        "slug": "plant",
+        "items": [
+            {
+                "endpoint": "plant_dashboard",
+                "label": "Plant Dashboard",
+                "active_endpoints": PLANT_NAV_ACTIVE,
+            },
         ],
     },
     {
@@ -5353,9 +5567,35 @@ NAV_GROUPS = [
                     "treasury_budget_control",
                     "treasury_budget_control_project",
                     "treasury_budget_control_edit",
+                    "treasury_project_profitability",
+                    "treasury_contract_management",
+                    "treasury_contract_management_new",
+                    "treasury_contract_management_detail",
+                    "treasury_contract_management_project",
+                    "treasury_equipment_costing",
+                    "treasury_labour_productivity",
+                    "treasury_labour_productivity_new",
+                    "treasury_labour_productivity_detail",
+                    "treasury_labour_productivity_project",
                     "treasury_document_vault",
                     "treasury_cash_flow_forecast",
+                    "treasury_command_center",
+                    "treasury_alert_engine",
+                    "treasury_alert_engine_settings",
+                    "treasury_alert_engine_refresh",
+                    "treasury_alert_engine_dismiss",
+                    "treasury_bank_guarantees",
                 ],
+            },
+            {
+                "endpoint": "securities_guarantees",
+                "label": "Securities Register",
+                "active_endpoints": ["securities_guarantees", "securities_guarantees_export"],
+            },
+            {
+                "endpoint": "treasury_bank_guarantees",
+                "label": "Treasury Bank Guarantees",
+                "active_endpoints": ["treasury_bank_guarantees"],
             },
             {
                 "endpoint": "treasury_cheques",
@@ -5420,7 +5660,21 @@ NAV_GROUPS = [
             {
                 "endpoint": "settings",
                 "label": "Company Settings",
-                "active_endpoints": ["settings", "company_master", "company_document_download"],
+                "active_endpoints": ["settings"],
+            },
+            {
+                "endpoint": "company_master",
+                "label": "Company Master",
+                "active_endpoints": ["company_master", "company_document_download"],
+            },
+            {
+                "endpoint": "corporate_dms",
+                "label": "Corporate DMS",
+                "active_endpoints": [
+                    "corporate_dms",
+                    "corporate_dms_file",
+                    "corporate_dms_download",
+                ],
             },
             {
                 "endpoint": "workflow_settings",
@@ -5557,6 +5811,14 @@ def inject_maxek_layout():
         notifs = get_notifications(db, user_id, limit=10, unread_only=True)
     except sqlite3.OperationalError:
         notifs = []
+    try:
+        system_alert_counts = get_alert_counts_by_severity(db)
+    except sqlite3.OperationalError:
+        ensure_runtime_schema(db, force=True)
+        try:
+            system_alert_counts = get_alert_counts_by_severity(db)
+        except sqlite3.OperationalError:
+            system_alert_counts = {"info": 0, "warning": 0, "critical": 0, "total": 0}
     approval_total = widgets["maker"] + widgets["checker"] + widgets["approver"]
     nav_slug = (request.view_args or {}).get("slug") if request.endpoint == "department_hub" else None
     current_nav_group = active_nav_group(request.endpoint, nav_slug)
@@ -5604,6 +5866,7 @@ def inject_maxek_layout():
         "approval_summary": approval_summary,
         "workflow_caps": workflow_caps,
         "user_notifications": notifs,
+        "system_alert_counts": system_alert_counts,
         "display_status": display_status,
         "maker_status_message": maker_status_message,
         "format_decimal_hours": format_decimal_hours,
@@ -6105,6 +6368,13 @@ def staff():
         row["travel_tiers"] = _fetch_staff_travel_tiers(db, row["id"])
         row["salary_increments"] = _fetch_staff_salary_increments(db, row["id"])
         rows.append(row)
+    editing_basic_salary = ""
+    for component in editing_components:
+        if (component.get("component_name") or "").strip().lower() == "basic salary":
+            editing_basic_salary = component.get("amount") or ""
+            break
+    if editing_basic_salary == "" and editing_staff and editing_staff["salary_type"] == "Monthly":
+        editing_basic_salary = editing_staff["salary_amount"] or ""
     return render_template(
         "staff.html",
         rows=rows,
@@ -6116,6 +6386,7 @@ def staff():
         editing_components=editing_components,
         editing_travel_tiers=editing_travel_tiers,
         editing_salary_increments=editing_salary_increments,
+        editing_basic_salary=editing_basic_salary,
         salary_component_options=STAFF_SALARY_COMPONENT_OPTIONS,
     )
 
@@ -10004,9 +10275,13 @@ def boq_multiple_entry():
     db = get_db()
     ensure_boq_master_table(db)
     module_id, table, endpoint = "boq", "boq_master", "boq_multiple_entry"
+    user_id = session.get("user_id")
+    admin = is_admin_user()
+    wf_ctx = {}
 
     if request.method == "POST":
         project_id = request.form.get("project_id", "").strip()
+        boq_id = request.form.get("boq_id", "").strip()
         lines, parse_error = _parse_boq_line_items(max_lines=MAX_BOQ_BULK_LINES)
 
         if not project_id:
@@ -10025,6 +10300,32 @@ def boq_multiple_entry():
         total_amount = round(sum(line["amount"] for line in lines), 2)
         created_by = session.get("username", "")
         created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        if boq_id:
+            existing_boq = query_db(
+                "SELECT * FROM boq_master WHERE id=? AND COALESCE(is_deleted, 0)=0",
+                (boq_id,),
+                one=True,
+            )
+            if not existing_boq:
+                flash("BOQ record not found.")
+                return redirect(url_for(endpoint))
+            edit_role = get_edit_role_for_user(
+                db, user_id, module_id, existing_boq["approval_status"], admin
+            )
+            if not edit_role:
+                flash("This record is locked and cannot be edited.")
+                return redirect(url_for(endpoint, view=boq_id))
+            db.execute(
+                "UPDATE boq_master SET project_id=?, total_amount=?, line_count=?, "
+                "modified_by=?, modified_at=? WHERE id=?",
+                (project_id, total_amount, len(lines), created_by, created_at, boq_id),
+            )
+            db.execute("DELETE FROM boq_items WHERE boq_id=?", (boq_id,))
+            _insert_boq_lines(db, int(boq_id), project_id, lines, created_by, created_at)
+            _complete_module_save(db, module_id, table, int(boq_id), edit_role)
+            return redirect(url_for(endpoint, view=boq_id))
+
         boq_number = generate_boq_number(db, int(project_id))
         db.execute(
             "INSERT INTO boq_master(boq_number, project_id, total_amount, line_count, "
@@ -10059,11 +10360,62 @@ def boq_multiple_entry():
             )
         )
 
+    edit_id = request.args.get("edit", type=int)
+    editing_boq = None
+    editing_lines = []
+    if edit_id:
+        editing_boq = query_db(
+            "SELECT m.*, p.project_code, p.project_name FROM boq_master m "
+            "LEFT JOIN projects p ON m.project_id = p.id "
+            "WHERE m.id=? AND COALESCE(m.is_deleted, 0)=0",
+            (edit_id,),
+            one=True,
+        )
+        if not editing_boq:
+            flash("BOQ record not found.")
+            return redirect(url_for(endpoint))
+        edit_role = get_edit_role_for_user(
+            db, user_id, module_id, editing_boq["approval_status"], admin
+        )
+        if not edit_role:
+            flash("This record is locked and cannot be edited.")
+            return redirect(url_for(endpoint, view=edit_id))
+        wf_ctx = {"edit_role": edit_role}
+        editing_lines = query_db(
+            "SELECT * FROM boq_items WHERE boq_id=? AND COALESCE(is_deleted, 0)=0 "
+            "ORDER BY line_no, id",
+            (edit_id,),
+        )
+
+    view_id = request.args.get("view", type=int) if not edit_id else None
+    view_boq = None
+    view_lines = []
+    if view_id:
+        view_boq = query_db(
+            "SELECT m.*, p.project_code, p.project_name FROM boq_master m "
+            "LEFT JOIN projects p ON m.project_id = p.id "
+            "WHERE m.id=? AND COALESCE(m.is_deleted, 0)=0",
+            (view_id,),
+            one=True,
+        )
+        if view_boq:
+            wf_ctx = _workflow_view_context(
+                module_id, view_boq["id"], table, view_boq["approval_status"]
+            )
+            view_lines = query_db(
+                "SELECT * FROM boq_items WHERE boq_id=? AND COALESCE(is_deleted, 0)=0 "
+                "ORDER BY line_no, id",
+                (view_id,),
+            )
+
     boq_form_project_id = request.args.get("project_id", type=int)
+    if editing_boq:
+        boq_form_project_id = editing_boq["project_id"]
     projects = get_project_options_for_boq()
     preview_project_id = boq_form_project_id
     next_boq_number = (
-        peek_boq_number(db, preview_project_id) if preview_project_id else "Select project"
+        editing_boq["boq_number"] if editing_boq
+        else (peek_boq_number(db, preview_project_id) if preview_project_id else "Select project")
     )
     recent_rows = query_db(
         "SELECT m.*, p.project_name FROM boq_master m "
@@ -10085,6 +10437,14 @@ def boq_multiple_entry():
         saved_line_count=request.args.get("saved_lines", type=int),
         saved_total=request.args.get("saved_total", type=float),
         continue_project_id=boq_form_project_id if saved_boq_number else None,
+        view_boq=dict(view_boq) if view_boq else None,
+        view_lines=[dict(line) for line in view_lines],
+        editing_boq=dict(editing_boq) if editing_boq else None,
+        editing_lines=[dict(line) for line in editing_lines],
+        history=wf_ctx.get("history"),
+        edit_role=wf_ctx.get("edit_role"),
+        can_reopen=wf_ctx.get("can_reopen", False),
+        approval_id=wf_ctx.get("approval_id"),
     )
 
 
@@ -12659,6 +13019,83 @@ def timesheet():
     return render_template("timesheet.html", rows=rows)
 
 
+@app.route("/wbs")
+@login_required
+def wbs_redirect():
+    project_id = request.args.get("project_id", type=int)
+    if project_id:
+        return redirect(url_for("cost_planning", project_id=project_id) + "#wbs-view")
+    return redirect(url_for("cost_planning") + "#wbs-view")
+
+
+PROJECT_DOC_FIELDS = (
+    ("agreement_document", "Agreement"),
+    ("work_order_document", "Work Order"),
+    ("bank_guarantee_document", "Bank Guarantee"),
+    ("security_deposit_document", "Security Deposit"),
+)
+
+
+@app.route("/project-documents")
+@login_required
+def project_documents():
+    search = request.args.get("q", "").strip()
+    clauses = ["1=1"]
+    params = []
+    if search:
+        clauses.append("(project_code LIKE ? OR project_name LIKE ? OR work_order_number LIKE ?)")
+        like = f"%{search}%"
+        params.extend([like, like, like])
+    rows = query_db(
+        "SELECT id, project_code, project_name, work_order_number, "
+        "agreement_document, work_order_document, bank_guarantee_document, security_deposit_document "
+        f"FROM projects WHERE {' AND '.join(clauses)} ORDER BY project_name",
+        params,
+    )
+    doc_rows = []
+    for row in rows:
+        item = dict(row)
+        item["documents"] = [
+            {"field": field, "label": label, "filename": item.get(field) or ""}
+            for field, label in PROJECT_DOC_FIELDS
+            if item.get(field)
+        ]
+        item["doc_count"] = len(item["documents"])
+        doc_rows.append(item)
+    return render_template(
+        "project_documents_register.html",
+        rows=doc_rows,
+        search=search,
+        doc_fields=PROJECT_DOC_FIELDS,
+    )
+
+
+@app.route("/project-documents/download/<int:project_id>/<doc_field>")
+@login_required
+def project_document_download(project_id, doc_field):
+    allowed = {field for field, _ in PROJECT_DOC_FIELDS}
+    if doc_field not in allowed:
+        flash("Invalid document type.")
+        return redirect(url_for("project_documents"))
+    row = query_db(
+        f"SELECT {doc_field} FROM projects WHERE id=?",
+        (project_id,),
+        one=True,
+    )
+    if not row or not row[doc_field]:
+        flash("Document not found.")
+        return redirect(url_for("project_documents"))
+    path = os.path.join(PROJECT_DOCS_DIR, row[doc_field])
+    if not os.path.isfile(path):
+        flash("Document file missing on server.")
+        return redirect(url_for("project_documents"))
+    return send_from_directory(
+        PROJECT_DOCS_DIR,
+        row[doc_field],
+        as_attachment=request.args.get("download") == "1",
+    )
+
+
 @app.route("/cost-planning", methods=["GET", "POST"])
 @login_required
 def cost_planning():
@@ -12695,12 +13132,45 @@ def cost_planning():
                 + "#micro-planning"
             )
 
+        module_id, table = "cost_planning", "cost_plans"
+        cost_plan_id_raw = request.form.get("cost_plan_id", "").strip()
+        is_edit = cost_plan_id_raw.isdigit()
+        edit_role = None
+        if is_edit:
+            existing = db.execute(
+                "SELECT approval_status FROM cost_plans WHERE id=?",
+                (cost_plan_id_raw,),
+            ).fetchone()
+            if not existing:
+                flash("Cost plan not found.")
+                return redirect(url_for("cost_planning"))
+            edit_role = get_edit_role_for_user(
+                db,
+                session.get("user_id"),
+                module_id,
+                existing["approval_status"],
+                is_admin_user(),
+            )
+            if not edit_role:
+                flash("This cost plan is locked and cannot be edited.")
+                return redirect(url_for("cost_planning", view=cost_plan_id_raw))
+
         plan_id, err = save_cost_plan_from_form(db, request.form, username)
         if err:
             flash(err)
             return redirect(url_for("cost_planning") + "#cost-plan-form")
-        db.commit()
-        flash("Cost plan saved.")
+        if is_edit:
+            _complete_module_save(db, module_id, table, plan_id, edit_role)
+        else:
+            db.execute(
+                "UPDATE cost_plans SET approval_status=? WHERE id=?",
+                (RECORD_PENDING_CHECKER, plan_id),
+            )
+            create_approval_request(
+                db, module_id, plan_id, table, username, session.get("user_id")
+            )
+            db.commit()
+            flash("Cost plan saved. Status: Pending Checker.")
         return redirect(
             url_for("cost_planning", project_id=request.form.get("project_id"), plan=plan_id)
             + "#cost-plan-form"
@@ -15496,10 +15966,20 @@ def employee_timesheets_form():
 def employee_timesheets_submit(timesheet_id):
     db = get_db()
     _prepare_employee_timesheet_db(db)
+    module_id, table = "employee_timesheet", "employee_monthly_timesheets"
     try:
         submit_timesheet(db, timesheet_id, session.get("username", ""))
+        if not get_approval_request(db, module_id, timesheet_id, table):
+            create_approval_request(
+                db,
+                module_id,
+                timesheet_id,
+                table,
+                session.get("username", ""),
+                session.get("user_id"),
+            )
         db.commit()
-        flash("Timesheet submitted to company.")
+        flash("Timesheet submitted for approval.")
     except ValueError as exc:
         flash(str(exc))
     return redirect(url_for("employee_timesheets_form", view=timesheet_id))
@@ -15711,14 +16191,48 @@ def sub_billing_register():
 def sub_billing_form():
     db = get_db()
     _prepare_sub_billing_db(db)
+    module_id = SUB_BILLING_MODULE_ID
+    table = SUB_BILLING_TABLE
+    wf_ctx = {}
+
     if request.method == "POST":
         edit_id = request.form.get("bill_id", type=int)
+        edit_role = None
+        if edit_id:
+            existing = db.execute(
+                f"SELECT approval_status FROM {table} WHERE id=?",
+                (edit_id,),
+            ).fetchone()
+            if not existing:
+                flash("Sub-contractor bill not found.")
+                return redirect(url_for("sub_billing_register"))
+            edit_role = get_edit_role_for_user(
+                db,
+                session.get("user_id"),
+                module_id,
+                existing["approval_status"],
+                is_admin_user(),
+            )
+            if not edit_role:
+                flash("This record is locked and cannot be edited.")
+                return redirect(url_for("sub_billing_form", view=edit_id))
         try:
             bill_id = save_subcontractor_bill(
                 db, request.form, session.get("username", ""), edit_id
             )
-            db.commit()
-            flash("Sub-contractor bill saved.")
+            if edit_id:
+                _complete_module_save(db, module_id, table, bill_id, edit_role)
+            else:
+                create_approval_request(
+                    db,
+                    module_id,
+                    bill_id,
+                    table,
+                    session.get("username", ""),
+                    session.get("user_id"),
+                )
+                db.commit()
+                flash("Sub-contractor bill saved. Status: Pending Checker.")
             return redirect(url_for("sub_billing_form", view=bill_id))
         except ValueError as exc:
             flash(str(exc))
@@ -15729,8 +16243,24 @@ def sub_billing_form():
     view_record = edit_record = None
     if view_id:
         view_record = get_subcontractor_bill(db, view_id)
+        if view_record:
+            wf_ctx = _workflow_view_context(
+                module_id,
+                view_record["id"],
+                table,
+                view_record.get("approval_status"),
+            )
     elif edit_id:
         edit_record = get_subcontractor_bill(db, edit_id)
+        if edit_record:
+            edit_role = get_edit_role_for_user(
+                db,
+                session.get("user_id"),
+                module_id,
+                edit_record.get("approval_status"),
+                is_admin_user(),
+            )
+            wf_ctx = {"edit_role": edit_role}
 
     today = datetime.now().strftime("%Y-%m-%d")
     return render_template(
@@ -15741,6 +16271,10 @@ def sub_billing_form():
         subcontractors=list_subcontractors_for_billing(db),
         default_declaration=DEFAULT_DECLARATION,
         form_defaults={"bill_date": today},
+        history=wf_ctx.get("history"),
+        edit_role=wf_ctx.get("edit_role"),
+        can_reopen=wf_ctx.get("can_reopen", False),
+        approval_id=wf_ctx.get("approval_id"),
     )
 
 
@@ -16038,6 +16572,7 @@ register_treasury_routes(
     _complete_module_save=_complete_module_save,
     treasury_docs_dir=TREASURY_DOCS_DIR,
     save_file_fn=save_file,
+    db_path=DB_PATH,
 )
 
 if __name__ == "__main__":
