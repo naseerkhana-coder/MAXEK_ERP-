@@ -153,6 +153,19 @@ from backup_service import (
     ensure_backup_schema,
     run_scheduled_backup_if_due,
 )
+from user_activity_service import (
+    DEFAULT_IDLE_THRESHOLD_MINUTES,
+    ensure_user_activity_schema,
+    get_activity_dashboard,
+    get_idle_report,
+    get_login_report,
+    get_screen_activity_report,
+    log_login,
+    log_logout,
+    log_page_view,
+    resolve_module_name,
+    should_track_page_view,
+)
 
 from office_fleet_service import (
     INWARD_MODES,
@@ -816,6 +829,39 @@ def close_connection(exception):
 @app.before_request
 def _bootstrap_db_schema():
     ensure_runtime_schema()
+
+
+@app.before_request
+def _track_user_page_activity():
+    if not session.get("user_id"):
+        return
+    endpoint = request.endpoint or ""
+    if not should_track_page_view(
+        method=request.method,
+        path=request.path,
+        endpoint=endpoint,
+    ):
+        return
+    try:
+        nav_group = active_nav_group(endpoint)
+        module_name = resolve_module_name(endpoint, nav_group.get("label") if nav_group else None)
+        db = get_db()
+        page_id, viewed_at = log_page_view(
+            db,
+            user_id=session["user_id"],
+            employee_name=session.get("employee_name"),
+            session_id=session.get("login_session_id"),
+            module_name=module_name,
+            page_path=request.path,
+            endpoint=endpoint,
+            idle_threshold_minutes=DEFAULT_IDLE_THRESHOLD_MINUTES,
+            last_page_activity_id=session.get("last_page_activity_id"),
+            last_viewed_at=session.get("last_page_viewed_at"),
+        )
+        session["last_page_activity_id"] = page_id
+        session["last_page_viewed_at"] = viewed_at
+    except Exception:
+        app.logger.exception("User page activity tracking failed")
 
 
 def save_file(file_storage, dest_folder):
@@ -4501,6 +4547,7 @@ def ensure_runtime_schema(db=None, force=False):
     ensure_app_settings_table(db)
     ensure_workflow_master_schema(db)
     ensure_notifications_schema(db)
+    ensure_user_activity_schema(db)
     try:
         migrate_workflow_statuses(db)
         seed_workflow_master(db)
@@ -5349,11 +5396,6 @@ NAV_GROUPS = [
                 "active_endpoints": ["project_documents", "project_document_download", "projects"],
             },
             {
-                "endpoint": "qc_master",
-                "label": "QC Master",
-                "active_endpoints": ["qc_master", "plant_qc"],
-            },
-            {
                 "endpoint": "reports",
                 "label": "Project Reports",
                 "active_endpoints": ["reports", "workflow_audit_report"],
@@ -5484,10 +5526,47 @@ NAV_GROUPS = [
                 "active_endpoints": ["material_transfer"],
             },
             {"endpoint": "inventory", "label": "Inventory Stock", "active_endpoints": ["inventory"]},
+        ],
+    },
+    {
+        "label": "Fleet & Vehicles",
+        "icon": "fa-truck",
+        "slug": "fleet",
+        "items": [
             {
                 "endpoint": "fleet_dashboard",
-                "label": "Fleet Management",
+                "label": "Fleet Dashboard",
                 "active_endpoints": FLEET_NAV_ACTIVE,
+            },
+            {
+                "endpoint": "fleet_vehicles",
+                "label": "Vehicle Master",
+                "active_endpoints": ["fleet_vehicles", "fleet_vehicle_print"],
+            },
+            {
+                "endpoint": "fleet_vehicle_documents",
+                "label": "Vehicle Documents",
+                "active_endpoints": ["fleet_vehicle_documents", "fleet_document_download"],
+            },
+            {
+                "endpoint": "fleet_running_log",
+                "label": "Running Log",
+                "active_endpoints": ["fleet_running_log"],
+            },
+            {
+                "endpoint": "fleet_diesel_purchase",
+                "label": "Diesel Purchase",
+                "active_endpoints": ["fleet_diesel_purchase"],
+            },
+            {
+                "endpoint": "fleet_diesel_stock",
+                "label": "Diesel Stock",
+                "active_endpoints": ["fleet_diesel_stock"],
+            },
+            {
+                "endpoint": "fleet_diesel_issue",
+                "label": "Diesel Issue",
+                "active_endpoints": ["fleet_diesel_issue"],
             },
         ],
     },
@@ -5500,6 +5579,57 @@ NAV_GROUPS = [
                 "endpoint": "plant_dashboard",
                 "label": "Plant Dashboard",
                 "active_endpoints": PLANT_NAV_ACTIVE,
+            },
+            {
+                "endpoint": "plant_plants",
+                "label": "Plant Master",
+                "active_endpoints": ["plant_plants"],
+            },
+            {
+                "endpoint": "plant_asphalt_production",
+                "label": "Asphalt Production",
+                "active_endpoints": [
+                    "plant_asphalt_production",
+                    "plant_asphalt_dispatch",
+                    "plant_asphalt_dispatch_print",
+                ],
+            },
+            {
+                "endpoint": "plant_asphalt_dispatch",
+                "label": "Asphalt Dispatch",
+                "active_endpoints": [
+                    "plant_asphalt_production",
+                    "plant_asphalt_dispatch",
+                    "plant_asphalt_dispatch_print",
+                ],
+            },
+            {
+                "endpoint": "plant_rmc_production",
+                "label": "RMC / Concrete Production",
+                "active_endpoints": [
+                    "plant_rmc_production",
+                    "plant_rmc_dispatch",
+                    "plant_rmc_dispatch_print",
+                ],
+            },
+            {
+                "endpoint": "plant_rmc_dispatch",
+                "label": "RMC / Concrete Dispatch",
+                "active_endpoints": [
+                    "plant_rmc_production",
+                    "plant_rmc_dispatch",
+                    "plant_rmc_dispatch_print",
+                ],
+            },
+            {
+                "endpoint": "qc_master",
+                "label": "Quality Control (QC Master)",
+                "active_endpoints": ["qc_master"],
+            },
+            {
+                "endpoint": "plant_qc",
+                "label": "Plant QC Tests",
+                "active_endpoints": ["plant_qc"],
             },
         ],
     },
@@ -5680,6 +5810,11 @@ NAV_GROUPS = [
                 "endpoint": "workflow_settings",
                 "label": "Workflow Settings",
                 "active_endpoints": ["workflow_settings", "workflow_matrix"],
+            },
+            {
+                "endpoint": "user_activity_monitor",
+                "label": "User Activity Monitor",
+                "active_endpoints": ["user_activity_monitor"],
             },
         ],
     },
@@ -5890,12 +6025,29 @@ def login():
         user = authenticate_user(get_db(), username, password)
         if user:
             session.clear()
-            session["user_id"] = get_user_id(user)
+            user_id = get_user_id(user)
+            session["user_id"] = user_id
             session["username"] = user["username"]
             session["role"] = _row_val(user, "role")
             session["workflow_role"] = _row_val(user, "workflow_role")
             session["department"] = _row_val(user, "department")
             session["employee_name"] = get_user_display_name(user)
+            try:
+                login_session_id = log_login(
+                    get_db(),
+                    user_id=user_id,
+                    employee_name=session.get("employee_name"),
+                    role=session.get("role"),
+                    ip_address=(
+                        (request.headers.get("X-Forwarded-For") or request.remote_addr or "")
+                        .split(",")[0]
+                        .strip()
+                    ),
+                    user_agent=request.headers.get("User-Agent"),
+                )
+                session["login_session_id"] = login_session_id
+            except Exception:
+                app.logger.exception("Failed to log user login session")
             if remember:
                 session.permanent = True
                 app.permanent_session_lifetime = timedelta(days=30)
@@ -5919,6 +6071,10 @@ def forgot_password():
 
 @app.route("/logout")
 def logout():
+    try:
+        log_logout(get_db(), session.get("login_session_id"))
+    except Exception:
+        app.logger.exception("Failed to log user logout session")
     session.clear()
     return redirect(url_for("login"))
 
@@ -9208,6 +9364,40 @@ def user_management():
         workflow_roles=USER_MGMT_WORKFLOW_ROLES,
         system_roles=USER_MGMT_SYSTEM_ROLES,
         active_tab=active_tab,
+    )
+
+
+@app.route("/settings/user-activity")
+@admin_required
+def user_activity_monitor():
+    db = get_db()
+    date_from = request.args.get("from_date", "").strip() or None
+    date_to = request.args.get("to_date", "").strip() or None
+    active_tab = request.args.get("tab", "dashboard")
+    if active_tab not in ("dashboard", "login", "screen", "idle"):
+        active_tab = "dashboard"
+
+    dashboard = get_activity_dashboard(db, date_from=date_from, date_to=date_to)
+    login_rows = get_login_report(db, date_from=date_from, date_to=date_to)
+    screen_rows = get_screen_activity_report(db, date_from=date_from, date_to=date_to)
+    idle_rows = get_idle_report(
+        db,
+        date_from=date_from,
+        date_to=date_to,
+        idle_threshold_minutes=DEFAULT_IDLE_THRESHOLD_MINUTES,
+    )
+
+    return render_template(
+        "user_activity.html",
+        active_tab=active_tab,
+        date_from=dashboard["date_from"],
+        date_to=dashboard["date_to"],
+        dashboard=dashboard,
+        login_rows=login_rows,
+        screen_rows=screen_rows,
+        idle_rows=idle_rows,
+        idle_threshold_minutes=DEFAULT_IDLE_THRESHOLD_MINUTES,
+        retention_days=90,
     )
 
 

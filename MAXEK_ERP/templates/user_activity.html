@@ -1,0 +1,170 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'User Activity Monitor' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('settings') ~ '">Settings</a> &gt; User Activity Monitor' %}
+
+{% block content %}
+<div class="module-layout">
+  <form method="get" class="erp-form-card" style="margin-bottom: 1rem; display: flex; gap: 1rem; flex-wrap: wrap; align-items: end;">
+    <input type="hidden" name="tab" value="{{ active_tab }}">
+    <div class="erp-field">
+      <input type="date" name="from_date" value="{{ date_from }}" placeholder=" ">
+      <label>From</label>
+    </div>
+    <div class="erp-field">
+      <input type="date" name="to_date" value="{{ date_to }}" placeholder=" ">
+      <label>To</label>
+    </div>
+    <button type="submit" class="erp-btn erp-btn-primary"><i class="fa-solid fa-filter"></i> Apply Filter</button>
+  </form>
+
+  <div class="erp-form-card" style="margin-bottom: 1rem;">
+    <div class="erp-form-actions" style="margin-bottom: 0; gap: 0.5rem; flex-wrap: wrap;">
+      <a href="{{ url_for('user_activity_monitor', tab='dashboard', from_date=date_from, to_date=date_to) }}"
+         class="erp-btn {% if active_tab == 'dashboard' %}erp-btn-primary{% else %}erp-btn-ghost{% endif %}">
+        <i class="fa-solid fa-gauge-high"></i> Dashboard
+      </a>
+      <a href="{{ url_for('user_activity_monitor', tab='login', from_date=date_from, to_date=date_to) }}"
+         class="erp-btn {% if active_tab == 'login' %}erp-btn-primary{% else %}erp-btn-ghost{% endif %}">
+        <i class="fa-solid fa-right-to-bracket"></i> Login Log
+      </a>
+      <a href="{{ url_for('user_activity_monitor', tab='screen', from_date=date_from, to_date=date_to) }}"
+         class="erp-btn {% if active_tab == 'screen' %}erp-btn-primary{% else %}erp-btn-ghost{% endif %}">
+        <i class="fa-solid fa-desktop"></i> Screen Activity
+      </a>
+      <a href="{{ url_for('user_activity_monitor', tab='idle', from_date=date_from, to_date=date_to) }}"
+         class="erp-btn {% if active_tab == 'idle' %}erp-btn-primary{% else %}erp-btn-ghost{% endif %}">
+        <i class="fa-solid fa-hourglass-half"></i> Idle Report
+      </a>
+    </div>
+  </div>
+
+  {% if active_tab == 'dashboard' %}
+  <div class="erp-summary-grid" style="margin-bottom: 1rem;">
+    <div class="erp-stat-card"><span>Total Logins</span><strong>{{ dashboard.total_logins }}</strong></div>
+    <div class="erp-stat-card"><span>Unique Users</span><strong>{{ dashboard.unique_users }}</strong></div>
+    <div class="erp-stat-card"><span>Page Views</span><strong>{{ dashboard.page_views }}</strong></div>
+    <div class="erp-stat-card"><span>Active Users (pages)</span><strong>{{ dashboard.active_users }}</strong></div>
+    <div class="erp-stat-card"><span>Total Session Time</span><strong>{{ '%.1f'|format((dashboard.total_session_seconds or 0) / 3600) }} h</strong></div>
+    <div class="erp-stat-card"><span>Total Idle Time</span><strong>{{ '%.1f'|format((dashboard.total_idle_seconds or 0) / 3600) }} h</strong></div>
+  </div>
+  <div class="erp-form-card">
+    <p class="erp-hint">
+      Idle periods are recorded when there is no page activity for {{ idle_threshold_minutes }} minutes or more.
+      Activity data is retained for {{ retention_days }} days by default (configure purge via ops if needed).
+    </p>
+  </div>
+  {% elif active_tab == 'login' %}
+  <div class="erp-table-panel" data-erp-table>
+    <div class="erp-table-toolbar">
+      <h3 class="erp-table-title">Login / Logout Sessions</h3>
+      <div class="erp-table-controls">
+        <div class="erp-table-search"><i class="fa-solid fa-magnifying-glass"></i><input type="search" data-table-search placeholder="Search sessions..."></div>
+      </div>
+    </div>
+    <div class="erp-table-scroll">
+      <table class="erp-table erp-table-module">
+        <thead>
+          <tr>
+            <th>User</th>
+            <th>Role</th>
+            <th>Login</th>
+            <th>Logout</th>
+            <th>Total Time</th>
+            <th>IP</th>
+            <th>Device</th>
+            <th>Browser</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in login_rows %}
+          <tr>
+            <td>{{ row.employee_name or '—' }}</td>
+            <td>{{ row.role or '—' }}</td>
+            <td>{{ row.login_time }}</td>
+            <td>{{ row.logout_time or 'Active' }}</td>
+            <td>{{ row.total_time_display }}</td>
+            <td>{{ row.ip_address or '—' }}</td>
+            <td>{{ row.device_name or '—' }}</td>
+            <td>{{ row.browser or '—' }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="8">No login sessions in this date range.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% elif active_tab == 'screen' %}
+  <div class="erp-table-panel" data-erp-table>
+    <div class="erp-table-toolbar">
+      <h3 class="erp-table-title">Screen Activity by Module</h3>
+      <div class="erp-table-controls">
+        <div class="erp-table-search"><i class="fa-solid fa-magnifying-glass"></i><input type="search" data-table-search placeholder="Search activity..."></div>
+      </div>
+    </div>
+    <div class="erp-table-scroll">
+      <table class="erp-table erp-table-module">
+        <thead>
+          <tr>
+            <th>User</th>
+            <th>Module</th>
+            <th>Time Spent</th>
+            <th>Page Views</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in screen_rows %}
+          <tr>
+            <td>{{ row.employee_name or '—' }}</td>
+            <td>{{ row.module_name or '—' }}</td>
+            <td>{{ row.time_spent_display }}</td>
+            <td>{{ row.page_views }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4">No screen activity in this date range.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% elif active_tab == 'idle' %}
+  <div class="erp-form-card" style="margin-bottom: 1rem;">
+    <p class="erp-hint">Idle threshold: {{ idle_threshold_minutes }} minutes without page navigation.</p>
+  </div>
+  <div class="erp-table-panel" data-erp-table>
+    <div class="erp-table-toolbar">
+      <h3 class="erp-table-title">Active vs Idle Time</h3>
+      <div class="erp-table-controls">
+        <div class="erp-table-search"><i class="fa-solid fa-magnifying-glass"></i><input type="search" data-table-search placeholder="Search users..."></div>
+      </div>
+    </div>
+    <div class="erp-table-scroll">
+      <table class="erp-table erp-table-module">
+        <thead>
+          <tr>
+            <th>User</th>
+            <th>Total Active</th>
+            <th>Total Idle</th>
+            <th>Active (min)</th>
+            <th>Idle (min)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in idle_rows %}
+          <tr>
+            <td>{{ row.employee_name or '—' }}</td>
+            <td>{{ row.active_display }}</td>
+            <td>{{ row.idle_display }}</td>
+            <td>{{ row.active_minutes }}</td>
+            <td>{{ row.idle_minutes }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5">No activity data in this date range.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

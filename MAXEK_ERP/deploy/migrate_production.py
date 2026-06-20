@@ -26,6 +26,7 @@ from subcontract_payment_service import ensure_subcontract_payment_schema
 from store_service import ensure_store_schema
 from treasury_service import ensure_treasury_schema
 from budget_service import ensure_budget_schema
+from user_activity_service import ensure_user_activity_schema
 
 
 def main():
@@ -45,6 +46,7 @@ def main():
         ensure_store_schema(db)
         ensure_treasury_schema(db)
         ensure_budget_schema(db)
+        ensure_user_activity_schema(db)
         ensure_corporate_dms_schema(db)
         ensure_qc_schema(db)
         ensure_precast_schema(db)
