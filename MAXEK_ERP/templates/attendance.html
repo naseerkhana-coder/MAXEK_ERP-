@@ -13,7 +13,7 @@
   · <strong>Daily</strong> = one row per day · <strong>Monthly summary</strong> = one row per monthly-salary staff per month (worked days)
 </div>
 
-<div class="erp-form-card" style="margin-bottom: 1rem; padding: 0.75rem 1rem;">
+<div class="erp-form-card erp-form-card--tabs" style="margin-bottom: 1rem; padding: 0.75rem 1rem;">
   <div class="erp-btn-group" role="tablist" aria-label="Attendance entry mode">
     <a href="{{ url_for('attendance', mode='daily') }}#add-attendance"
        class="erp-btn {% if attendance_mode != 'monthly' %}erp-btn-primary{% else %}erp-btn-ghost{% endif %}">

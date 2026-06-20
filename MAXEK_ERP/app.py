@@ -5225,6 +5225,20 @@ FLEET_NAV_ACTIVE = [
     "fleet_document_download",
 ]
 
+OFFICE_NAV_ACTIVE = [
+    "office_admin",
+    "office_inward",
+    "office_outward",
+    "office_letters",
+    "office_letter_print",
+    "office_quotations",
+    "office_quotation_print",
+    "office_po_register",
+    "office_agreements",
+    "office_legal",
+    "office_document_download",
+]
+
 PLANT_NAV_ACTIVE = [
     "plant_dashboard",
     "plant_plants",
@@ -5526,6 +5540,54 @@ NAV_GROUPS = [
                 "active_endpoints": ["material_transfer"],
             },
             {"endpoint": "inventory", "label": "Inventory Stock", "active_endpoints": ["inventory"]},
+        ],
+    },
+    {
+        "label": "Office Administration",
+        "icon": "fa-building",
+        "slug": "office",
+        "active_endpoints": OFFICE_NAV_ACTIVE,
+        "items": [
+            {
+                "endpoint": "office_admin",
+                "label": "Office Dashboard",
+                "active_endpoints": ["office_admin"],
+            },
+            {
+                "endpoint": "office_inward",
+                "label": "Letter In / Inward Register",
+                "active_endpoints": ["office_inward"],
+            },
+            {
+                "endpoint": "office_outward",
+                "label": "Letter Out / Outward Register",
+                "active_endpoints": ["office_outward"],
+            },
+            {
+                "endpoint": "office_letters",
+                "label": "Letter Preparation / General Letters",
+                "active_endpoints": ["office_letters", "office_letter_print"],
+            },
+            {
+                "endpoint": "office_quotations",
+                "label": "Quotations",
+                "active_endpoints": ["office_quotations", "office_quotation_print"],
+            },
+            {
+                "endpoint": "office_po_register",
+                "label": "PO Register",
+                "active_endpoints": ["office_po_register"],
+            },
+            {
+                "endpoint": "office_agreements",
+                "label": "Agreements",
+                "active_endpoints": ["office_agreements"],
+            },
+            {
+                "endpoint": "office_legal",
+                "label": "Legal Documents",
+                "active_endpoints": ["office_legal"],
+            },
         ],
     },
     {
@@ -14284,9 +14346,9 @@ def office_admin():
             "alert_days": OFFICE_EXPIRY_ALERT_DAYS,
         }
     modules = [
-        {"endpoint": "office_inward", "label": "Inward Register", "icon": "fa-inbox", "description": "Incoming documents & correspondence"},
-        {"endpoint": "office_outward", "label": "Outward Register", "icon": "fa-paper-plane", "description": "Dispatched documents with attachments"},
-        {"endpoint": "office_letters", "label": "Letter Management", "icon": "fa-envelope-open-text", "description": "Official letters with print view"},
+        {"endpoint": "office_inward", "label": "Letter In / Inward Register", "icon": "fa-inbox", "description": "Incoming documents & correspondence"},
+        {"endpoint": "office_outward", "label": "Letter Out / Outward Register", "icon": "fa-paper-plane", "description": "Dispatched documents with attachments"},
+        {"endpoint": "office_letters", "label": "Letter Preparation / General Letters", "icon": "fa-envelope-open-text", "description": "Official letters with print view"},
         {"endpoint": "office_quotations", "label": "Quotations", "icon": "fa-file-invoice", "description": "Client quotations with GST lines"},
         {"endpoint": "office_po_register", "label": "PO Register", "icon": "fa-clipboard-list", "description": "Read-only view of store purchase orders"},
         {"endpoint": "office_agreements", "label": "Agreements", "icon": "fa-handshake", "description": "Agreement register with attachments"},

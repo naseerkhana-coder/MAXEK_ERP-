@@ -11,7 +11,7 @@
   <strong>Flow:</strong> Maker [Save / Submit] → Checker [Verify / Edit / Reject] → Approver [Approve / Edit / Reject]
 </div>
 <div class="module-layout dpr-module-layout">
-  <div class="erp-form-card" style="margin-bottom: 1rem;">
+  <div class="erp-form-card erp-form-card--tabs" style="margin-bottom: 1rem;">
     <div class="erp-tab-bar">
       <a href="{{ url_for('dpr_entry') }}" class="erp-tab{% if active_tab == 'entry' %} active{% endif %}">DPR Entry</a>
       <a href="{{ url_for('dpr_client_bill_pending') }}" class="erp-tab{% if active_tab == 'client_bill' %} active{% endif %}">
@@ -928,10 +928,6 @@
 {% endblock %}
 {% block head_extra %}
 <style>
-  .erp-tab-bar { display: flex; gap: 0.5rem; flex-wrap: wrap; }
-  .erp-tab { padding: 0.5rem 1rem; border-radius: 6px; text-decoration: none; color: inherit; border: 1px solid var(--erp-border, #e2e8f0); }
-  .erp-tab.active { background: var(--erp-primary, #2563eb); color: #fff; border-color: transparent; }
-  .erp-badge { background: #ef4444; color: #fff; border-radius: 999px; padding: 0 0.4rem; font-size: 0.75rem; margin-left: 0.25rem; }
   .dpr-dimension-group { margin-bottom: 1rem; }
   .dpr-dimension-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem; }
   .dpr-reading-row { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.35rem; }
