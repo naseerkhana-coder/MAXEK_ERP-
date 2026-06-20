@@ -782,14 +782,8 @@
 }
 
 .maxek-layout .erp-field-with-action {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
   align-items: stretch;
   gap: 10px;
-}
-
-.maxek-layout .erp-field-with-action label {
-  left: 14px;
 }
 
 .maxek-layout .erp-inline-action {
@@ -1642,19 +1636,18 @@
 .maxek-layout .worker-form-grid--compact .erp-field input,
 .maxek-layout .worker-form-grid--compact .erp-field select {
   min-height: 40px;
-  padding: 16px 10px 5px;
+  padding: 8px 10px;
   font-size: 13px;
 }
 
 .maxek-layout .worker-form-grid--compact .erp-field input[type="file"] {
-  min-height: 42px;
-  padding-top: 17px;
+  min-height: 40px;
+  padding: 6px 10px;
   font-size: 12px;
 }
 
 .maxek-layout .worker-form-grid--compact .erp-field label {
-  top: 12px;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .maxek-layout .worker-rate-summary {
@@ -1664,10 +1657,10 @@
   gap: 6px 12px;
   padding: 7px 10px;
   border-radius: 8px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background: rgba(20, 24, 34, 0.55);
+  border: 1px solid var(--border-subtle);
   font-size: 12px;
-  color: #475569;
+  color: var(--text-muted);
   line-height: 1.35;
 }
 
@@ -1678,7 +1671,7 @@
 .maxek-layout .worker-rate-summary-label {
   flex: 0 0 100%;
   font-weight: 600;
-  color: #64748b;
+  color: var(--text-muted);
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -1686,7 +1679,7 @@
 
 .maxek-layout .worker-rate-pill strong {
   font-weight: 600;
-  color: #334155;
+  color: var(--text-main);
   margin-right: 4px;
 }
 
@@ -1708,11 +1701,12 @@
 }
 
 .maxek-layout .erp-form-card {
-  background: #fff;
-  color: #1f2937;
+  background: var(--bg-card-dark);
+  color: var(--text-main);
+  border: 1px solid var(--border-subtle);
   border-radius: 10px;
   padding: 16px 18px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
 .maxek-layout .erp-form-card--compact {
@@ -1725,27 +1719,28 @@
   font-size: 16px;
   font-weight: 700;
   margin: 0 0 12px;
-  color: #111827;
+  color: var(--text-main);
 }
 
 .maxek-layout .erp-form-subtitle {
   margin: 0.5rem 0 0.25rem;
   font-size: 0.95rem;
   font-weight: 600;
-  color: #64748b;
+  color: var(--text-muted);
 }
 
 .maxek-layout .erp-hint {
   margin: 0 0 0.75rem;
   font-size: 0.85rem;
-  color: #64748b;
+  color: var(--text-muted);
 }
 
 .maxek-layout .maker-row {
   padding: 0.75rem;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border-subtle);
   border-radius: 8px;
-  background: rgba(248, 250, 252, 0.6);
+  background: rgba(20, 24, 34, 0.55);
+  color: var(--text-main);
 }
 
 .maxek-layout .boq-module-layout {
@@ -1857,20 +1852,39 @@
 }
 
 .maxek-layout .erp-field {
-  position: relative;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 6px;
 }
 
 .maxek-layout .erp-field input:not([type="checkbox"]):not([type="radio"]),
 .maxek-layout .erp-field select,
 .maxek-layout .erp-field textarea {
   width: 100%;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--border-subtle);
   border-radius: 8px;
-  padding: 20px 12px 8px;
+  padding: 10px 12px;
   font-size: 14px;
-  background: #fff;
-  color: #111827;
-  min-height: 48px;
+  background: var(--bg-dark-ops);
+  color: var(--text-main);
+  min-height: 42px;
+}
+
+.maxek-layout .erp-field input::placeholder,
+.maxek-layout .erp-field textarea::placeholder {
+  color: var(--text-muted);
+  opacity: 0.75;
+}
+
+.maxek-layout .erp-field input[type="date"],
+.maxek-layout .erp-field input[type="month"],
+.maxek-layout .erp-field input[type="datetime-local"] {
+  color-scheme: dark;
+}
+
+.maxek-layout .erp-field select option {
+  background: var(--bg-card-dark);
+  color: var(--text-main);
 }
 
 .maxek-layout .coa-entry-panel .coa-options-row {
@@ -1887,7 +1901,7 @@
   align-items: center;
   gap: 0.4rem;
   font-size: 14px;
-  color: #374151;
+  color: var(--text-muted);
   cursor: pointer;
   pointer-events: auto;
 }
@@ -1902,8 +1916,8 @@
 }
 
 .maxek-layout .erp-field input[type="file"] {
-  min-height: 54px;
-  padding-top: 22px;
+  min-height: 42px;
+  padding: 8px 12px;
 }
 
 .maxek-layout .erp-field textarea {
@@ -1912,13 +1926,15 @@
 }
 
 .maxek-layout .erp-field label {
-  position: absolute;
-  left: 12px;
-  top: 14px;
-  font-size: 13px;
-  color: #6b7280;
+  position: static;
+  display: block;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text-muted);
   pointer-events: none;
-  transition: all 0.2s ease;
+  transition: color 0.2s ease;
 }
 
 .maxek-layout .erp-field input:focus,
@@ -1931,49 +1947,78 @@
 .maxek-layout .erp-field textarea:not(:placeholder-shown) {
   border-color: var(--maxek-red);
   outline: none;
+  box-shadow: 0 0 0 1px rgba(227, 6, 19, 0.25);
 }
 
-.maxek-layout .erp-field input:focus + label,
-.maxek-layout .erp-field select:focus + label,
-.maxek-layout .erp-field textarea:focus + label,
-.maxek-layout .erp-field input.has-value + label,
-.maxek-layout .erp-field select.has-value + label,
-.maxek-layout .erp-field textarea.has-value + label,
-.maxek-layout .erp-field input:not(:placeholder-shown) + label,
-.maxek-layout .erp-field textarea:not(:placeholder-shown) + label,
-.maxek-layout .erp-field select + label,
-.maxek-layout .erp-field input[readonly] + label,
-.maxek-layout .erp-field input[type="file"] + label {
-  top: 4px;
-  font-size: 11px;
+.maxek-layout .erp-field:focus-within label {
   color: var(--maxek-red);
 }
 
+.maxek-layout .erp-field.erp-field-with-action {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  gap: 6px 10px;
+  align-items: stretch;
+}
+
+.maxek-layout .erp-field.erp-field-with-action label {
+  grid-column: 1 / -1;
+  grid-row: 1;
+}
+
+.maxek-layout .erp-field.erp-field-with-action select,
+.maxek-layout .erp-field.erp-field-with-action input:not([type="checkbox"]):not([type="radio"]) {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.maxek-layout .erp-field.erp-field-with-action .erp-inline-action {
+  grid-column: 2;
+  grid-row: 2;
+  align-self: stretch;
+}
+
 .maxek-layout .erp-field-auto-number {
-  border: 1px solid #d1d5db;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 6px;
+  border: 1px solid var(--border-subtle);
   border-radius: 8px;
-  background: #f9fafb;
-  min-height: 48px;
+  background: var(--bg-dark-ops);
+  min-height: auto;
+  padding: 0;
 }
 
 .maxek-layout .erp-field-auto-number:focus-within {
   border-color: var(--maxek-red);
+  box-shadow: 0 0 0 1px rgba(227, 6, 19, 0.25);
 }
 
 .maxek-layout .erp-field-auto-number label {
-  top: 4px;
-  font-size: 11px;
+  position: static;
+  display: block;
+  margin: 0;
+  padding: 0 12px;
+  padding-top: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+
+.maxek-layout .erp-field-auto-number:focus-within label {
   color: var(--maxek-red);
 }
 
 .maxek-layout .erp-auto-number {
   display: block;
   width: 100%;
-  padding: 20px 12px 10px;
+  padding: 10px 12px 12px;
   font-size: 16px;
   font-weight: 700;
   line-height: 1.2;
-  color: #111827;
+  color: var(--text-main);
   letter-spacing: 0.02em;
 }
 
@@ -3238,8 +3283,13 @@
     grid-column: span 1;
   }
 
-  .maxek-layout .erp-field-with-action {
+  .maxek-layout .erp-field.erp-field-with-action {
     grid-template-columns: 1fr;
+  }
+
+  .maxek-layout .erp-field.erp-field-with-action .erp-inline-action {
+    grid-column: 1;
+    grid-row: 3;
   }
 
   .maxek-layout .erp-inline-action {
