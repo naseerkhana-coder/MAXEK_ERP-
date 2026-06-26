@@ -29,6 +29,8 @@ backups/
 
 # IDE / tooling
 .cursor/
+!.cursor/rules/
+!.cursor/rules/maxek-erp.mdc
 .vscode/
 *.swp
 .DS_Store
