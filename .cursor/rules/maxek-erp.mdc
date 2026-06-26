@@ -1,0 +1,58 @@
+---
+description: MAXEK Construction ERP development rules and module Definition of Done
+globs:
+  - "**/*.py"
+  - "**/*.html"
+  - "**/*.js"
+  - "templates/**"
+  - "static/**"
+alwaysApply: false
+---
+
+# MAXEK Construction ERP Rules
+
+Development constraints for all Cursor work on MAXEK Construction ERP. Follow these rules on every task.
+
+## Development rules
+
+1. **Do NOT redesign any UI.** The existing UI reflects approved workflows and user training.
+2. **Do NOT rename modules.** Module names map to navigation, permissions, URLs, and documentation.
+3. **Do NOT remove existing features.** Features may support edge cases (retention, variations, multi-site payroll).
+4. **Fix backend before frontend.** Stabilize routes, queries, and business logic first.
+5. **Reuse existing templates.** New pages should extend the same base templates.
+6. **Reuse common CRUD components.** List, form, filter, and pagination patterns already exist.
+7. **Reuse common toolbar.** Toolbar actions (save, export, print, back) use shared handlers.
+8. **Every button must have a working backend route.** Wire each action to a real endpoint.
+9. **Every route must return valid data.** Validate shape, status codes, and edge cases.
+10. **Every fix must be tested before commit.** Exercise the changed flow manually or with tests.
+11. **Commit after every completed task.** Small, focused commits preserve rollback points.
+12. **Never modify unrelated modules.** Change only files required for the stated task.
+
+Full rationale: `docs/MAXEK_ERP_RULES.md`
+
+## Definition of Done (every module)
+
+A module is complete **only** when all of the following pass in browser testing. See `docs/MODULE_DEFINITION_OF_DONE.md` for verification steps and sign-off template.
+
+1. Dashboard opens
+2. Module opens
+3. New works
+4. Save works
+5. Open works
+6. View works
+7. Edit works
+8. Delete works
+9. Search works
+10. Status filter works
+11. Date filter works
+12. Sort works
+13. Refresh works
+14. Export Excel works
+15. Export PDF works
+16. Print works
+17. Run Report works
+18. No 404 errors
+19. No 500 errors
+20. No JavaScript console errors
+
+**Policy:** No module task is done until all 20 items pass. Partial CRUD without export/report/error checks does not count as complete.
