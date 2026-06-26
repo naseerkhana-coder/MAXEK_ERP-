@@ -1,481 +1,343 @@
-# Phase 2 — Cursor Tasks (Copy-Paste Ready)
+# Phase 2 — Cursor Tasks
 
-**Project:** MAXEK Construction ERP  
-**Governance:** [MAXEK_ERP_RULES.md](./MAXEK_ERP_RULES.md) · [MODULE_DEFINITION_OF_DONE.md](./MODULE_DEFINITION_OF_DONE.md)  
-**Framework:** [FRAMEWORK.md](./FRAMEWORK.md) · **Validation:** [PHASE2_MODULE_VALIDATION.md](./PHASE2_MODULE_VALIDATION.md)
+> **Rules:** Follow [MAXEK_ERP_RULES.md](./MAXEK_ERP_RULES.md) for all development work.
 
-Run **one task at a time**. Do not redesign UI, rename modules, or remove features. Fix backend before frontend. A task is complete only when all 20 Definition of Done items pass in the browser.
+Copy-paste each task into a new Cursor chat. Follow [MAXEK_ERP_RULES.md](./MAXEK_ERP_RULES.md) on every task: no UI redesign, no module renames, no unrelated file changes, fix backend before frontend, test before commit.
+
+**Project path:** `C:\Users\rajee\Documents\New project\MAXEK_ERP`  
+**Framework reference:** [FRAMEWORK.md](./FRAMEWORK.md)  
+**Validation baseline:** [PHASE2_MODULE_VALIDATION.md](./PHASE2_MODULE_VALIDATION.md)  
+**Done criteria:** [MODULE_DEFINITION_OF_DONE.md](./MODULE_DEFINITION_OF_DONE.md) — all 20 browser checks must pass.
+
+Use `move_agent_to_root` with the project path before editing.
 
 ---
 
-## How to use
+## Fix order overview
 
-1. Copy the task block for the module you are fixing.
-2. Paste into a new Cursor chat (Agent mode).
-3. After the fix, verify against [MODULE_DEFINITION_OF_DONE.md](./MODULE_DEFINITION_OF_DONE.md).
-4. Commit with a focused message; push when the module passes sign-off.
-
-**Recommended order:** follow section numbers below (matches [PHASE2_MODULE_VALIDATION.md § Recommended fix order](./PHASE2_MODULE_VALIDATION.md#recommended-fix-order)).
+| Order | Module area | Priority |
+|-------|-------------|----------|
+| 1 | Project Management | Reference implementation |
+| 2 | BOQ | High traffic |
+| 3 | DPR | High traffic |
+| 4 | Procurement | RFQ/PO/GRN gaps |
+| 5 | Subcontract + Work Order | Hidden nav |
+| 6 | Store & Inventory | Toolbar parity |
+| 7 | HR & Payroll | Leave/timesheets |
+| 8 | Finance & Accounts | Voucher lists |
+| 9 | Plant & Fleet | Virtual nav mapping |
+| 10 | QA / QC | Registers vs labels |
+| 11 | Administration | DMS + registers |
+| 12 | Reports | Hub stubs |
+| 13 | Planning & WBS | Toolbar migration |
 
 ---
 
 ## 1. Project Management
 
-Reference module — `/projects` already uses `erp_standard_toolbar` (Phase 1). Close remaining gaps first.
-
-### Task 1A — Delete with workflow guard
+### Task: Project Management — Delete with workflow guard
 
 ```
-Fix Project Management delete in MAXEK ERP.
+In C:\Users\rajee\Documents\New project\MAXEK_ERP, add maker-only delete for projects:
 
-Project: C:\Users\rajee\Documents\New project\MAXEK_ERP
-Rules: docs/MAXEK_ERP_RULES.md, docs/FRAMEWORK.md, docs/MODULE_DEFINITION_OF_DONE.md
+1. Add POST delete handling in projects() in app.py with workflow guard (module_id project_creation).
+2. Block delete when child records exist (BOQ, DPR, or other linked tables — check existing schema).
+3. Wire toolbar Delete on erp_standard_toolbar via workflow_modals or erp-framework.js delete flow.
+4. Do NOT change other modules.
 
-Add maker-only soft-delete for projects in app.py projects() handler and wire toolbar Delete in templates/projects.html.
-Use workflow guard for module_id project_creation.
-Block delete when BOQ or DPR child records exist for the project.
-Do not change other modules.
-Test all 20 DoD items for /projects when done.
+Follow MAXEK_ERP_RULES.md and FRAMEWORK.md. Test: create test project, verify delete blocked when children exist, verify workflow roles. Commit when all MODULE_DEFINITION_OF_DONE items for delete pass.
 ```
 
-### Task 1B — Toolbar gaps (search, filters, PDF)
+### Task: Project Management — Toolbar gaps (status filter, server search)
 
 ```
-Fix Project Management toolbar gaps in MAXEK ERP.
+In C:\Users\rajee\Documents\New project\MAXEK_ERP, complete Project Management list toolbar gaps on /projects:
 
-Project: C:\Users\rajee\Documents\New project\MAXEK_ERP
-Reference: templates/projects.html (erp_standard_toolbar), docs/FRAMEWORK.md
+1. Verify server-side filtering for q, status, date_from, date_to, sort GET params in projects() using erp_framework.apply_list_filters or equivalent.
+2. Ensure erp_standard_toolbar status_options and sort_options actually filter the list (not UI-only).
+3. Document in template comments that Open/View/Edit remain row-level per FRAMEWORK.md.
+4. Add date range filters if missing from toolbar.
+5. Do NOT redesign projects.html layout.
 
-Add server-side search via apply_list_filters and ?q= on /projects.
-Verify status filter, date filter, sort, and refresh work end-to-end with erp_standard_toolbar.
-Add Export PDF or document why PDF is deferred (DoD item 15).
-Keep Open/View/Edit as row-level actions per FRAMEWORK.md.
-Do not redesign UI.
-Test all 20 DoD items for /projects when done.
+Test full toolbar checklist in PHASE2_MODULE_VALIDATION.md Module 1. Commit only this module.
 ```
 
-### Task 1C — Orphan sub-modules (nav only)
+### Task: Project Management — Clients toolbar upgrade
 
 ```
-Add sidebar or dept-hub links for Project Management orphan routes in MAXEK ERP.
+In C:\Users\rajee\Documents\New project\MAXEK_ERP, upgrade templates/clients.html from erp_module_toolbar to erp_standard_toolbar matching projects.html pattern:
 
-Project: C:\Users\rajee\Documents\New project\MAXEK_ERP
-
-Add NAV_GROUPS or projects dashboard tile links for:
-- /client-billing (Client Billing)
-- /project-photos (Project Photos)
-- /securities-guarantees (Securities & Guarantees)
-
-Do not rename modules or change existing URLs.
-Follow ui_shell_config.py patterns.
+- Add ModuleConfig for clients in erp_framework.py if missing.
+- Wire server export route if only client CSV exists.
+- Keep row-level workflow actions. Scope: clients module only.
 ```
 
 ---
 
-## 2. Planning & WBS
+## 2. BOQ
 
-### Task 2A — Adopt erp_standard_toolbar on cost planning
-
-```
-Migrate Planning & WBS list to erp_standard_toolbar in MAXEK ERP.
-
-Project: C:\Users\rajee\Documents\New project\MAXEK_ERP
-Template: templates/cost_planning.html
-Reference: templates/projects.html, docs/FRAMEWORK.md
-
-Replace page_actions-only toolbar with erp_standard_toolbar on the cost plan list.
-Wire module_page_context from erp_framework.py.
-Keep WBS embedded tab; do not split into a new module.
-Add server Excel export route if missing.
-Test DoD on /cost-planning.
-```
-
----
-
-## 3. BOQ
-
-### Task 3A — Adopt erp_standard_toolbar
+### Task: BOQ — Adopt erp_module_toolbar
 
 ```
-Migrate BOQ management to erp_standard_toolbar in MAXEK ERP.
+In C:\Users\rajee\Documents\New project\MAXEK_ERP, replace templates/boq.html legacy erp-table-toolbar with erp_module_toolbar matching clients.html:
 
-Project: C:\Users\rajee\Documents\New project\MAXEK_ERP
-Template: templates/boq.html
-Reference: templates/projects.html, docs/FRAMEWORK.md
+- search_placeholder, add_url to existing new BOQ form anchor
+- export_name='boq' or wire server export if /boq export route added
+- print_target pointing to BOQ list table
+- Keep existing page_actions AI button via extra_buttons
+- Preserve workflow delete (form_action=delete_boq) on rows
 
-Replace legacy erp-table-toolbar with erp_standard_toolbar.
-Keep page_actions AI button and existing delete_boq workflow.
-Wire export to existing print/export routes where possible.
-Do not change BOQ business logic.
-Test DoD on /boq-management.
+Do not remove BOQ Multiple Item Entry route. Test list search, export, print. Commit: BOQ toolbar only.
 ```
 
-### Task 3B — BOQ Multiple Entry edit/view
+### Task: BOQ — Server Excel export
 
 ```
-Fix BOQ Multiple Entry CRUD gaps in MAXEK ERP.
-
-Project: C:\Users\rajee\Documents\New project\MAXEK_ERP
-Route: /boq-multiple-entry
-
-Add edit and view routes for recent BOQ entries per MAXEK_ERP_AUDIT_REPORT.md partial status.
-Reuse existing templates and workflow (boq module).
-Do not redesign UI.
+In C:\Users\rajee\Documents\New project\MAXEK_ERP, add GET /boq-management/export (or equivalent) using erp_framework.export_rows_to_excel for BOQ list rows. Wire export_url on erp_module_toolbar. Keep client CSV as fallback only if needed. BOQ module files only.
 ```
 
 ---
 
-## 4. DPR
+## 3. DPR
 
-### Task 4A — Standard toolbar on DPR list
+### Task: DPR — Standard toolbar on measurement list
 
 ```
-Add erp_standard_toolbar to DPR entry list in MAXEK ERP.
+In C:\Users\rajee\Documents\New project\MAXEK_ERP, add erp_module_toolbar to templates/dpr.html main measurement list section:
 
-Project: C:\Users\rajee\Documents\New project\MAXEK_ERP
-Template: templates/dpr.html
-Reference: docs/FRAMEWORK.md
+- Client search on measurement table
+- Export Excel (client CSV minimum; server export if straightforward)
+- Print target for measurement list region
+- Do not change DPR workflow logic or client-bill tab export behavior
 
-Add search, export, and print on the main measurement list (not only client-bill tab).
-Use erp_standard_toolbar and data-erp-row-id on list rows.
-Preserve workflow on measurements.
-Test DoD on /dpr-entry.
+Test DPR entry, pending, and costing tabs still work. DPR templates and routes only.
+```
+
+### Task: DPR — List filters
+
+```
+In C:\Users\rajee\Documents\New project\MAXEK_ERP, add status and date filters to DPR list (project + date range minimum) via GET params and backend filter in dpr route handler. Integrate into toolbar extra_buttons or migrate to erp_standard_toolbar if Projects pattern fits. DPR scope only.
 ```
 
 ---
 
-## 5. Procurement
+## 4. Procurement
 
-### Task 5A — PO and GRN toolbar parity
-
-```
-Migrate Purchase Order and GRN screens to erp_standard_toolbar in MAXEK ERP.
-
-Project: C:\Users\rajee\Documents\New project\MAXEK_ERP
-Templates: templates/purchase_orders.html, store receipt template
-Reference: templates/material_request.html (already uses erp_module_toolbar — migrate to erp_standard_toolbar)
-
-Match MR/PR toolbar pattern.
-Wire export and print targets.
-Test DoD on /purchase/orders and /store-receipt.
-```
-
-### Task 5B — RFQ / Quotation Comparison
+### Task: Procurement — RFQ / Quotation Comparison routes or doc
 
 ```
-Resolve RFQ and Quotation Comparison nav vs routes in MAXEK ERP.
+In C:\Users\rajee\Documents\New project\MAXEK_ERP, resolve RFQ and Quotation Comparison gap in ui_shell_config.py STANDARD_SUB_LABELS vs actual routes:
 
-Project: C:\Users\rajee\Documents\New project\MAXEK_ERP
+Option A: Add dedicated routes and list templates for RFQ and quotation comparison.
+Option B: Update STANDARD_SUB_LABELS and sub-toolbar to point to PO-embedded quotation flow in purchase_orders.html, and add in-app help text on PO screen.
 
-STANDARD_SUB_LABELS references RFQ and quotation comparison but no dedicated routes exist.
-Either:
-  (A) Add /purchase/rfq and /purchase/quotation-comparison routes with minimal list screens, OR
-  (B) Update STANDARD_SUB_LABELS and nav to point to PO-embedded quotation flow in purchase_orders.html and document in docs/PHASE2_MODULE_VALIDATION.md.
+Pick the option that matches existing business flow (check purchase_orders.html for embedded quotations). Update nav only — do not remove MR/PR/PO/GRN. Document choice in a comment in ui_shell_config.py.
+```
 
-Do not remove procurement features. Pick (A) or (B) and implement consistently.
+### Task: Procurement — PO and GRN toolbar
+
+```
+In C:\Users\rajee\Documents\New project\MAXEK_ERP, migrate purchase_orders.html and GRN list template from page_actions-only to erp_module_toolbar (match material_request.html). Preserve workflow modals and row actions. Procurement templates only.
+```
+
+---
+
+## 5. Subcontract + Work Order
+
+### Task: Subcontract — Restore main toolbar access
+
+```
+In C:\Users\rajee\Documents\New project\MAXEK_ERP, restore subcontract-management visibility:
+
+1. Review build_main_toolbar() in ui_shell_config.py — currently pops subcontract-management.
+2. Either re-add to MAIN_TOOLBAR_SLUGS or add prominent link from Projects/Procurement toolbar to /dept/subcontract.
+3. Validate /dept/subcontract portal tiles match NAV_GROUPS subcontract-management items.
+4. Do not rename modules. Nav config + dept portal template only unless a single link addition is needed elsewhere.
+```
+
+### Task: Work Order — Unify naming and entry point
+
+```
+In C:\Users\rajee\Documents\New project\MAXEK_ERP, align Work Order user entry:
+
+1. Document primary WO route (/subcontract-payments vs project form WO fields) in template page title.
+2. Add sub-toolbar or dept tile label "Work Orders" pointing to subcontract_work_orders list.
+3. Add erp_module_toolbar to subcontract payments/WO list if missing.
+Subcontract module files only.
 ```
 
 ---
 
 ## 6. Store & Inventory
 
-### Task 6A — GRN, issue, transfer toolbar
+### Task: Store — Receipt, Issue, Transfer toolbar parity
 
 ```
-Migrate Store GRN, Issue, and Transfer to erp_standard_toolbar in MAXEK ERP.
+In C:\Users\rajee\Documents\New project\MAXEK_ERP, add erp_module_toolbar to store receipt, store issue, and material transfer list templates (match store_materials.html). Include search, print, and export_name per screen. Preserve existing POST handlers. Store templates only.
+```
 
-Project: C:\Users\rajee\Documents\New project\MAXEK_ERP
-Templates: store-receipt, store-issue, material-transfer templates
-Reference: docs/FRAMEWORK.md
+### Task: Store — Inventory list export
 
-Add erp_standard_toolbar with workflow delete where applicable.
-Inventory (/inventory) may remain read-only; document if Export/Delete N/A.
-Test DoD on each screen.
+```
+In C:\Users\rajee\Documents\New project\MAXEK_ERP, add export and print to /inventory read-only list via erp_module_toolbar or page_actions extension. No schema changes unless required for export columns.
 ```
 
 ---
 
-## 7. Work Order
+## 7. HR & Payroll
 
-### Task 7A — Unified Work Order nav label
-
-```
-Align Work Order navigation in MAXEK ERP.
-
-Project: C:\Users\rajee\Documents\New project\MAXEK_ERP
-Primary route: /subcontract-payments (subcontract_work_orders)
-
-Add clear "Work Orders" label in Subcontract nav or dept hub pointing to /subcontract-payments WO section.
-Do not rename subcontract_payments endpoint.
-Document private project WO fields on /projects as secondary entry.
-```
-
----
-
-## 8. Subcontract
-
-### Task 8A — Restore main toolbar access
+### Task: HR — Leave and timesheets toolbar
 
 ```
-Restore Subcontract department access from main toolbar in MAXEK ERP.
-
-Project: C:\Users\rajee\Documents\New project\MAXEK_ERP
-Files: ui_shell_config.py, build_main_toolbar in app.py
-
-subcontract-management is in NAV_GROUPS but removed from main toolbar.
-Re-include in build_main_toolbar OR add prominent dept portal link on dashboard.
-Validate /dept/subcontract tiles match NAV_GROUPS.
-Do not rename modules.
+In C:\Users\rajee\Documents\New project\MAXEK_ERP, migrate leave-request and timesheet list templates to erp_module_toolbar (match staff.html). Keep attendance and payroll unchanged unless broken. HR templates only.
 ```
 
-### Task 8B — Subcontractor screens toolbar migration
+### Task: HR — Payroll salary screen alignment
 
 ```
-Migrate subcontractor list screens to erp_standard_toolbar in MAXEK ERP.
-
-Project: C:\Users\rajee\Documents\New project\MAXEK_ERP
-Templates: templates/subcontractors.html, templates/subcontract_payments.html, templates/workers.html
-
-Follow templates/projects.html pattern.
-Test DoD on /subcontractors and /subcontract-payments.
+In C:\Users\rajee\Documents\New project\MAXEK_ERP, review salary/payroll split screens — ensure payroll.html toolbar pattern is consistent and /reports links for salary reports are correct. Fix only HR payroll templates and routes.
 ```
 
 ---
 
-## 9. QA / QC
+## 8. Finance & Accounts
 
-### Task 9A — QC master standard toolbar
-
-```
-Migrate QC Master to erp_standard_toolbar in MAXEK ERP.
-
-Project: C:\Users\rajee\Documents\New project\MAXEK_ERP
-Templates: templates/qc_master.html, /quality-control routes
-
-Add erp_standard_toolbar and module_page_context.
-Add sidebar entry under Projects or dedicated QC nav if missing.
-Test DoD on /qc-master.
-```
-
-### Task 9B — NCR / cube register vs labels
+### Task: Finance — Payment voucher list toolbar
 
 ```
-Audit QA/QC nav labels vs implemented routes in MAXEK ERP.
+In C:\Users\rajee\Documents\New project\MAXEK_ERP, add erp_module_toolbar to payment voucher list template under /accounts. Wire search (client minimum), print, export. Do not change voucher posting logic. Accounts templates only.
+```
 
-Project: C:\Users\rajee\Documents\New project\MAXEK_ERP
+### Task: Finance — Receipt and journal voucher lists
 
-Compare STANDARD_SUB_LABELS and nav entries for NCR, cube register, asphalt testing against actual routes.
-Either wire routes or remove/relabel stub entries.
-Update docs/PHASE2_MODULE_VALIDATION.md if nav changes.
+```
+In C:\Users\rajee\Documents\New project\MAXEK_ERP, repeat erp_module_toolbar adoption for receipt voucher and journal voucher list screens. Match payment voucher task pattern. One commit per voucher type or single focused commit for all three list pages.
+```
+
+### Task: Finance — Treasury stub report wiring
+
+```
+In C:\Users\rajee\Documents\New project\MAXEK_ERP, audit report_registry.py treasury entries marked stub — wire at least bank reconciliation and cash book reports to existing print routes or mark as screen-only in corporate_reports_hub.html. Reports config only unless a small route fix is required.
 ```
 
 ---
 
-## 10. Plant & Fleet
+## 9. Plant & Fleet
 
-### Task 10A — Sidebar for Plant and Fleet hubs
-
-```
-Add Plant and Fleet to sidebar or main toolbar in MAXEK ERP.
-
-Project: C:\Users\rajee\Documents\New project\MAXEK_ERP
-Routes: /plant, /fleet
-
-plant-machinery nav group exists but main toolbar uses virtual fleet-mechanical + plant-operations.
-Ensure users can reach /plant and /fleet without deep links.
-Fix virtual toolbar label → route mismatches (e.g. Tyre Register → fleet_vehicle_documents).
-Do not rename modules.
-```
-
-### Task 10B — Plant sub-module toolbar sample
+### Task: Plant & Fleet — Fix virtual toolbar route mapping
 
 ```
-Migrate one Plant sub-module list to erp_standard_toolbar as template in MAXEK ERP.
+In C:\Users\rajee\Documents\New project\MAXEK_ERP, fix ui_shell_config.py VIRTUAL_TOOLBAR_ENTRIES mismatches:
 
-Project: C:\Users\rajee\Documents\New project\MAXEK_ERP
+- Tyre Register label → verify fleet_vehicle_documents is correct endpoint or rename label to match actual screen
+- Breakdown Register → fleet_running_log
+- Audit all fleet-mechanical and plant-operations items against app.py route names
 
-Pick plant_dashboard or one production list (e.g. asphalt).
-Apply erp_standard_toolbar per FRAMEWORK.md.
-Document pattern for remaining plant sub-modules in commit message.
+Update labels or active_endpoints only — no module renames. Test each sub-toolbar link loads without 404.
+```
+
+### Task: Plant — Hub to list toolbar migration
+
+```
+In C:\Users\rajee\Documents\New project\MAXEK_ERP, add erp_module_toolbar to plant asphalt and RMC production list views (highest traffic plant screens). Plant templates only.
 ```
 
 ---
 
-## 11. HR & Payroll
+## 10. QA / QC
 
-### Task 11A — Leave request nav + toolbar
-
-```
-Fix Leave Request module in MAXEK ERP.
-
-Project: C:\Users\rajee\Documents\New project\MAXEK_ERP
-Route: /leave-request
-
-Add Workforce nav entry for Leave Request.
-Migrate to erp_standard_toolbar.
-Workflow module leave_request already registered — verify Delete uses workflow_modals.
-Test all 20 DoD items.
-```
-
-### Task 11B — Timesheets and salary screens
+### Task: QA/QC — QC master toolbar
 
 ```
-Migrate timesheets and salary processing to erp_standard_toolbar in MAXEK ERP.
-
-Project: C:\Users\rajee\Documents\New project\MAXEK_ERP
-Routes: /timesheets, /salary, /timesheet
-
-Clarify nav: /timesheet vs /timesheets — align NAV_GROUPS with working forms.
-Apply erp_standard_toolbar where list CRUD exists.
-Test DoD per screen.
+In C:\Users\rajee\Documents\New project\MAXEK_ERP, add erp_module_toolbar to /qc-master list template. Full CRUD already exists — wire search, export, print. QC templates only.
 ```
 
-### Task 11C — Staff/attendance/payroll migration to standard toolbar
+### Task: QA/QC — NCR and cube register nav truth
 
 ```
-Upgrade HR screens from erp_module_toolbar to erp_standard_toolbar in MAXEK ERP.
-
-Project: C:\Users\rajee\Documents\New project\MAXEK_ERP
-Templates: staff.html, attendance.html, payroll.html
-
-Follow templates/projects.html.
-Preserve existing workflow modules.
-Test DoD on /staff, /attendance, /payroll.
+In C:\Users\rajee\Documents\New project\MAXEK_ERP, audit quality-control nav items vs routes for NCR, cube register, asphalt testing. Either implement missing list screens or remove/hide stub labels from NAV_GROUPS and STANDARD_SUB_LABELS. Document in template if screen-only.
 ```
 
 ---
 
-## 12. Finance & Accounts
+## 11. Administration
 
-### Task 12A — Petty cash / voucher list toolbar
-
-```
-Add erp_standard_toolbar to Accounts voucher list screens in MAXEK ERP.
-
-Project: C:\Users\rajee\Documents\New project\MAXEK_ERP
-
-Start with /petty_cash and /accounts/receipts as pilot.
-Use erp_framework export helpers where applicable.
-Treasury stubs (CSV import, email alerts) — document as Phase 2+ if not fixing now.
-Test DoD on pilot screens.
-```
-
-### Task 12B — Treasury sub-screens (incremental)
+### Task: Administration — Office registers toolbar
 
 ```
-Migrate one Treasury list screen to erp_standard_toolbar in MAXEK ERP.
+In C:\Users\rajee\Documents\New project\MAXEK_ERP, add erp_module_toolbar to inward/outward register list templates under office-admin. Search + print minimum. Admin templates only.
+```
 
-Project: C:\Users\rajee\Documents\New project\MAXEK_ERP
-Route: /treasury/bank-guarantees (reference — already ✅ in gap audit)
+### Task: Administration — Corporate DMS nav
 
-Use bank-guarantees as pattern for payments, receipts, cheques lists.
-One screen per task; do not batch entire treasury in one pass.
+```
+In C:\Users\rajee\Documents\New project\MAXEK_ERP, add Corporate DMS (/settings/corporate-dms) to settings or admin-compliance sub-toolbar with correct label. Verify route loads. Nav config + one settings link only.
 ```
 
 ---
 
-## 13. Administration
+## 12. Reports
 
-### Task 13A — Corporate DMS nav
-
-```
-Add Corporate DMS to Settings navigation in MAXEK ERP.
-
-Project: C:\Users\rajee\Documents\New project\MAXEK_ERP
-Route: /settings/corporate-dms
-
-Link from Settings NAV_GROUPS or settings.html.
-Optional: erp_standard_toolbar on DMS document list for admin users.
-Test module opens from menu (DoD item 2).
-```
-
-### Task 13B — Office admin registers toolbar
+### Task: Reports — Wire corporate hub stubs
 
 ```
-Migrate one Office Administration register to erp_standard_toolbar in MAXEK ERP.
+In C:\Users\rajee\Documents\New project\MAXEK_ERP, open templates/corporate_reports_hub.html and report_registry.py:
 
-Project: C:\Users\rajee\Documents\New project\MAXEK_ERP
-Hub: /office-admin
+1. For each report marked stub, either wire to /reports/run?report=slug or link to module print route.
+2. Update hub card status from stub to wired or screen-only with clear user message.
+3. Do not remove legacy /reports until redirects are documented.
 
-Pick inward or outward register as pilot.
-Follow FRAMEWORK.md.
+Reports registry and hub template only.
+```
+
+### Task: Reports — Legacy /reports deprecation plan
+
+```
+In C:\Users\rajee\Documents\New project\MAXEK_ERP, add redirect or banner on GET /reports pointing users to /reports/corporate for module reports. Keep attendance/salary quick access if still needed. Minimal template change only.
 ```
 
 ---
 
-## 14. Reports
+## 13. Planning & WBS
 
-### Task 14A — Wire corporate hub stubs
-
-```
-Wire one stub report in corporate reports hub in MAXEK ERP.
-
-Project: C:\Users\rajee\Documents\New project\MAXEK_ERP
-Files: report_registry.py, templates/corporate_reports_hub.html
-
-Change one stub entry to wired with /reports/run routing per FRAMEWORK.md.
-Add erp_report_runner on source module list if needed.
-Test Run Report (DoD item 17).
-```
-
-### Task 14B — Legacy /reports scope
+### Task: Planning — Adopt module toolbar on cost planning
 
 ```
-Clarify or expand legacy /reports route in MAXEK ERP.
+In C:\Users\rajee\Documents\New project\MAXEK_ERP, replace page_actions-only export/print on cost-planning list area with erp_module_toolbar. Preserve WBS tab embedding at #wbs-view — do not split WBS to a new route unless already planned. Planning templates only.
+```
 
-Project: C:\Users\rajee\Documents\New project\MAXEK_ERP
-Route: /reports (currently attendance + salary only)
+### Task: Planning — WBS standalone access (optional)
 
-Either redirect Project Reports nav to /reports/corporate?category=projects OR add project report links to /reports.
-Update NAV_GROUPS label if needed. Do not remove attendance/salary reports.
-Document decision in docs/PHASE2_MODULE_VALIDATION.md.
+```
+In C:\Users\rajee\Documents\New project\MAXEK_ERP, if product owner wants WBS as standalone screen: add /wbs route that renders cost-planning template with #wbs-view focused (deep link). Otherwise skip and document tab-only access in FRAMEWORK.md. User must confirm before implementing.
 ```
 
 ---
 
-## Cross-cutting tasks
+## Commit convention
 
-### Task X1 — Migrate erp_module_toolbar → erp_standard_toolbar (batch)
+After each task:
 
-```
-Migrate remaining erp_module_toolbar screens to erp_standard_toolbar in MAXEK ERP.
-
-Project: C:\Users\rajee\Documents\New project\MAXEK_ERP
-
-Grep templates for erp_module_toolbar. Migrate one module per commit:
-clients, staff, attendance, payroll, material_request, purchase_request, store_materials.
-
-Reference: templates/projects.html, docs/FRAMEWORK.md
-Test DoD after each migration.
+```bash
+git add <scoped files only>
+git commit -m "fix(<module>): <short description per conventional commits>"
 ```
 
-### Task X2 — Orphan module nav (gap audit)
+Phase 2 doc commit (already done separately):
 
 ```
-Add NAV_GROUPS entries for gap-audit orphan modules in MAXEK ERP.
-
-Project: C:\Users\rajee\Documents\New project\MAXEK_ERP
-Reference: docs/MODULE_GAP_AUDIT_14.md
-
-Add menu entries for modules with routes but no sidebar:
-- /project-photos
-- /client-billing
-- /leave-request
-- /settings/corporate-dms
-- /fleet (or link from Office hub)
-- /plant
-
-One nav change per commit where possible.
+docs: Phase 2 module validation and framework documentation
 ```
 
 ---
 
 ## Task completion checklist
 
-Before marking any task done:
+Before marking any task done, verify in browser:
 
-- [ ] All 20 items in [MODULE_DEFINITION_OF_DONE.md](./MODULE_DEFINITION_OF_DONE.md) pass
-- [ ] No new 404/500 errors in browser DevTools
-- [ ] [MAXEK_ERP_RULES.md](./MAXEK_ERP_RULES.md) followed (no UI redesign, no unrelated modules)
-- [ ] Focused git commit with clear message
-- [ ] [PHASE2_MODULE_VALIDATION.md](./PHASE2_MODULE_VALIDATION.md) updated if nav or scope changed
+- [ ] Module opens from nav without 404
+- [ ] New / Save / View / Edit / Delete work (where applicable)
+- [ ] Search and filters work
+- [ ] Export Excel and Print work
+- [ ] No console errors
+- [ ] All 20 items in MODULE_DEFINITION_OF_DONE.md pass for that screen

@@ -1,5 +1,7 @@
 # MAXEK ERP — Shared Framework (Phase 1)
 
+> **Rules:** Follow [MAXEK_ERP_RULES.md](./MAXEK_ERP_RULES.md) for all development work.
+
 Reusable patterns for every department module. Phase 1 standardizes the framework layer only; business logic stays in existing services.
 
 ## Components
