@@ -1,6 +1,12 @@
 """Tests for MAXEK ERP shared framework helpers."""
 
-import pytest
+import os
+import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
+
+from flask import Flask
 
 from erp_framework import (
     PROJECTS_MODULE,
@@ -12,33 +18,51 @@ from erp_framework import (
     report_run_target,
 )
 
-
-@pytest.fixture
-def app_ctx(app):
-    with app.test_request_context("/projects"):
-        yield
+_test_app = Flask(__name__)
 
 
-def test_parse_crud_request_view_and_edit(app):
-    with app.test_request_context("/projects?view=5&edit=3"):
+@_test_app.route("/dashboard")
+def _dashboard():
+    return "ok"
+
+
+@_test_app.route("/projects/dashboard")
+def _projects_dashboard():
+    return "ok"
+
+
+@_test_app.route("/department/<slug>")
+def _department_portal(slug):
+    return slug
+
+
+@_test_app.route("/projects")
+def _projects():
+    return "ok"
+
+
+def test_parse_crud_request_view_and_edit():
+    with _test_app.test_request_context("/projects?view=5&edit=3"):
         state = parse_crud_request()
         assert state.view_id == 5
         assert state.edit_id == 3
         assert state.mode == "view"
 
 
-def test_build_breadcrumb_items(app_ctx):
-    crumbs = build_breadcrumb_items(PROJECTS_MODULE, current_label="Project List")
-    assert crumbs[0]["label"] == "Dashboard"
-    assert crumbs[1]["label"] == "Projects"
-    assert crumbs[-1]["label"] == "Project List"
-    assert crumbs[-1].get("url") is None
+def test_build_breadcrumb_items():
+    with _test_app.test_request_context("/projects"):
+        crumbs = build_breadcrumb_items(PROJECTS_MODULE, current_label="Project List")
+        assert crumbs[0]["label"] == "Dashboard"
+        assert crumbs[1]["label"] == "Projects"
+        assert crumbs[-1]["label"] == "Project List"
+        assert crumbs[-1].get("url") is None
 
 
-def test_crud_urls(app_ctx):
-    urls = crud_urls(PROJECTS_MODULE, record_id=42)
-    assert urls["view"].endswith("view=42")
-    assert urls["edit"].endswith("edit=42")
+def test_crud_urls():
+    with _test_app.test_request_context("/projects"):
+        urls = crud_urls(PROJECTS_MODULE, record_id=42)
+        assert "view=42" in urls["view"]
+        assert "edit=42" in urls["edit"]
 
 
 def test_apply_list_filters_status_and_search():
@@ -46,16 +70,22 @@ def test_apply_list_filters_status_and_search():
         {"project_name": "Alpha Bridge", "status": "Active"},
         {"project_name": "Beta Road", "status": "Completed"},
     ]
-    filtered = apply_list_filters(rows, status="Active", search="alpha", search_fields=("project_name",))
+    filtered = apply_list_filters(
+        rows,
+        status="Active",
+        search="alpha",
+        search_fields=("project_name",),
+    )
     assert len(filtered) == 1
     assert filtered[0]["project_name"] == "Alpha Bridge"
 
 
-def test_module_page_context_list_mode(app_ctx):
-    ctx = module_page_context(PROJECTS_MODULE)
-    assert ctx["page_title"] == PROJECTS_MODULE.list_label
-    assert "breadcrumb_items" in ctx
-    assert ctx["crud"].mode == "list"
+def test_module_page_context_list_mode():
+    with _test_app.test_request_context("/projects"):
+        ctx = module_page_context(PROJECTS_MODULE)
+        assert ctx["page_title"] == PROJECTS_MODULE.list_label
+        assert "breadcrumb_items" in ctx
+        assert ctx["crud"].mode == "list"
 
 
 def test_report_run_target_stub():

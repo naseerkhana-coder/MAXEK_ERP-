@@ -183,7 +183,7 @@ def apply_list_filters(
             key=lambda row: str(row.get("project_name") or row.get("name") or "").lower(),
             reverse=True,
         )
-  else:
+    else:
         result.sort(key=lambda row: row.get("id") or 0, reverse=True)
     return result
 

@@ -1,179 +1,110 @@
-# MAXEK ERP — Shared Framework (Phase 1)
+# MAXEK ERP — Shared UI Framework (Phase 1)
 
-This document describes the reusable framework every department module should adopt. Phase 1 standardizes patterns only; per-module business logic stays in existing services and routes.
+This document describes the reusable framework every module should adopt. **Project Management (`projects`)** is the reference implementation.
 
-## Overview
+## Components
 
 | Layer | Location | Purpose |
 |-------|----------|---------|
-| Python helpers | `erp_framework.py` | CRUD params, breadcrumbs, list filters, Excel export, report routing |
-| UI macros | `templates/macros/erp_ui.html` | Toolbar, breadcrumbs, report runner, table panels |
-| Client JS | `static/js/erp-framework.js` | Row selection, toolbar CRUD actions, client filters/sort |
-| Base layout | `templates/base_maxek.html` | Shell nav, breadcrumbs, loads framework JS |
-| Reports registry | `report_registry.py` | Report catalog and wired/stub/screen status |
-| Report routes | `app.py` → `/reports/run`, `/reports/standard/<slug>/*` | Run, print, export |
+| Python helpers | `erp_framework.py` | Breadcrumbs, CRUD URL builders, list filters, Excel export, report routing |
+| Toolbar macro | `templates/macros/erp_ui.html` → `erp_standard_toolbar` | Standard list-page actions |
+| Report runner macro | `templates/macros/erp_ui.html` → `erp_report_runner` | Run / export reports |
+| Navigation macros | `erp_breadcrumb`, `erp_btn_back` | Breadcrumbs and back button |
+| Client JS | `static/js/erp-framework.js` | Row selection, toolbar CRUD, filters |
+| Base layout | `templates/base_maxek.html` | Loads framework JS globally |
 
-## Reference module
+## Standard toolbar
 
-**Project Management → Projects** (`/projects`) is wired as the reference implementation:
+Include on every **list** screen:
 
-- `erp_standard_toolbar` with full CRUD + filter + export buttons
-- `breadcrumb_items` from `module_page_context(PROJECTS_MODULE)`
-- Selectable rows (`data-erp-row-id`, `data-erp-row-status`, `data-erp-row-date`)
-- Server export at `/projects/export`
+```jinja2
+{% from 'macros/erp_ui.html' import erp_standard_toolbar, erp_module_table_panel %}
 
-## 1. Standard toolbar
-
-Use the `erp_standard_toolbar` macro on every list page:
-
-```jinja
-{% from 'macros/erp_ui.html' import erp_standard_toolbar %}
-
-{{ erp_standard_toolbar(
-  module_endpoint='staff',
-  search_placeholder='Search employees...',
-  export_url=url_for('staff_export'),
-  print_target='#employee-records',
-  table_target='#employee-records',
-  delete_table='staff',
-  module_id='employee_master',
-  form_anchor='#add-staff',
-  status_options=[{'value': 'Active', 'label': 'Active'}],
-  sort_options=[{'value': 1, 'label': 'Name'}]
-) }}
+<div class="erp-module-layout">
+  {{ erp_standard_toolbar(
+    module_endpoint='projects',
+    search_name='q',
+    new_url=url_for('projects') ~ '#add-project',
+    export_url=url_for('projects_export'),
+    export_pdf_url=url_for('projects') ~ '?print=1',
+    delete_table='projects',
+    module_id='project_creation',
+    status_options=[{'value': 'Active', 'label': 'Active'}],
+    print_target='#project-list',
+    table_target='#project-list',
+  ) }}
+  {% call erp_module_table_panel(id='project-list', title='Records') %}
+    <table data-erp-crud-table>
+      <tr data-record-id="{{ row.id }}" data-record-editable="1" data-record-deletable="1">...</tr>
+    </table>
+  {% endcall %}
+</div>
 ```
 
-**Toolbar buttons (standard):**
+Toolbar buttons: **New · Open · View · Edit · Delete · Search · Status · Date · Sort · Refresh · Export Excel · Export PDF · Print**
 
-- CRUD: New, Open, View, Edit, Delete (row must be selected except New)
-- Filters: Search, Status, Date from/to, Sort, Refresh
-- Export: Export Excel, Export PDF (print-to-PDF), Print
+Select a table row (click) before using Open/View/Edit/Delete.
 
-**Table rows must include:**
+## Navigation
 
-```html
-<tr data-erp-row-id="{{ row.id }}"
-    data-erp-row-status="{{ row.status }}"
-    data-erp-row-date="{{ row.created_at }}">
-```
-
-For workflow delete, either include `workflow_modals()` and per-row `.js-delete-record` buttons, or set `data-delete-table` and `data-module-id` on the toolbar.
-
-Legacy modules can keep `erp_module_toolbar` (search + add + export + print only) until migrated in Phase 2.
-
-## 2. Standard navigation
-
-### Breadcrumbs
-
-In the route handler:
+Use `module_page_context()` in the route handler:
 
 ```python
-from erp_framework import ModuleConfig, module_page_context
+from erp_framework import PROJECTS_MODULE, module_page_context, parse_crud_request
 
-MY_MODULE = ModuleConfig(
-    module_id="...",
-    table="...",
-    endpoint="staff",
-    department_slug="hr-payroll",
-    department_label="HR & Payroll",
-    module_label="Employee Master",
-    list_label="Employee List",
-    hub_endpoint="hr_dashboard",  # optional
+framework_ctx = module_page_context(
+    PROJECTS_MODULE,
+    current_label="Project List",
+    crud=parse_crud_request(),
 )
-
-ctx = module_page_context(MY_MODULE, current_label="Employee List")
-return render_template("staff.html", **ctx, rows=rows)
+return render_template("projects.html", **framework_ctx, rows=rows)
 ```
 
-`base_maxek.html` renders `breadcrumb_items` automatically when `page_title` is set.
+Breadcrumb trail: **Dashboard → Department → Module → Page**
 
-### Hierarchy
+`base_maxek.html` renders `breadcrumb_items` via `erp_breadcrumb`.
 
-Dashboard → Department (portal/hub) → Module list → View/Edit
+## CRUD route convention
 
-Use `erp_btn_back()` in `page_actions` to return to the department hub.
+| Action | URL pattern | Handler |
+|--------|-------------|---------|
+| List | `/projects` | GET |
+| View | `/projects?view=<id>` | GET |
+| Edit | `/projects?edit=<id>#form-anchor` | GET + POST |
+| Create | `/projects#form-anchor` or `?new=1` | POST |
+| Delete | POST `workflow_delete_record` | workflow modal |
 
-## 3. Standard CRUD pattern
+Define a `ModuleConfig` in `erp_framework.py` per module (see `PROJECTS_MODULE`).
 
-### Query parameters (canonical)
+## List filters & export
 
-| Action | URL pattern |
-|--------|-------------|
-| List | `/module` |
-| Create | `/module?new=1#add-record` |
-| View | `/module?view=<id>` |
-| Edit | `/module?edit=<id>#add-record` |
-
-### Route handler pattern
+Server-side filters via GET params: `q`, `status`, `date_from`, `date_to`, `sort`.
 
 ```python
-@login_required
-def my_module():
-    crud = parse_crud_request()
-    edit_id = crud.edit_id
-    view_id = crud.view_id
-    if request.method == "POST":
-        # create or update
-        return redirect(url_for("my_module", view=new_id))
-    rows = ...
-    ctx = module_page_context(MY_MODULE)
-    return render_template("my_module.html", rows=rows, **ctx)
+rows = apply_list_filters(
+    rows,
+    status=request.args.get("status"),
+    search=request.args.get("q"),
+    search_fields=("project_name", "project_code"),
+)
 ```
 
-### Excel export
+Excel export route example: `/projects/export` using `export_rows_to_excel()`.
 
-```python
-@app.route("/my-module/export")
-@login_required
-def my_module_export():
-    rows = ...
-    buffer, filename = export_rows_to_excel(rows, "my_module", columns=[...])
-    return send_file(buffer, as_attachment=True, download_name=filename, mimetype="...")
-```
+## Reports
 
-## 4. Standard report framework
+- Registry: `report_registry.py`
+- Hub UI: `/reports/corporate`
+- Standard runner: `/reports/run?report=<slug>&action=view|excel|pdf`
+- Routing helper: `report_run_target()` in `erp_framework.py`
 
-### Registry
-
-Add entries in `report_registry.py` with `status`: `wired`, `stub`, or `screen`.
-
-### Run route
-
-`GET /reports/run?report=<slug>&action=view|excel|record_id=...`
-
-Dispatches to the correct print screen, corporate stub, or Excel export.
-
-### Report runner form
-
-```jinja
-{% from 'macros/erp_ui.html' import erp_report_runner %}
-
-{{ erp_report_runner(
-  report_slug='dpr_report',
-  title='DPR Report',
-  projects=projects
-) }}
-```
-
-Corporate print layouts use `corporate_report_action_bar` from `templates/macros/corporate_report.html` plus `static/js/report-actions.js`.
+Use `erp_report_runner` macro on module report pages.
 
 ## Phase 2 gaps (per-module)
 
-- Migrate remaining list pages from `erp_module_toolbar` to `erp_standard_toolbar`
-- Replace raw `breadcrumbs` HTML strings with `breadcrumb_items`
-- Add `/export` routes for modules that only have client-side CSV export
-- Wire workflow delete rules per module on toolbar Delete
-- Add server-side sort/pagination instead of client-only sort where datasets are large
-- Connect wired reports to record pickers on module list pages
-
-## Files added/changed in Phase 1
-
-- `erp_framework.py` (new)
-- `static/js/erp-framework.js` (new)
-- `templates/macros/erp_ui.html` — `erp_standard_toolbar`, `erp_report_runner`
-- `templates/base_maxek.html` — loads framework JS
-- `static/css/maxek-dashboard.css` — toolbar groups, selected row
-- `app.py` — `report_run`, `projects_export`, projects framework context
-- `templates/projects.html` — reference wiring
-- `docs/FRAMEWORK.md` (this file)
-- `tests/test_erp_framework.py` (new)
+- Wire remaining modules to `erp_standard_toolbar` (currently only **Projects** is fully wired)
+- Add `ModuleConfig` entries for each department module
+- Server-side pagination for large lists
+- Dedicated PDF generators (currently PDF uses print pipeline)
+- Complete stub reports in `report_registry.py`
+- Workflow-aware delete from toolbar on modules without workflow modals

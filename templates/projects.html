@@ -48,9 +48,11 @@
   {{ erp_standard_toolbar(
     module_endpoint='projects',
     search_placeholder='Search projects...',
+    search_name='q',
     new_url=url_for('projects') ~ '#add-project',
     form_anchor='#add-project',
     export_url=url_for('projects_export'),
+    export_pdf_url=url_for('projects') ~ '?print=1',
     print_target='#project-list',
     table_target='#project-list',
     delete_table='projects',
@@ -350,11 +352,19 @@
 
   {% call erp_module_table_panel(id='project-list', title='Project List') %}
     <div class="erp-table-scroll">
-      <table class="erp-table erp-table-module">
+      <table class="erp-table erp-table-module" data-erp-crud-table>
         <thead><tr><th>Project No.</th><th>Name</th><th>Type</th><th>Client / Dept</th><th>Approved Total</th><th>Status</th><th>Workflow</th><th>Actions</th></tr></thead>
         <tbody>
           {% for row in rows %}
-          <tr data-erp-row-id="{{ row.id }}" data-erp-row-status="{{ row.status or 'Active' }}" data-erp-row-date="{{ row.created_at or '' }}">
+          {% set can_edit = row.approval_status in ['Pending Checker', 'Rejected by Checker', 'Rejected by Approver'] %}
+          {% set can_delete = row.approval_status in ['Pending Checker', 'Rejected by Checker', 'Rejected by Approver'] %}
+          <tr data-record-id="{{ row.id }}"
+              data-erp-row-id="{{ row.id }}"
+              data-erp-row-status="{{ row.status or 'Active' }}"
+              data-erp-row-date="{{ row.created_at or '' }}"
+              data-record-workflow="{{ row.approval_status or '' }}"
+              data-record-editable="{{ '1' if can_edit else '0' }}"
+              data-record-deletable="{{ '1' if can_delete else '0' }}">
             <td>{{ row.project_code or row.id }}</td>
             <td>
               <button type="button" class="erp-link-btn" data-modal-open="project-hub-{{ row.id }}" title="Open Project 360">
