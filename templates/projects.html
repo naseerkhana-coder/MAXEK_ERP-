@@ -1,8 +1,8 @@
 {% extends 'base_maxek.html' %}
-{% from 'macros/erp_ui.html' import approval_badge, role_status_badge, rejection_notice, workflow_modals, transaction_view_tabs, checker_row_actions, approver_row_actions, maker_row_actions, erp_pagination, erp_module_toolbar, erp_module_table_panel %}
-{% set page_title = 'Project Creation' if show_project_form|default(false) else 'Projects' %}
-{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; Projects' %}
+{% from 'macros/erp_ui.html' import approval_badge, role_status_badge, rejection_notice, workflow_modals, transaction_view_tabs, checker_row_actions, approver_row_actions, maker_row_actions, erp_pagination, erp_standard_toolbar, erp_module_table_panel, erp_btn_back %}
+{% set page_title = page_title or ('Project Creation' if show_project_form|default(false) else 'Project List') %}
 {% block page_actions %}
+{{ erp_btn_back(url_for('projects_dashboard'), 'Project Dashboard') }}
 <button type="button" class="erp-btn erp-btn-ghost" data-ai-open data-ai-mode="assistant"><i class="fa-solid fa-wand-magic-sparkles"></i> AI Assistant</button>
 <a href="{{ url_for('cost_planning') }}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-coins"></i> Cost Planning</a>
 {% endblock %}
@@ -45,11 +45,26 @@
 
 <div class="erp-module-layout">
 {% if not view_project %}
-  {{ erp_module_toolbar(
+  {{ erp_standard_toolbar(
+    module_endpoint='projects',
     search_placeholder='Search projects...',
-    add_url='#add-project',
-    export_name='projects',
-    print_target='#project-list'
+    new_url=url_for('projects') ~ '#add-project',
+    form_anchor='#add-project',
+    export_url=url_for('projects_export'),
+    print_target='#project-list',
+    table_target='#project-list',
+    delete_table='projects',
+    module_id=module_id,
+    status_options=[
+      {'value': 'Active', 'label': 'Active'},
+      {'value': 'Completed', 'label': 'Completed'},
+      {'value': 'On Hold', 'label': 'On Hold'}
+    ],
+    sort_options=[
+      {'value': 0, 'label': 'Project No.'},
+      {'value': 1, 'label': 'Name'},
+      {'value': 5, 'label': 'Status'}
+    ]
   ) }}
 {% endif %}
 
@@ -339,7 +354,7 @@
         <thead><tr><th>Project No.</th><th>Name</th><th>Type</th><th>Client / Dept</th><th>Approved Total</th><th>Status</th><th>Workflow</th><th>Actions</th></tr></thead>
         <tbody>
           {% for row in rows %}
-          <tr>
+          <tr data-erp-row-id="{{ row.id }}" data-erp-row-status="{{ row.status or 'Active' }}" data-erp-row-date="{{ row.created_at or '' }}">
             <td>{{ row.project_code or row.id }}</td>
             <td>
               <button type="button" class="erp-link-btn" data-modal-open="project-hub-{{ row.id }}" title="Open Project 360">

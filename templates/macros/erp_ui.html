@@ -351,6 +351,126 @@
     print_target — CSS selector for table region print (#data-table)
     extra_buttons — raw HTML for additional toolbar buttons
 #}
+{#
+  Standard MAXEK list-page toolbar (Phase 1 framework).
+  CRUD group: New, Open, View, Edit, Delete
+  Filter group: Search, Status, Date range, Sort, Refresh
+  Export group: Excel, PDF, Print
+
+  Requires static/js/erp-framework.js for row selection and toolbar actions.
+#}
+{% macro erp_standard_toolbar(
+  module_endpoint,
+  search_placeholder='Search records...',
+  search_name='',
+  new_url='',
+  new_label='New',
+  list_url='',
+  form_anchor='#add-record',
+  export_url='',
+  export_name='export',
+  export_pdf_url='',
+  print_enabled=true,
+  print_url='',
+  print_target='#data-table',
+  table_target='',
+  status_options=none,
+  status_name='status',
+  date_from_name='date_from',
+  date_to_name='date_to',
+  sort_options=none,
+  sort_name='sort',
+  delete_table='',
+  module_id='',
+  show_crud_buttons=true,
+  show_filters=true,
+  extra_buttons=''
+) %}
+{% set endpoint = module_endpoint %}
+{% set base_list = list_url or url_for(endpoint) %}
+<div class="erp-module-toolbar erp-standard-toolbar" role="toolbar" aria-label="Module actions"
+     data-erp-standard-toolbar
+     data-module-endpoint="{{ endpoint }}"
+     data-list-url="{{ base_list }}"
+     data-new-url="{{ new_url or (base_list ~ '?new=1') }}"
+     data-form-anchor="{{ form_anchor }}"
+     data-delete-table="{{ delete_table }}"
+     data-module-id="{{ module_id }}"
+     data-export-pdf-url="{{ export_pdf_url }}"
+     data-print-target="{{ print_target }}"
+     {% if table_target %}data-table-target="{{ table_target }}"{% endif %}>
+  {% if show_crud_buttons %}
+  <div class="erp-toolbar-group erp-toolbar-group--crud" aria-label="Record actions">
+    <button type="button" class="erp-btn erp-btn-primary erp-btn-sm" data-erp-toolbar-action="new" title="Create new record"><i class="fa-solid fa-plus" aria-hidden="true"></i> {{ new_label }}</button>
+    <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-erp-toolbar-action="open" title="Open selected record"><i class="fa-solid fa-folder-open" aria-hidden="true"></i> Open</button>
+    <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-erp-toolbar-action="view" title="View selected record"><i class="fa-solid fa-eye" aria-hidden="true"></i> View</button>
+    <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-erp-toolbar-action="edit" title="Edit selected record"><i class="fa-solid fa-pen-to-square" aria-hidden="true"></i> Edit</button>
+    <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-erp-toolbar-action="delete" title="Delete selected record"><i class="fa-solid fa-trash-can" aria-hidden="true"></i> Delete</button>
+  </div>
+  {% endif %}
+  {% if show_filters %}
+  <div class="erp-toolbar-group erp-toolbar-group--filters" aria-label="Search and filters">
+    <div class="erp-module-toolbar-search">
+      {% if search_name %}
+      <form method="get" class="erp-module-toolbar-search-form">
+        <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+        <input type="search" name="{{ search_name }}" value="{{ request.args.get(search_name, '') }}" placeholder="{{ search_placeholder }}" data-erp-module-search aria-label="Search records">
+        {% if status_options %}
+        <input type="hidden" name="{{ status_name }}" value="{{ request.args.get(status_name, '') }}">
+        {% endif %}
+        {% if sort_options %}
+        <input type="hidden" name="{{ sort_name }}" value="{{ request.args.get(sort_name, '') }}">
+        {% endif %}
+      </form>
+      {% else %}
+      <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+      <input type="search" placeholder="{{ search_placeholder }}" data-erp-module-search data-table-search aria-label="Search records">
+      {% endif %}
+    </div>
+    {% if status_options %}
+    <select class="erp-toolbar-filter" name="{{ status_name }}" data-erp-status-filter aria-label="Filter by status">
+      <option value="">All status</option>
+      {% for opt in status_options %}
+      <option value="{{ opt.value }}"{% if request.args.get(status_name) == opt.value %} selected{% endif %}>{{ opt.label }}</option>
+      {% endfor %}
+    </select>
+    {% endif %}
+    <input type="date" class="erp-toolbar-filter erp-toolbar-filter--date" name="{{ date_from_name }}" value="{{ request.args.get(date_from_name, '') }}" data-erp-date-from aria-label="Date from" title="Date from">
+    <input type="date" class="erp-toolbar-filter erp-toolbar-filter--date" name="{{ date_to_name }}" value="{{ request.args.get(date_to_name, '') }}" data-erp-date-to aria-label="Date to" title="Date to">
+    {% if sort_options %}
+    <select class="erp-toolbar-filter" name="{{ sort_name }}" data-erp-sort aria-label="Sort column">
+      <option value="">Sort</option>
+      {% for opt in sort_options %}
+      <option value="{{ opt.value }}"{% if request.args.get(sort_name) == opt.value|string %} selected{% endif %}>{{ opt.label }}</option>
+      {% endfor %}
+    </select>
+    {% endif %}
+    <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-erp-toolbar-action="refresh" title="Refresh list"><i class="fa-solid fa-rotate-right" aria-hidden="true"></i> Refresh</button>
+  </div>
+  {% endif %}
+  <div class="erp-toolbar-group erp-toolbar-group--export" aria-label="Export actions">
+    {% if export_url %}
+    <a href="{{ export_url }}" class="erp-btn erp-btn-ghost erp-btn-sm" data-export-excel><i class="fa-solid fa-file-excel" aria-hidden="true"></i> Export Excel</a>
+    {% elif export_name %}
+    <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-table-export="{{ export_name }}" data-export-excel><i class="fa-solid fa-file-excel" aria-hidden="true"></i> Export Excel</button>
+    {% endif %}
+    {% if export_pdf_url %}
+    <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-erp-toolbar-action="export-pdf"><i class="fa-solid fa-file-pdf" aria-hidden="true"></i> Export PDF</button>
+    {% else %}
+    <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-erp-toolbar-action="export-pdf" title="Print to PDF"><i class="fa-solid fa-file-pdf" aria-hidden="true"></i> Export PDF</button>
+    {% endif %}
+    {% if print_enabled %}
+      {% if print_url %}
+      <a href="{{ print_url }}" class="erp-btn erp-btn-ghost erp-btn-sm" target="_blank" rel="noopener" data-erp-print><i class="fa-solid fa-print" aria-hidden="true"></i> Print</a>
+      {% else %}
+      <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-erp-print{% if print_target %} data-erp-print-target="{{ print_target }}"{% endif %}><i class="fa-solid fa-print" aria-hidden="true"></i> Print</button>
+      {% endif %}
+    {% endif %}
+    {{ extra_buttons|safe }}
+  </div>
+</div>
+{% endmacro %}
+
 {% macro erp_module_toolbar(
   search_placeholder='Search records...',
   search_name='',
@@ -365,6 +485,7 @@
   print_target='#data-table',
   extra_buttons=''
 ) %}
+{# Backward-compatible wrapper — use erp_standard_toolbar for full CRUD/filter toolbar #}
 <div class="erp-module-toolbar" role="toolbar" aria-label="Module actions">
   <div class="erp-module-toolbar-search">
     {% if search_name %}
@@ -400,6 +521,69 @@
     {{ extra_buttons|safe }}
   </div>
 </div>
+{% endmacro %}
+
+{% macro erp_report_runner(
+  report_slug,
+  title='Run Report',
+  action_url='',
+  filters=none,
+  show_record_id=false,
+  record_id_label='Record ID',
+  projects=none,
+  extra_fields=''
+) %}
+{% set run_url = action_url or url_for('report_run') %}
+<form method="get" action="{{ run_url }}" class="erp-report-runner erp-form-card" data-erp-report-runner>
+  <input type="hidden" name="report" value="{{ report_slug }}">
+  <input type="hidden" name="action" value="view">
+  <h3 class="erp-form-title">{{ title }}</h3>
+  <div class="erp-form-grid">
+    {% if projects %}
+    <div class="erp-field span-2">
+      <select name="project_id" class="has-value">
+        <option value="">All projects</option>
+        {% for project in projects %}
+        <option value="{{ project.id }}">{{ project.name or project.project_name }}</option>
+        {% endfor %}
+      </select>
+      <label>Project</label>
+    </div>
+    {% endif %}
+    {% if show_record_id %}
+    <div class="erp-field">
+      <input name="record_id" type="number" min="1" placeholder=" " required>
+      <label>{{ record_id_label }}</label>
+    </div>
+    {% endif %}
+    {% if filters %}
+    {% for field in filters %}
+    <div class="erp-field{% if field.span %} span-{{ field.span }}{% endif %}">
+      {% if field.type == 'select' %}
+      <select name="{{ field.name }}" class="has-value">
+        <option value="">{{ field.placeholder or 'Select' }}</option>
+        {% for opt in field.options or [] %}
+        <option value="{{ opt.value }}">{{ opt.label }}</option>
+        {% endfor %}
+      </select>
+      {% elif field.type == 'date' %}
+      <input type="date" name="{{ field.name }}" placeholder=" ">
+      {% else %}
+      <input type="{{ field.type or 'text' }}" name="{{ field.name }}" placeholder=" ">
+      {% endif %}
+      <label>{{ field.label }}</label>
+    </div>
+    {% endfor %}
+    {% endif %}
+    {{ extra_fields|safe }}
+  </div>
+  <div class="erp-form-actions">
+    <button type="submit" class="erp-btn erp-btn-primary" name="action" value="view"><i class="fa-solid fa-play" aria-hidden="true"></i> Run</button>
+    <button type="submit" class="erp-btn erp-btn-ghost" name="action" value="excel"><i class="fa-solid fa-file-excel" aria-hidden="true"></i> Export Excel</button>
+    <button type="submit" class="erp-btn erp-btn-ghost" name="action" value="pdf" formaction="{{ url_for('report_run') }}?report={{ report_slug }}&action=pdf"><i class="fa-solid fa-file-pdf" aria-hidden="true"></i> Export PDF</button>
+    <button type="button" class="erp-btn erp-btn-ghost" onclick="window.print()"><i class="fa-solid fa-print" aria-hidden="true"></i> Print</button>
+  </div>
+</form>
 {% endmacro %}
 
 {% macro erp_module_form_panel(id='data-entry', title='', hidden=false, extra_class='') %}

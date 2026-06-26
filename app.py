@@ -561,6 +561,14 @@ from report_registry import (
     count_by_status,
 )
 
+from erp_framework import (
+    PROJECTS_MODULE,
+    apply_list_filters,
+    export_rows_to_excel,
+    module_page_context,
+    report_run_target,
+)
+
 from corporate_report_data_service import (
     load_standard_report_data,
     get_stub_template,
@@ -10468,6 +10476,16 @@ def projects():
         "SELECT p.*, c.client_name, c.company_name FROM projects p "
         "LEFT JOIN clients c ON p.client_id = c.id ORDER BY p.id DESC"
     )
+    rows = apply_list_filters(
+        rows,
+        status=request.args.get("status") or None,
+        status_field="status",
+        date_from=request.args.get("date_from") or None,
+        date_to=request.args.get("date_to") or None,
+        date_field="created_at",
+        search=request.args.get("q") or None,
+        search_fields=("project_name", "project_code", "client_name", "company_name", "gov_department"),
+    )
     project_ids = [row["id"] for row in rows]
     hub_index = _build_project_hub_index(db, project_ids)
     if view_project_id and view_project_id not in project_ids and not view_project:
@@ -10502,6 +10520,18 @@ def projects():
     if bill_project_id:
         project_bill_submissions = _load_project_client_bill_submissions(db, bill_project_id)
         bill_submission_summary = _bill_submission_summary(project_bill_submissions)
+    framework_ctx = module_page_context(
+        PROJECTS_MODULE,
+        current_label=(
+            "View Project"
+            if view_project
+            else "Edit Project"
+            if editing_project
+            else "New Project"
+            if show_project_form and not editing_project
+            else PROJECTS_MODULE.list_label
+        ),
+    )
     return render_template(
         "projects.html",
         rows=rows,
@@ -10528,6 +10558,53 @@ def projects():
         module_id=module_id,
         show_project_form=show_project_form,
         module_active_anchor=module_active_anchor,
+        **framework_ctx,
+    )
+
+
+@app.route("/projects/export")
+@login_required
+def projects_export():
+    db = get_db()
+    rows = query_db(
+        "SELECT p.project_code, p.project_name, p.project_type, p.gov_department, "
+        "p.private_client_name, c.company_name, c.client_name, p.location, "
+        "p.approved_total_amount, p.status, p.approval_status, p.created_at "
+        "FROM projects p LEFT JOIN clients c ON p.client_id = c.id ORDER BY p.id DESC"
+    )
+    rows = apply_list_filters(
+        rows,
+        status=request.args.get("status") or None,
+        status_field="status",
+        date_from=request.args.get("date_from") or None,
+        date_to=request.args.get("date_to") or None,
+        date_field="created_at",
+    )
+    if not rows:
+        flash("No projects to export.")
+        return redirect(url_for("projects"))
+    buffer, filename = export_rows_to_excel(
+        rows,
+        "projects",
+        columns=[
+            ("project_code", "Project No."),
+            ("project_name", "Project Name"),
+            ("project_type", "Type"),
+            ("gov_department", "Department"),
+            ("company_name", "Client Company"),
+            ("client_name", "Client"),
+            ("location", "Location"),
+            ("approved_total_amount", "Approved Total"),
+            ("status", "Status"),
+            ("approval_status", "Workflow"),
+            ("created_at", "Created At"),
+        ],
+    )
+    return send_file(
+        buffer,
+        as_attachment=True,
+        download_name=filename,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
 
@@ -12394,6 +12471,38 @@ def corporate_reports_hub():
         categories=reports_by_category(),
         status_counts=count_by_status(),
     )
+
+
+@app.route("/reports/run")
+@login_required
+def report_run():
+    """Standard report runner — routes to print, screen, or export handlers."""
+    slug = (request.args.get("report") or "").strip()
+    if not slug:
+        flash("Select a report to run.")
+        return redirect(url_for("corporate_reports_hub"))
+    report_def = get_report_def(slug)
+    if not report_def:
+        flash("Unknown report type.")
+        return redirect(url_for("corporate_reports_hub"))
+    action = (request.args.get("action") or "view").lower()
+    if action == "pdf":
+        action = "view"
+    target = report_run_target(slug, report_def, request.args)
+    if target.get("error") == "wired_record_required":
+        flash("Enter the record ID for this report, then click Run.")
+        return redirect(url_for("corporate_reports_hub"))
+    if target.get("error"):
+        flash("This report is not configured for the standard runner.")
+        return redirect(url_for("corporate_reports_hub"))
+    values = dict(target.get("values") or {})
+    if action == "excel" and report_def.get("status") != "wired":
+        return redirect(url_for("corporate_report_export", slug=slug, **request.args))
+    if request.args.get("project_id"):
+        values["project_id"] = request.args.get("project_id")
+    if request.args.get("print") == "1":
+        values["print"] = "1"
+    return redirect(url_for(target["endpoint"], **values))
 
 
 @app.route("/reports/standard/<slug>/print")
