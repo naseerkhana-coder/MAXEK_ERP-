@@ -108,21 +108,13 @@
     {% endif %}
   </nav>
 
+  {% if not pro_shell_department_portal|default(false) %}
   <div class="pro-dash-sidebar-bottom">
-    {% if not pro_shell_department_portal|default(false) %}
     <div class="pro-dash-sidebar-promo">
       <p class="pro-dash-promo-title">MAXEK Assistant</p>
       <p class="pro-dash-promo-text">Ask AI about BOQ, DPR, approvals &amp; reports.</p>
       <button type="button" class="pro-dash-promo-btn" data-ai-open>Try it now</button>
     </div>
-    {% endif %}
-
-    <div class="pro-dash-sidebar-user">
-      <div class="pro-dash-user-avatar">{{ admin_initial }}</div>
-      <div class="pro-dash-user-meta">
-        <strong>{{ welcome_name or session.get('employee_name') or session.get('username') or 'Administrator' }}</strong>
-        <span>{{ command_centre_branch|default(selected_branch) }} · {{ command_user_role|default(session.get('role') or 'Owner') }}</span>
-      </div>
-    </div>
   </div>
+  {% endif %}
 </aside>

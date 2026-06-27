@@ -98,6 +98,10 @@
   min-height: 0;
 }
 
+.pro-dash-dashboard-host > .pro-dash-content[hidden] {
+  display: none !important;
+}
+
 /* Module pages — scrollable content, not dashboard grid */
 .pro-dash-content--module {
   display: block;
@@ -471,10 +475,7 @@
 }
 
 .pro-dash-sidebar-user {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 4px 6px 0;
+  display: none !important;
 }
 
 /* Sign out belongs in the header only — hide legacy/cached sidebar logout markup */

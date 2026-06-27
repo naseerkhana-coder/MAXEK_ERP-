@@ -3,11 +3,14 @@ MAXEK ERP — VPS UPDATE FILE LIST (WinSCP)
 Upload ONLY these files/folders to /var/www/maxek-erp-flask/
 DO NOT upload: database/maxek.db, .env, venv/, backups/
 
-SIDEBAR SIGN-OUT FIX (required — copy all three)
-------------------------------------------------
-templates/partials/dashboard_shell_sidebar.html   ← no logout in sidebar HTML
-static/css/maxek-pro-dashboard.css                ← hides legacy .pro-dash-logout-btn
-templates/base_maxek.html                         ← cache-bust pro dashboard CSS
+SIDEBAR + LAYOUT TABS (required — copy all)
+--------------------------------------------
+templates/partials/dashboard_shell_sidebar.html   ← no user block at bottom
+templates/partials/dashboard_shell_header.html     ← Overview / Operations / Finance tabs
+templates/dashboard.html                           ← panel ids for tab a11y
+static/js/maxek-pro-dashboard.js                   ← layout tab switching
+static/css/maxek-pro-dashboard.css                 ← panel [hidden] + no sidebar user
+templates/base_maxek.html                          ← cache-bust pro dashboard assets
 
 CORE (overwrite)
 ----------------

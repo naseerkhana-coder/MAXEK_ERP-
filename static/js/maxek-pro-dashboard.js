@@ -7,7 +7,8 @@
   }
 
   var sidebarStorageKey = 'maxek-pro-dash-sidebar-collapsed';
-  var closedTabsStorageKey = 'maxek-pro-dash-closed-tabs';
+  var layoutStorageKey = 'maxek-pro-dash-layout';
+  var legacyClosedTabsKey = 'maxek-pro-dash-closed-tabs';
 
   function setSidebarCollapsed(collapsed) {
     shell.classList.toggle('is-sidebar-collapsed', collapsed);
@@ -44,149 +45,85 @@
     });
   }
 
-  function getVisibleTabs() {
-    return Array.prototype.filter.call(
-      shell.querySelectorAll('[data-pro-dash-tab]'),
-      function (tab) {
-        return !tab.classList.contains('is-hidden');
-      }
-    );
-  }
+  var layoutTabs = Array.prototype.slice.call(
+    shell.querySelectorAll('[data-pro-dash-tab]')
+  );
+  var layoutPanels = Array.prototype.slice.call(
+    shell.querySelectorAll('[data-pro-dash-panel]')
+  );
 
-  function getClosedTabIds() {
-    try {
-      var raw = localStorage.getItem(closedTabsStorageKey);
-      if (!raw) {
-        return [];
-      }
-      var parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch (err) {
-      return [];
+  function activateLayout(layoutId) {
+    if (!layoutId) {
+      return;
     }
-  }
 
-  function saveClosedTabIds(ids) {
+    var hasPanel = layoutPanels.some(function (panel) {
+      return panel.getAttribute('data-pro-dash-panel') === layoutId;
+    });
+    if (!hasPanel) {
+      return;
+    }
+
+    layoutTabs.forEach(function (tab) {
+      var active = tab.getAttribute('data-pro-dash-tab') === layoutId;
+      tab.classList.toggle('is-active', active);
+      tab.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+
+    layoutPanels.forEach(function (panel) {
+      var show = panel.getAttribute('data-pro-dash-panel') === layoutId;
+      panel.hidden = !show;
+    });
+
     try {
-      localStorage.setItem(closedTabsStorageKey, JSON.stringify(ids));
+      sessionStorage.setItem(layoutStorageKey, layoutId);
     } catch (err) {
       /* ignore */
     }
-  }
 
-  function activateTab(tab) {
-    if (!tab || tab.classList.contains('is-hidden')) {
-      return;
-    }
-
-    var target = tab.getAttribute('data-pro-dash-tab');
-    if (!target) {
-      return;
-    }
-
-    var tabs = shell.querySelectorAll('[data-pro-dash-tab]');
-    var panels = shell.querySelectorAll('[data-pro-dash-panel]');
-
-    tabs.forEach(function (item) {
-      var active = item === tab;
-      item.classList.toggle('is-active', active);
-      item.setAttribute('aria-selected', active ? 'true' : 'false');
-    });
-
-    panels.forEach(function (panel) {
-      var show = panel.getAttribute('data-pro-dash-panel') === target;
-      panel.hidden = !show;
-    });
-  }
-
-  function closeTab(tab) {
-    var tabId = tab.getAttribute('data-pro-dash-tab');
-    if (!tabId) {
-      return;
-    }
-
-    var visibleTabs = getVisibleTabs();
-    if (visibleTabs.length <= 1) {
-      return;
-    }
-
-    var wasActive = tab.classList.contains('is-active');
-    tab.classList.add('is-hidden');
-    tab.classList.remove('is-active');
-    tab.setAttribute('aria-selected', 'false');
-
-    var panel = shell.querySelector('[data-pro-dash-panel="' + tabId + '"]');
-    if (panel) {
-      panel.hidden = true;
-    }
-
-    var closedIds = getClosedTabIds();
-    if (closedIds.indexOf(tabId) === -1) {
-      closedIds.push(tabId);
-      saveClosedTabIds(closedIds);
-    }
-
-    if (wasActive) {
-      var nextTab = getVisibleTabs()[0];
-      if (nextTab) {
-        activateTab(nextTab);
-      }
+    if (window.location.hash !== '#' + layoutId) {
+      history.replaceState(null, '', '#' + layoutId);
     }
   }
 
   function initLayoutTabs() {
-    var tabs = shell.querySelectorAll('[data-pro-dash-tab]');
-    if (!tabs.length) {
+    if (!layoutTabs.length || !layoutPanels.length) {
       return;
     }
 
-    var closedIds = getClosedTabIds();
-    tabs.forEach(function (tab) {
-      var tabId = tab.getAttribute('data-pro-dash-tab');
-      if (tabId && closedIds.indexOf(tabId) !== -1) {
-        tab.classList.add('is-hidden');
-        tab.classList.remove('is-active');
-        tab.setAttribute('aria-selected', 'false');
-        var panel = shell.querySelector('[data-pro-dash-panel="' + tabId + '"]');
-        if (panel) {
-          panel.hidden = true;
-        }
-      }
-    });
-
-    var visibleTabs = getVisibleTabs();
-    if (!visibleTabs.length) {
-      tabs.forEach(function (tab) {
-        tab.classList.remove('is-hidden');
-      });
-      saveClosedTabIds([]);
-      visibleTabs = getVisibleTabs();
+    try {
+      localStorage.removeItem(legacyClosedTabsKey);
+    } catch (err) {
+      /* ignore */
     }
 
-    var activeTab = visibleTabs.find(function (tab) {
-      return tab.classList.contains('is-active');
+    layoutTabs.forEach(function (tab) {
+      tab.classList.remove('is-hidden');
+      tab.addEventListener('click', function () {
+        activateLayout(tab.getAttribute('data-pro-dash-tab'));
+      });
     });
-    if (!activeTab) {
-      activateTab(visibleTabs[0]);
+
+    var initialLayout = 'default';
+    var hashLayout = (window.location.hash || '').replace(/^#/, '');
+    if (hashLayout && layoutPanels.some(function (panel) {
+      return panel.getAttribute('data-pro-dash-panel') === hashLayout;
+    })) {
+      initialLayout = hashLayout;
+    } else {
+      try {
+        var stored = sessionStorage.getItem(layoutStorageKey);
+        if (stored && layoutPanels.some(function (panel) {
+          return panel.getAttribute('data-pro-dash-panel') === stored;
+        })) {
+          initialLayout = stored;
+        }
+      } catch (err) {
+        /* ignore */
+      }
     }
 
-    tabs.forEach(function (tab) {
-      tab.addEventListener('click', function (event) {
-        if (event.target.closest('.pro-dash-tab-close')) {
-          return;
-        }
-        activateTab(tab);
-      });
-
-      var closeBtn = tab.querySelector('.pro-dash-tab-close');
-      if (closeBtn) {
-        closeBtn.addEventListener('click', function (event) {
-          event.preventDefault();
-          event.stopPropagation();
-          closeTab(tab);
-        });
-      }
-    });
+    activateLayout(initialLayout);
   }
 
   initLayoutTabs();

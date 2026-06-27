@@ -5,7 +5,7 @@
 {% block title %}Dashboard — MAXEK ERP{% endblock %}
 
 {% block content %}
-<div class="pro-dash-content" data-pro-dash-panel="default">
+<div class="pro-dash-content" id="pro-dash-panel-default" data-pro-dash-panel="default">
   <section class="pro-dash-kpi-strip" aria-label="Key performance indicators">
     {% for kpi in command_centre_kpis %}
     <article class="pro-dash-kpi-card">
@@ -116,7 +116,7 @@
   </section>
 </div>
 
-<div class="pro-dash-content pro-dash-content--alt" data-pro-dash-panel="operations" hidden>
+<div class="pro-dash-content pro-dash-content--alt" id="pro-dash-panel-operations" data-pro-dash-panel="operations" hidden>
   <section class="pro-dash-dept-grid" aria-label="Department workspaces">
     {% for card in command_centre_cards %}
     <a href="{{ url_for('department_portal', slug=card.slug) }}" class="pro-dash-dept-card" style="--dept-accent: {{ card.accent }};">
@@ -131,7 +131,7 @@
   </section>
 </div>
 
-<div class="pro-dash-content pro-dash-content--alt" data-pro-dash-panel="finance" hidden>
+<div class="pro-dash-content pro-dash-content--alt" id="pro-dash-panel-finance" data-pro-dash-panel="finance" hidden>
   <section class="pro-dash-kpi-strip pro-dash-kpi-strip--finance" aria-label="Finance KPIs">
     <article class="pro-dash-kpi-card">
       <span class="pro-dash-kpi-label">Cash Balance</span>

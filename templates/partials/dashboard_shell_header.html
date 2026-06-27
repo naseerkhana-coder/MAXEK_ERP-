@@ -1,19 +1,13 @@
 <header class="pro-dash-header">
-  <div class="pro-dash-tabs" role="tablist" aria-label="Dashboard layouts">
-    <button type="button" class="pro-dash-tab is-active" role="tab" aria-selected="true" data-pro-dash-tab="default">
-      <span class="pro-dash-tab-label">Default layout</span>
-      <span class="pro-dash-tab-close" role="button" tabindex="-1" aria-label="Close Default layout tab" title="Close tab">&times;</span>
+  <div class="pro-dash-tabs" role="tablist" aria-label="Dashboard views">
+    <button type="button" class="pro-dash-tab is-active" role="tab" aria-selected="true" aria-controls="pro-dash-panel-default" data-pro-dash-tab="default">
+      <span class="pro-dash-tab-label">Overview</span>
     </button>
-    <button type="button" class="pro-dash-tab" role="tab" aria-selected="false" data-pro-dash-tab="operations">
+    <button type="button" class="pro-dash-tab" role="tab" aria-selected="false" aria-controls="pro-dash-panel-operations" data-pro-dash-tab="operations">
       <span class="pro-dash-tab-label">Operations</span>
-      <span class="pro-dash-tab-close" role="button" tabindex="-1" aria-label="Close Operations tab" title="Close tab">&times;</span>
     </button>
-    <button type="button" class="pro-dash-tab" role="tab" aria-selected="false" data-pro-dash-tab="finance">
+    <button type="button" class="pro-dash-tab" role="tab" aria-selected="false" aria-controls="pro-dash-panel-finance" data-pro-dash-tab="finance">
       <span class="pro-dash-tab-label">Finance</span>
-      <span class="pro-dash-tab-close" role="button" tabindex="-1" aria-label="Close Finance tab" title="Close tab">&times;</span>
-    </button>
-    <button type="button" class="pro-dash-tab pro-dash-tab--add" title="Add layout" aria-label="Add layout">
-      <i class="fa-solid fa-plus" aria-hidden="true"></i>
     </button>
   </div>
 
