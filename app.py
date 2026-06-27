@@ -10051,6 +10051,7 @@ def render_choice_b_dashboard():
             role_label = "Platform Admin"
     except Exception:
         pass
+    sidebar_context["command_user_role"] = role_label
 
     return render_template(
         "dashboard.html",
@@ -10060,7 +10061,6 @@ def render_choice_b_dashboard():
         command_centre_bottom_widgets=MAIN_DASHBOARD_BOTTOM_WIDGETS,
         command_centre_activity=command_centre_activity,
         command_centre_month=month_year,
-        command_user_role=role_label,
         dashboard_greeting=greeting,
         dashboard_kpi_icons=_dashboard_kpi_icon_map(),
         dashboard_quick_links=DASHBOARD_OVERVIEW_QUICK_LINKS,
