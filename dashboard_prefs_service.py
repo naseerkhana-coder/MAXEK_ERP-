@@ -8,6 +8,15 @@ from typing import Any
 
 from user_context_service import ensure_user_context_schema
 
+VALID_UI_THEMES = frozenset({"command-dark", "pro-light", "ultra-color"})
+DEFAULT_UI_THEME = "command-dark"
+
+
+def normalize_ui_theme(theme: str | None) -> str:
+    if theme and theme in VALID_UI_THEMES:
+        return theme
+    return DEFAULT_UI_THEME
+
 DEFAULT_ROLE_PROFILES: dict[str, dict[str, Any]] = {
     "accounts": {
         "favorite_modules": ["accounts_payments", "accounts_receipts", "accounts_gst", "accounts_reports"],
@@ -38,11 +47,14 @@ DEFAULT_ROLE_PROFILES: dict[str, dict[str, Any]] = {
 
 def _merge_defaults(prefs: dict[str, Any] | None, role_profile: str) -> dict[str, Any]:
     base = dict(DEFAULT_ROLE_PROFILES.get(role_profile, DEFAULT_ROLE_PROFILES["default"]))
+    base["ui_theme"] = DEFAULT_UI_THEME
     if not prefs:
         return base
     for key in ("favorite_modules", "dashboard_cards", "quick_actions", "reports"):
         if prefs.get(key):
             base[key] = prefs[key]
+    if prefs.get("ui_theme"):
+        base["ui_theme"] = normalize_ui_theme(prefs.get("ui_theme"))
     return base
 
 
@@ -67,6 +79,8 @@ def load_dashboard_preferences(db, user_id: int | None) -> dict[str, Any]:
                 parsed[col] = []
         else:
             parsed[col] = []
+    if "ui_theme" in row.keys():
+        parsed["ui_theme"] = normalize_ui_theme(row["ui_theme"])
     return _merge_defaults(parsed, role_profile)
 
 
@@ -79,6 +93,7 @@ def save_dashboard_preferences(
     dashboard_cards: list[str] | None = None,
     quick_actions: list[str] | None = None,
     reports: list[str] | None = None,
+    ui_theme: str | None = None,
 ) -> dict[str, Any]:
     ensure_user_context_schema(db)
     existing = load_dashboard_preferences(db, user_id)
@@ -88,19 +103,21 @@ def save_dashboard_preferences(
         "dashboard_cards": dashboard_cards if dashboard_cards is not None else existing.get("dashboard_cards", []),
         "quick_actions": quick_actions if quick_actions is not None else existing.get("quick_actions", []),
         "reports": reports if reports is not None else existing.get("reports", []),
+        "ui_theme": normalize_ui_theme(ui_theme if ui_theme is not None else existing.get("ui_theme")),
     }
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     db.execute(
         """
         INSERT INTO user_dashboard_preferences(
-            user_id, role_profile, favorite_modules, dashboard_cards, quick_actions, reports, updated_at
-        ) VALUES(?,?,?,?,?,?,?)
+            user_id, role_profile, favorite_modules, dashboard_cards, quick_actions, reports, ui_theme, updated_at
+        ) VALUES(?,?,?,?,?,?,?,?)
         ON CONFLICT(user_id) DO UPDATE SET
             role_profile=excluded.role_profile,
             favorite_modules=excluded.favorite_modules,
             dashboard_cards=excluded.dashboard_cards,
             quick_actions=excluded.quick_actions,
             reports=excluded.reports,
+            ui_theme=excluded.ui_theme,
             updated_at=excluded.updated_at
         """,
         (
@@ -110,6 +127,7 @@ def save_dashboard_preferences(
             json.dumps(payload["dashboard_cards"]),
             json.dumps(payload["quick_actions"]),
             json.dumps(payload["reports"]),
+            payload["ui_theme"],
             now,
         ),
     )
@@ -149,6 +167,7 @@ _FAVORITE_MODULE_TO_DEPT_SLUG: dict[str, str] = {
     "accounts_receipts": "accounts",
     "accounts_gst": "accounts",
     "accounts_reports": "accounts",
+    "cost_planning": "planning-wbs",
     "boq_management": "projects",
     "dpr_entry": "projects",
     "client_billing_register": "projects",
@@ -158,6 +177,12 @@ _FAVORITE_MODULE_TO_DEPT_SLUG: dict[str, str] = {
     "purchase_orders": "store",
     "store_receipt": "store",
     "payroll": "hr-payroll",
+    "fleet_dashboard": "vehicle",
+    "fleet_vehicles": "vehicle",
+    "qc_master": "qc",
+    "plant_qc": "qc",
+    "plant_dashboard": "plant-machinery",
+    "subcontractors": "subcontract",
     "approvals": "accounts",
 }
 

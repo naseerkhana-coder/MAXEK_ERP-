@@ -182,6 +182,33 @@
         <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-maker-add><i class="fa-solid fa-plus"></i> Add assignment tab</button>
       </div>
 
+      {% if edit_user %}
+      <div class="span-2" data-tab-permissions-panel>
+        <h4 class="erp-form-subtitle">Department Tab Access</h4>
+        <p class="erp-hint">Select a department, then tick the modules/tabs this user may open. Saves per department.</p>
+        <div class="erp-form-grid" style="align-items:end;margin-bottom:0.75rem;">
+          <div class="erp-field">
+            <select id="perm-department" data-perm-department>
+              <option value="">Select department</option>
+              {% for slug, label in permission_departments %}
+              <option value="{{ slug }}">{{ label }}</option>
+              {% endfor %}
+            </select>
+            <label>Department</label>
+          </div>
+          <div class="erp-field">
+            <button type="button" class="erp-btn erp-btn-primary erp-btn-sm" data-perm-save disabled>
+              <i class="fa-solid fa-floppy-disk"></i> Save tab access
+            </button>
+          </div>
+        </div>
+        <div data-perm-status class="erp-hint" hidden></div>
+        <div data-perm-grid class="dash-display-toggles" hidden></div>
+        <p data-perm-empty class="erp-hint">Choose a department to load its module list.</p>
+        <input type="hidden" data-perm-user-id value="{{ edit_user.id }}">
+      </div>
+      {% endif %}
+
       <div class="erp-form-actions span-2">
         <button class="erp-btn erp-btn-primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Save User</button>
         {% if edit_user %}<a href="{{ url_for('user_settings') }}" class="erp-btn erp-btn-ghost">Cancel</a>{% endif %}

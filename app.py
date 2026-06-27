@@ -59,6 +59,10 @@ from attendance_service import (
     list_monthly_attendance_records,
     get_monthly_attendance_record,
     save_monthly_attendance_from_form,
+    list_trades_for_subcontractor,
+    list_subcontractor_workers_for_attendance,
+    save_bulk_subcontractor_attendance,
+    SUBCONTRACTOR_ATTENDANCE_STATUSES,
 )
 
 from accounts_service import (
@@ -334,12 +338,18 @@ from ui_shell_config import (
     APP_VERSION_LABEL,
     GLOBAL_SEARCH_CATEGORIES,
     HELP_CENTER_ITEMS,
+    MAIN_DASHBOARD_BOTTOM_WIDGETS,
+    MAIN_DASHBOARD_DEPARTMENT_SLUGS,
+    MAIN_DASHBOARD_PORTAL_ALIASES,
     VIRTUAL_TOOLBAR_ENTRIES,
     accounts_sub_toolbar_sections,
     build_main_toolbar,
     filter_sub_toolbar_items,
+    get_department_portal_menu,
+    portal_menu_as_nav_group,
     quick_panel_for_slug,
     resolve_active_toolbar_slug,
+    resolve_department_portal_slug,
 )
 
 from super_admin_service import (
@@ -374,6 +384,16 @@ from user_context_service import (
     load_user_context,
     save_user_context,
 )
+from user_permission_service import (
+    PERMISSION_DEPARTMENT_CHOICES,
+    apply_user_tab_permissions_to_nav_groups,
+    build_department_tab_catalog,
+    ensure_user_tab_permissions_schema,
+    filter_portal_menu_for_user,
+    get_user_department_tab_state,
+    nav_slug_to_permission_department,
+    save_user_department_tab_permissions,
+)
 from badge_counts_service import badge_for_endpoint, get_live_badge_counts
 from attachment_service import ensure_attachment_schema
 from audit_trail_service import ensure_audit_schema, list_audit_trail
@@ -383,6 +403,7 @@ from dashboard_prefs_service import (
     filter_command_centre_quick_actions,
     infer_role_profile,
     load_dashboard_preferences,
+    normalize_ui_theme,
     save_dashboard_preferences,
 )
 
@@ -556,17 +577,10 @@ from corporate_template_service import (
 )
 
 from report_registry import (
+    REPORT_CATEGORIES,
     get_report_def,
     reports_by_category,
     count_by_status,
-)
-
-from erp_framework import (
-    PROJECTS_MODULE,
-    apply_list_filters,
-    export_rows_to_excel,
-    module_page_context,
-    report_run_target,
 )
 
 from corporate_report_data_service import (
@@ -4823,7 +4837,7 @@ def get_attendance_form_worker_data():
         "ORDER BY subcontractor_name"
     )
     subcontractor_worker_rows = query_db(
-        "SELECT id, worker_code, worker_name, photo, subcontractor_id, designation "
+        "SELECT id, worker_code, worker_name, photo, subcontractor_id, designation, working_hours "
         "FROM workers "
         "WHERE (status IS NULL OR status = 'Active') "
         "AND COALESCE(worker_category, 'Company Staff') = 'Sub Contractor Staff' "
@@ -5348,6 +5362,7 @@ def ensure_runtime_schema(db=None, force=False):
         ensure_user_context_schema(db)
         ensure_attachment_schema(db)
         ensure_audit_schema(db)
+        ensure_user_tab_permissions_schema(db)
     except Exception:
         app.logger.exception("ERP platform schema bootstrap failed")
     _create_transaction_tables(db.cursor())
@@ -6298,16 +6313,34 @@ def _safe_scalar_count(db, sql, params=(), default=0):
         return default
 
 
-def _render_department_hub(title, section, stat_cards, modules, module_section_title="Modules"):
+def _render_department_hub(
+    title,
+    section,
+    stat_cards,
+    modules,
+    module_section_title="Modules",
+    report_modules=None,
+    report_section_title="Reports",
+    ticket_types=None,
+    ticket_section_title="Ticket types",
+    command_centre_mode=False,
+    **extra_template_context,
+):
     breadcrumbs = f'<a href="{url_for("dashboard")}">Home</a> &gt; {section}'
-    return render_template(
-        "department_dashboard.html",
-        hub_title=title,
-        breadcrumbs_html=breadcrumbs,
-        stat_cards=stat_cards,
-        modules=modules,
-        module_section_title=module_section_title,
-    )
+    context = {
+        "hub_title": title,
+        "breadcrumbs_html": breadcrumbs,
+        "stat_cards": stat_cards,
+        "modules": modules,
+        "module_section_title": module_section_title,
+        "report_modules": report_modules,
+        "report_section_title": report_section_title,
+        "ticket_types": ticket_types,
+        "ticket_section_title": ticket_section_title,
+        "command_centre_mode": command_centre_mode,
+    }
+    context.update(extra_template_context)
+    return render_template("department_dashboard.html", **context)
 
 
 def _workflow_view_context(module_id, record_id, record_table, approval_status):
@@ -7547,9 +7580,7 @@ def active_nav_group(endpoint, nav_slug=None):
     if endpoint == "department_portal" and nav_slug:
         portal = get_department_portal(nav_slug)
         if portal:
-            group = get_nav_group_by_slug(portal["nav_slug"])
-            if group:
-                return group
+            return portal_menu_as_nav_group(portal)
     if endpoint in ("dashboard", "dashboard_choice_b"):
         return get_nav_group_by_slug("dashboard")
     if endpoint in ("purchase_vendors", "masters_vendors", "masters_dashboard"):
@@ -7678,12 +7709,22 @@ def inject_maxek_layout():
     approval_total = widgets["maker"] + widgets["checker"] + widgets["approver"]
     nav_slug = (request.view_args or {}).get("slug") if request.endpoint in ("department_hub", "department_portal") else None
     current_nav_group = active_nav_group(request.endpoint, nav_slug)
+    on_department_portal = request.endpoint == "department_portal"
     guest_user = is_guest_user()
     hr_base_user = is_hr_base_user()
     super_admin = is_super_admin_user()
     visible_nav_groups = filter_nav_groups_for_user(
         NAV_GROUPS, guest=guest_user, hr_base=hr_base_user, super_admin=super_admin
     )
+    tab_perm_full_access = is_admin_user() or super_admin or guest_user
+    if user_id and not tab_perm_full_access:
+        visible_nav_groups = apply_user_tab_permissions_to_nav_groups(
+            db,
+            user_id,
+            visible_nav_groups,
+            full_access=False,
+            department_slug_for_nav=nav_slug_to_permission_department,
+        )
     try:
         app_timezone = get_app_setting(get_db(), "timezone", "Asia/Kolkata")
     except sqlite3.OperationalError:
@@ -7693,6 +7734,11 @@ def inject_maxek_layout():
     active_toolbar_slug = resolve_active_toolbar_slug(
         request.endpoint, nav_slug, visible_nav_groups
     )
+    if on_department_portal and nav_slug:
+        dept_portal = get_department_portal(nav_slug)
+        if dept_portal:
+            active_toolbar_slug = dept_portal["slug"]
+            current_nav_group = portal_menu_as_nav_group(dept_portal)
     if active_toolbar_slug in VIRTUAL_TOOLBAR_ENTRIES:
         virtual = VIRTUAL_TOOLBAR_ENTRIES[active_toolbar_slug]
         current_nav_group = {
@@ -7708,9 +7754,9 @@ def inject_maxek_layout():
             "icon": "fa-gauge-high",
             "items": [],
         }
-    sub_toolbar_items = filter_sub_toolbar_items(current_nav_group)
+    sub_toolbar_items = [] if on_department_portal else filter_sub_toolbar_items(current_nav_group)
     sub_toolbar_sections = None
-    if active_toolbar_slug == "accounts-finance":
+    if not on_department_portal and active_toolbar_slug == "accounts-finance":
         sub_toolbar_sections = accounts_sub_toolbar_sections()
         sub_toolbar_items = [
             item
@@ -7758,6 +7804,10 @@ def inject_maxek_layout():
         "version": APP_VERSION_LABEL,
         "last_backup": format_app_datetime(),
     }
+    try:
+        ui_theme = normalize_ui_theme(load_dashboard_preferences(db, user_id).get("ui_theme"))
+    except Exception:
+        ui_theme = normalize_ui_theme(None)
     return {
         "nav_groups": visible_nav_groups,
         "nav_items": [
@@ -7802,7 +7852,7 @@ def inject_maxek_layout():
         "maker_status_message": maker_status_message,
         "format_decimal_hours": format_decimal_hours,
         "safe_url_for": safe_url_for,
-        "hide_module_nav": request.endpoint in ("department_portal",),
+        "hide_module_nav": on_department_portal or request.endpoint in ("dashboard", "dashboard_choice_b"),
         "department_portals": get_department_portals(),
         "main_toolbar": main_toolbar,
         "active_toolbar_slug": active_toolbar_slug,
@@ -7815,8 +7865,9 @@ def inject_maxek_layout():
         "header_projects": header_projects,
         "selected_project_id": session.get("selected_project_id"),
         "status_strip": status_strip,
-        "hide_quick_panel": request.endpoint in ("login",),
-        "hide_action_panel": request.endpoint in ("login",),
+        "hide_quick_panel": request.endpoint in ("login", "dashboard", "dashboard_choice_b", "department_portal"),
+        "hide_action_panel": request.endpoint in ("login", "dashboard", "dashboard_choice_b", "department_portal"),
+        "ui_theme": ui_theme,
     }
 
 
@@ -7913,42 +7964,10 @@ def logout():
     return redirect(url_for("login"))
 
 
-DEPARTMENT_PORTAL_ALIASES = {
-    "project-management": "projects",
-    "projects": "projects",
-    "accounts-finance": "accounts",
-    "accounts": "accounts",
-    "store-procurement": "store",
-    "store": "store",
-    "hr-payroll": "hr-payroll",
-    "workforce": "hr-payroll",
-    "hr": "hr-payroll",
-    "plant-machinery": "mechanical",
-    "mechanical": "mechanical",
-    "procurement": "procurement",
-    "quality-control": "qc",
-    "qc": "qc",
-    "tender": "tender",
-    "reports": "reports",
-    "engineering-smartqto": "engineering",
-    "engineering": "engineering",
-    "subcontract-management": "subcontract",
-    "subcontract": "subcontract",
-}
-
-
 COMMAND_CENTRE_CARD_META = [
     {
-        "slug": "consultancy",
-        "card_label": "Consultancy ERP",
-        "category": "CORPORATE",
-        "description": "Enquiries, tender review, QTO, estimation, planning & billing",
-        "icon": "fa-briefcase",
-        "accent": "#0f766e",
-    },
-    {
         "slug": "accounts",
-        "card_label": "Accounts & Finance",
+        "card_label": "Accounts",
         "category": "FINANCE",
         "description": "Ledger, vouchers, TDS/GST & financial reports",
         "icon": "fa-landmark",
@@ -7963,44 +7982,76 @@ COMMAND_CENTRE_CARD_META = [
         "accent": "#8b5cf6",
     },
     {
+        "slug": "store",
+        "card_label": "Store",
+        "category": "INVENTORY",
+        "description": "Material requests, receipts, issues & stock control",
+        "icon": "fa-warehouse",
+        "accent": "#f59e0b",
+    },
+    {
         "slug": "hr-payroll",
-        "card_label": "HR & Payroll",
+        "card_label": "HR and Payroll",
         "category": "PEOPLE",
         "description": "Employees, attendance, leave & payroll processing",
         "icon": "fa-users",
         "accent": "#ec4899",
     },
     {
-        "slug": "store",
-        "card_label": "Store & Procurement",
-        "category": "INVENTORY",
-        "description": "Material requests, purchase orders & stock control",
-        "icon": "fa-warehouse",
-        "accent": "#f59e0b",
+        "slug": "vehicle",
+        "card_label": "Vehicle",
+        "category": "FLEET",
+        "description": "Vehicle master, running log, fuel & document tracking",
+        "icon": "fa-truck",
+        "accent": "#0ea5e9",
     },
     {
-        "slug": "engineering",
-        "card_label": "Engineering & SmartQTO",
+        "slug": "planning-wbs",
+        "card_label": "Planning and Costing",
         "category": "ENGINEERING",
-        "description": "BOQ, quantity tracking, rate analysis & drawings",
+        "description": "WBS, BOQ, rate analysis & cost planning",
         "icon": "fa-drafting-compass",
         "accent": "#14b8a6",
     },
     {
+        "slug": "plant-machinery",
+        "card_label": "Plant",
+        "category": "PLANT",
+        "description": "Asphalt, RMC, crusher, wet mix & plant operations",
+        "icon": "fa-industry",
+        "accent": "#10b981",
+    },
+    {
+        "slug": "engineering",
+        "card_label": "Planning & WBS",
+        "category": "ENGINEERING",
+        "description": "BOQ, WBS, rate analysis, quantity tracking & drawings",
+        "icon": "fa-drafting-compass",
+        "accent": "#14b8a6",
+    },
+    {
+        "slug": "administration",
+        "card_label": "Administration",
+        "category": "CORPORATE",
+        "description": "Office registers, agreements, legal docs & compliance",
+        "icon": "fa-building",
+        "accent": "#64748b",
+    },
+    {
+        "slug": "qc",
+        "card_label": "QC",
+        "category": "QUALITY",
+        "description": "Material testing, plant QC, inspections & NCR",
+        "icon": "fa-flask",
+        "accent": "#06b6d4",
+    },
+    {
         "slug": "subcontract",
-        "card_label": "Subcontract Management",
+        "card_label": "Subcontractor",
         "category": "CONTRACTS",
         "description": "Subcontractors, worker billing & payments",
         "icon": "fa-people-group",
         "accent": "#ef4444",
-    },
-    {
-        "slug": "mechanical",
-        "card_label": "Plant & Machinery",
-        "category": "ASSETS",
-        "description": "Plant master, maintenance, fuel & equipment tracking",
-        "icon": "fa-industry",
-        "accent": "#10b981",
     },
 ]
 
@@ -8008,13 +8059,19 @@ DEPARTMENT_ACCENT_EXTRAS = {
     "consultancy": "#0f766e",
     "procurement": "#f97316",
     "qc": "#06b6d4",
+    "vehicle": "#0ea5e9",
+    "plant-machinery": "#10b981",
+    "planning-wbs": "#14b8a6",
     "tender": "#a855f7",
     "reports": "#6366f1",
+    "mechanical": "#10b981",
+    "engineering": "#14b8a6",
+    "administration": "#64748b",
 }
 
 
 def get_department_accent(slug):
-    slug = DEPARTMENT_PORTAL_ALIASES.get(slug, slug)
+    slug = resolve_department_portal_slug(slug)
     for meta in COMMAND_CENTRE_CARD_META:
         if meta["slug"] == slug:
             return meta["accent"]
@@ -8110,7 +8167,7 @@ def get_department_portals():
         },
         {
             "slug": "hr-payroll",
-            "card_label": "HR & Payroll",
+            "card_label": "HR and Payroll",
             "title": "HR & PAYROLL DEPARTMENT",
             "icon": "fa-users",
             "nav_slug": "hr-payroll",
@@ -8124,6 +8181,22 @@ def get_department_portals():
                 {"endpoint": "leave_request", "label": "Leave Management", "icon": "fa-plane-departure", "active_endpoints": ["leave_request"]},
                 {"endpoint": "accounts_pf_register", "label": "PF / ESI", "icon": "fa-building", "active_endpoints": ["accounts_pf_register", "accounts_esi_register"]},
                 {"endpoint": "reports", "label": "Reports", "icon": "fa-file-excel", "active_endpoints": ["reports", "download_report"]},
+            ],
+        },
+        {
+            "slug": "vehicle",
+            "card_label": "Vehicle",
+            "title": "VEHICLE & FLEET DEPARTMENT",
+            "icon": "fa-truck",
+            "nav_slug": "fleet-mechanical",
+            "summary_title": "Fleet Summary",
+            "menu": [
+                {"endpoint": "fleet_vehicles", "label": "Vehicle Master", "icon": "fa-car", "active_endpoints": ["fleet_vehicles", "fleet_vehicle_print"]},
+                {"endpoint": "fleet_vehicle_documents", "label": "Vehicle Documents", "icon": "fa-id-card", "active_endpoints": ["fleet_vehicle_documents", "fleet_document_download"]},
+                {"endpoint": "fleet_running_log", "label": "Running Log", "icon": "fa-road", "active_endpoints": ["fleet_running_log"]},
+                {"endpoint": "fleet_diesel_purchase", "label": "Diesel Purchase", "icon": "fa-gas-pump", "active_endpoints": ["fleet_diesel_purchase"]},
+                {"endpoint": "fleet_diesel_stock", "label": "Diesel Stock", "icon": "fa-oil-can", "active_endpoints": ["fleet_diesel_stock"]},
+                {"endpoint": "fleet_diesel_issue", "label": "Diesel Issue", "icon": "fa-arrow-right-from-bracket", "active_endpoints": ["fleet_diesel_issue"]},
             ],
         },
         {
@@ -8159,7 +8232,7 @@ def get_department_portals():
         },
         {
             "slug": "subcontract",
-            "card_label": "Subcontract",
+            "card_label": "Subcontractor",
             "title": "SUBCONTRACT DEPARTMENT",
             "icon": "fa-people-group",
             "nav_slug": "subcontract-management",
@@ -8190,10 +8263,10 @@ def get_department_portals():
         },
         {
             "slug": "qc",
-            "card_label": "Quality Control",
+            "card_label": "QC",
             "title": "QUALITY CONTROL DEPARTMENT",
             "icon": "fa-flask",
-            "nav_slug": "plant-machinery",
+            "nav_slug": "qc",
             "summary_title": "QC Summary",
             "menu": [
                 {"endpoint": "qc_master", "label": "QC Test Master", "icon": "fa-vial", "active_endpoints": ["qc_master"]},
@@ -8230,135 +8303,40 @@ def get_department_portals():
                 {"endpoint": "payroll", "label": "Payroll Reports", "icon": "fa-money-check-dollar", "active_endpoints": ["payroll"]},
             ],
         },
+        {
+            "slug": "administration",
+            "card_label": "Administration & Compliance",
+            "title": "ADMINISTRATION & COMPLIANCE",
+            "icon": "fa-building",
+            "nav_slug": "admin-compliance",
+            "summary_title": "Office & compliance summary",
+            "menu": [
+                {"endpoint": "office_admin", "label": "Office Dashboard", "icon": "fa-gauge-high", "active_endpoints": ["office_admin"]},
+                {"endpoint": "office_inward", "label": "Letter In / Inward Register", "icon": "fa-inbox", "active_endpoints": ["office_inward"]},
+                {"endpoint": "office_outward", "label": "Letter Out / Outward Register", "icon": "fa-paper-plane", "active_endpoints": ["office_outward"]},
+                {"endpoint": "office_letters", "label": "Letter Preparation", "icon": "fa-envelope-open-text", "active_endpoints": ["office_letters", "office_letter_print"]},
+                {"endpoint": "office_agreements", "label": "Agreements", "icon": "fa-handshake", "active_endpoints": ["office_agreements"]},
+                {"endpoint": "office_legal", "label": "Legal Documents", "icon": "fa-scale-balanced", "active_endpoints": ["office_legal"]},
+                {"endpoint": "corporate_dms", "label": "Corporate DMS", "icon": "fa-folder-tree", "active_endpoints": ["corporate_dms", "corporate_dms_file", "corporate_dms_download"]},
+                {"endpoint": "fleet_dashboard", "label": "Fleet Dashboard", "icon": "fa-truck", "active_endpoints": ["fleet_dashboard"]},
+            ],
+        },
     ]
 
 
 def get_department_portal(slug):
-    slug = DEPARTMENT_PORTAL_ALIASES.get(slug, slug)
+    slug = resolve_department_portal_slug(slug)
     for portal in get_department_portals():
         if portal["slug"] == slug:
             enriched = dict(portal)
             enriched["accent"] = get_department_accent(slug)
+            enriched["menu"] = get_department_portal_menu(slug)
             return enriched
     return None
 
 
 def department_portal_stat_cards(slug, db):
-    slug = DEPARTMENT_PORTAL_ALIASES.get(slug, slug)
-    if slug == "consultancy":
-        pending_bills = 0
-        if _table_exists(db, "client_bills"):
-            pending_bills = _safe_scalar_count(
-                db,
-                "SELECT COUNT(*) AS c FROM client_bills "
-                "WHERE COALESCE(bill_status, '') NOT IN ('Approved', 'Paid', 'Cancelled')",
-            )
-        return [
-            {"label": "Clients", "value": _safe_scalar_count(db, "SELECT COUNT(*) AS c FROM clients")},
-            {"label": "Active Projects", "value": _safe_scalar_count(db, "SELECT COUNT(*) AS c FROM projects WHERE status='Active'")},
-            {"label": "Open BOQs", "value": _safe_scalar_count(db, "SELECT COUNT(*) AS c FROM boq_master WHERE COALESCE(is_deleted, 0)=0 AND approval_status NOT IN ('Approved', 'approved')")},
-            {"label": "Pending Bills", "value": pending_bills, "warn": pending_bills > 0},
-        ]
-    if slug == "projects":
-        return [
-            {"label": "Total Projects", "value": _safe_scalar_count(db, "SELECT COUNT(*) AS c FROM projects")},
-            {"label": "Active Projects", "value": _safe_scalar_count(db, "SELECT COUNT(*) AS c FROM projects WHERE status='Active'")},
-            {"label": "Open BOQs", "value": _safe_scalar_count(db, "SELECT COUNT(*) AS c FROM boq_master WHERE COALESCE(is_deleted, 0)=0 AND approval_status NOT IN ('Approved', 'approved')")},
-            {"label": "DPR Today", "value": _safe_scalar_count(db, "SELECT COUNT(*) AS c FROM dpr_measurements WHERE report_date=date('now')")},
-        ]
-    if slug == "accounts":
-        try:
-            _prepare_accounts_db(db)
-            stats = accounts_hub_stats(db)
-            return [
-                {"label": "Chart Heads", "value": stats.get("chart_heads", 0)},
-                {"label": "Expenses", "value": stats.get("expenses", 0)},
-                {"label": "Pending Expenses", "value": stats.get("pending_expenses", 0), "warn": stats.get("pending_expenses", 0) > 0},
-                {"label": "TDS Pending", "value": stats.get("tds_pending", 0), "warn": stats.get("tds_pending", 0) > 0},
-            ]
-        except Exception:
-            return []
-    if slug == "store":
-        try:
-            _prepare_store_db(db)
-            stats = store_dashboard_stats(db)
-            return [
-                {"label": "Materials", "value": stats.get("materials", 0)},
-                {"label": "Pending MR", "value": stats.get("pending_material_requests", 0)},
-                {"label": "Pending PR", "value": stats.get("pending_purchase_requests", 0)},
-                {"label": "Low Stock", "value": stats.get("low_stock_count", 0), "warn": stats.get("low_stock_count", 0) > 0},
-            ]
-        except Exception:
-            return []
-    if slug == "hr-payroll":
-        return [
-            {"label": "Active Staff", "value": _safe_scalar_count(db, "SELECT COUNT(*) AS c FROM staff WHERE status='Active'")},
-            {"label": "Present Today", "value": _safe_scalar_count(db, "SELECT COUNT(*) AS c FROM attendance WHERE attendance_date=date('now') AND status='Present'")},
-            {"label": "Pending Leave", "value": _safe_scalar_count(db, "SELECT COUNT(*) AS c FROM leave_requests WHERE approval_status IN ('Pending', 'Pending Checker', 'Pending Approval')")},
-            {"label": "Open Payroll", "value": _safe_scalar_count(db, "SELECT COUNT(*) AS c FROM payroll_runs WHERE status IN ('Draft', 'Pending Checker', 'Pending Approval')")},
-        ]
-    if slug == "mechanical":
-        try:
-            _prepare_plant_db(db)
-            stats = plant_dashboard_stats(db)
-            return [
-                {"label": "Plants", "value": stats.get("active_plants", 0)},
-                {"label": "Open Maintenance", "value": stats.get("open_maintenance_jobs", 0)},
-                {"label": "QC Today", "value": stats.get("today_qc_count", 0)},
-                {"label": "Low Stock Alerts", "value": stats.get("low_stock_alerts", 0)},
-            ]
-        except Exception:
-            return []
-    if slug == "procurement":
-        return [
-            {"label": "Pending PR", "value": _safe_scalar_count(db, "SELECT COUNT(*) AS c FROM purchase_requests WHERE approval_status IN ('Pending Checker', 'Pending Approval', 'Pending')")},
-            {"label": "Pending PO", "value": _safe_scalar_count(db, "SELECT COUNT(*) AS c FROM purchase_orders WHERE approval_status IN ('Pending Checker', 'Pending Approval', 'Pending')")},
-            {"label": "Pending GRN", "value": _safe_scalar_count(db, "SELECT COUNT(*) AS c FROM store_receipts WHERE approval_status IN ('Pending Checker', 'Pending Approval', 'Pending')")},
-            {"label": "Vendors", "value": _safe_scalar_count(db, "SELECT COUNT(*) AS c FROM vendors WHERE status='Active'")},
-        ]
-    if slug == "qc":
-        return [
-            {"label": "QC Tests", "value": _safe_scalar_count(db, "SELECT COUNT(*) AS c FROM qc_tests")},
-            {"label": "Active Tests", "value": _safe_scalar_count(db, "SELECT COUNT(*) AS c FROM qc_tests WHERE status='Active'")},
-            {"label": "Plant QC Today", "value": _safe_scalar_count(db, "SELECT COUNT(*) AS c FROM plant_qc_records WHERE test_date=date('now')")},
-            {"label": "QC Records", "value": _safe_scalar_count(db, "SELECT COUNT(*) AS c FROM plant_qc_records")},
-        ]
-    if slug == "tender":
-        return [
-            {"label": "Total Projects", "value": _safe_scalar_count(db, "SELECT COUNT(*) AS c FROM projects")},
-            {"label": "With Tender No.", "value": _safe_scalar_count(db, "SELECT COUNT(*) AS c FROM projects WHERE COALESCE(tender_number, '') != ''")},
-            {"label": "Active Projects", "value": _safe_scalar_count(db, "SELECT COUNT(*) AS c FROM projects WHERE status='Active'")},
-            {"label": "Clients", "value": _safe_scalar_count(db, "SELECT COUNT(*) AS c FROM clients")},
-        ]
-    if slug == "reports":
-        pending_approvals = 0
-        if _table_exists(db, "approval_requests"):
-            pending_approvals = _safe_scalar_count(
-                db,
-                "SELECT COUNT(*) AS c FROM approval_requests "
-                "WHERE status IN ('Pending Checker', 'Pending Approval')",
-            )
-        return [
-            {"label": "Projects", "value": _safe_scalar_count(db, "SELECT COUNT(*) AS c FROM projects")},
-            {"label": "Employees", "value": _safe_scalar_count(db, "SELECT COUNT(*) AS c FROM staff WHERE status='Active'")},
-            {"label": "Pending Approvals", "value": pending_approvals, "warn": pending_approvals > 0},
-            {"label": "Active Vendors", "value": _safe_scalar_count(db, "SELECT COUNT(*) AS c FROM vendors WHERE status='Active'")},
-        ]
-    if slug == "engineering":
-        return [
-            {"label": "Active BOQs", "value": _safe_scalar_count(db, "SELECT COUNT(*) AS c FROM boq_master WHERE COALESCE(is_deleted, 0)=0")},
-            {"label": "Open BOQs", "value": _safe_scalar_count(db, "SELECT COUNT(*) AS c FROM boq_master WHERE COALESCE(is_deleted, 0)=0 AND approval_status NOT IN ('Approved', 'approved')")},
-            {"label": "Projects", "value": _safe_scalar_count(db, "SELECT COUNT(*) AS c FROM projects WHERE status='Active'")},
-            {"label": "Drawings", "value": _safe_scalar_count(db, "SELECT COUNT(*) AS c FROM project_documents") if _table_exists(db, "project_documents") else 0},
-        ]
-    if slug == "subcontract":
-        return [
-            {"label": "Subcontractors", "value": _safe_scalar_count(db, "SELECT COUNT(*) AS c FROM subcontractors")},
-            {"label": "Active Workers", "value": _safe_scalar_count(db, "SELECT COUNT(*) AS c FROM workers WHERE status='Active'")},
-            {"label": "Pending Bills", "value": _safe_scalar_count(db, "SELECT COUNT(*) AS c FROM subcontractor_bills WHERE approval_status IN ('Pending Checker', 'Pending Approval', 'Pending')") if _table_exists(db, "subcontractor_bills") else 0},
-            {"label": "Open Payments", "value": _safe_scalar_count(db, "SELECT COUNT(*) AS c FROM subcontract_payments WHERE approval_status IN ('Pending Checker', 'Pending Approval', 'Pending')") if _table_exists(db, "subcontract_payments") else 0},
-        ]
-    return []
+    return get_workspace_standard_stat_cards(db, slug)
 
 
 @app.route("/dept/<slug>")
@@ -8376,10 +8354,23 @@ def department_portal(slug):
         return redirect(url_for("dashboard"))
     db = get_db()
     stat_cards = department_portal_stat_cards(portal["slug"], db)
+    menu = enrich_portal_menu_open_counts(db, get_department_portal_menu(portal["slug"]))
+    menu = filter_portal_menu_for_user(
+        db,
+        session.get("user_id"),
+        portal["slug"],
+        menu,
+        full_access=is_admin_user() or is_super_admin_user() or is_guest_user(),
+    )
+    portal_view = dict(portal)
+    portal_view["menu"] = menu
     return render_template(
         "department_workspace.html",
-        portal=portal,
+        portal=portal_view,
         stat_cards=stat_cards,
+        report_modules=build_workspace_report_modules(portal["slug"]),
+        ticket_types=get_workspace_ticket_types(db, portal["slug"]),
+        **_command_centre_sidebar_context(db, active_slug=portal["slug"]),
     )
 
 
@@ -8776,6 +8767,285 @@ def get_dashboard_stats(db):
     }
 
 
+DEPARTMENT_WORKFLOW_MODULES = {
+    "consultancy": ("boq", "cost_planning", "project_creation", "dpr", "client_billing"),
+    "projects": ("boq", "project_creation", "dpr", "cost_planning"),
+    "accounts": APPROVAL_MODULE_GROUPS["payment"] + ("petty_cash",),
+    "store": APPROVAL_MODULE_GROUPS["store"],
+    "procurement": ("purchase_request", "purchase_order"),
+    "hr-payroll": APPROVAL_MODULE_GROUPS["payroll"] + APPROVAL_MODULE_GROUPS["timesheet"],
+    "engineering": ("boq", "cost_planning"),
+    "subcontract": ("subcontractor_billing", "subcontract_payments"),
+    "tender": ("boq", "project_creation"),
+    "vehicle": (),
+    "mechanical": (),
+    "qc": (),
+    "administration": (),
+    "reports": tuple(module for group in APPROVAL_MODULE_GROUPS.values() for module in group),
+}
+
+DEPARTMENT_REPORT_CATEGORIES = {
+    "consultancy": ("engineering", "billing"),
+    "projects": ("billing", "management"),
+    "accounts": ("accounts", "management"),
+    "store": ("stores",),
+    "procurement": ("stores",),
+    "hr-payroll": ("payroll",),
+    "engineering": ("engineering", "management"),
+    "subcontract": ("billing",),
+    "mechanical": ("fleet_mechanical", "plant_operations"),
+    "vehicle": ("fleet_mechanical",),
+    "qc": ("engineering",),
+    "tender": ("billing",),
+    "administration": ("management",),
+    "reports": ("management", "engineering", "billing", "payroll", "accounts", "stores", "fleet_mechanical"),
+}
+
+ENDPOINT_WORKFLOW_MODULE = {
+    "material_request": "material_request",
+    "purchase_request": "purchase_request",
+    "purchase_orders": "purchase_order",
+    "purchase": "purchase_order",
+    "petty_cash": "petty_cash",
+    "payroll": "payroll",
+    "leave_request": "leave_request",
+    "boq_management": "boq",
+    "dpr_entry": "dpr",
+    "client_billing_register": "client_billing",
+    "cost_planning": "cost_planning",
+    "projects": "project_creation",
+    "accounts_expenses": "account_payment",
+    "accounts_payments": "payment_voucher",
+    "accounts_receipts": "account_receipt",
+    "store_issue": "store_issue",
+    "store_receipt": "store_receipt",
+    "sub_billing_register": "subcontractor_billing",
+    "subcontract_payments": "subcontract_payments",
+    "timesheet": "daily_timesheet",
+    "employee_timesheets": "employee_timesheet",
+}
+
+WORKFLOW_TICKET_TYPE_META = {
+    "purchase": {"label": "Purchase workflows", "icon": "fa-cart-shopping"},
+    "store": {"label": "Store workflows", "icon": "fa-warehouse"},
+    "timesheet": {"label": "Timesheet workflows", "icon": "fa-clock"},
+    "payroll": {"label": "Payroll workflows", "icon": "fa-money-check-dollar"},
+    "payment": {"label": "Payment workflows", "icon": "fa-landmark"},
+}
+
+
+def _department_workflow_module_ids(slug=None):
+    if not slug:
+        return tuple(module for group in APPROVAL_MODULE_GROUPS.values() for module in group)
+    slug = resolve_department_portal_slug(slug)
+    return DEPARTMENT_WORKFLOW_MODULES.get(slug, ())
+
+
+def _pending_workflow_count(db, module_ids):
+    if not module_ids or not _table_exists(db, "approval_requests"):
+        return 0
+    placeholders = ",".join("?" * len(module_ids))
+    return _safe_scalar_count(
+        db,
+        "SELECT COUNT(*) AS c FROM approval_requests "
+        f"WHERE module_id IN ({placeholders}) "
+        "AND workflow_status IN ('pending_checker', 'pending_approval')",
+        tuple(module_ids),
+    )
+
+
+def _workspace_open_items_count(db, slug=None):
+    module_ids = _department_workflow_module_ids(slug)
+    return _pending_workflow_count(db, module_ids)
+
+
+def _workspace_completed_count(db, slug=None):
+    module_ids = _department_workflow_module_ids(slug)
+    if not _table_exists(db, "approval_requests"):
+        return 0
+    base_sql = (
+        "SELECT COUNT(*) AS c FROM approval_requests "
+        "WHERE workflow_status='approved' "
+        "AND date(COALESCE(approver_action_at, checker_action_at, created_at)) >= date('now', 'start of month')"
+    )
+    if not module_ids:
+        return _safe_scalar_count(db, base_sql)
+    placeholders = ",".join("?" * len(module_ids))
+    return _safe_scalar_count(db, f"{base_sql} AND module_id IN ({placeholders})", tuple(module_ids))
+
+
+def _workspace_month_amount(db, slug=None):
+    total = 0.0
+    slug = resolve_department_portal_slug(slug) if slug else None
+    scopes = {slug} if slug else None
+    try:
+        if scopes is None or scopes & {"accounts", "projects", "consultancy", "engineering", "reports"}:
+            if _table_exists(db, "client_bills"):
+                row = db.execute(
+                    "SELECT COALESCE(SUM(net_amount), 0) AS total FROM client_bills "
+                    "WHERE date(COALESCE(bill_date, created_at)) >= date('now', 'start of month') "
+                    "AND approval_status IN ('Approved', 'Certified', 'Paid')"
+                ).fetchone()
+                total += float(row["total"] or 0)
+        if scopes is None or scopes & {"accounts", "reports"}:
+            if _table_exists(db, "account_expenses"):
+                row = db.execute(
+                    "SELECT COALESCE(SUM(amount), 0) AS total FROM account_expenses "
+                    "WHERE date(expense_date) >= date('now', 'start of month')"
+                ).fetchone()
+                total += float(row["total"] or 0)
+        if scopes is None or scopes & {"hr-payroll", "reports"}:
+            if _table_exists(db, "payroll_run_lines"):
+                row = db.execute(
+                    "SELECT COALESCE(SUM(net_pay), 0) AS total FROM payroll_run_lines prl "
+                    "JOIN payroll_runs pr ON pr.id = prl.payroll_run_id "
+                    "WHERE date(COALESCE(pr.run_date, pr.created_at)) >= date('now', 'start of month')"
+                ).fetchone()
+                total += float(row["total"] or 0)
+        if scopes is None or scopes & {"store", "procurement", "reports"}:
+            if _table_exists(db, "purchase_orders"):
+                row = db.execute(
+                    "SELECT COALESCE(SUM(grand_total), 0) AS total FROM purchase_orders "
+                    "WHERE date(COALESCE(order_date, created_at)) >= date('now', 'start of month') "
+                    "AND approval_status IN ('Approved', 'approved', 'Pending Approval', 'Pending Checker')"
+                ).fetchone()
+                total += float(row["total"] or 0)
+    except Exception:
+        app.logger.exception("Workspace month amount query failed for slug=%s", slug)
+    return total
+
+
+def _format_workspace_inr(amount):
+    amount = float(amount or 0)
+    if amount <= 0:
+        return "₹0"
+    if amount >= 10000000:
+        return f"₹{round(amount / 10000000, 1)} CR"
+    if amount >= 100000:
+        return f"₹{round(amount / 100000, 1)} L"
+    if amount >= 1000:
+        return f"₹{round(amount / 1000, 1)} K"
+    return f"₹{int(amount)}"
+
+
+def get_workspace_standard_stat_cards(db, slug=None):
+    open_items = _workspace_open_items_count(db, slug)
+    pending_approvals = open_items
+    month_amount = _workspace_month_amount(db, slug)
+    completed = _workspace_completed_count(db, slug)
+    return [
+        {"label": "Open items", "value": open_items, "warn": open_items > 0},
+        {"label": "Pending approvals", "value": pending_approvals, "warn": pending_approvals > 0},
+        {"label": "This month ₹", "value": _format_workspace_inr(month_amount)},
+        {"label": "Completed", "value": completed},
+    ]
+
+
+def build_workspace_report_modules(slug=None, limit=6):
+    slug = resolve_department_portal_slug(slug) if slug else None
+    category_slugs = DEPARTMENT_REPORT_CATEGORIES.get(slug or "reports", ("management",))
+    modules = []
+    for category in REPORT_CATEGORIES:
+        if category["slug"] not in category_slugs:
+            continue
+        for report in category["reports"]:
+            mod = {
+                "label": report["label"],
+                "icon": category["icon"],
+                "action_label": "Run",
+            }
+            if report.get("screen_endpoint"):
+                mod["endpoint"] = report["screen_endpoint"]
+            elif report.get("print_endpoint"):
+                mod["endpoint"] = report["print_endpoint"]
+                if report.get("print_param"):
+                    mod["query"] = {report["print_param"]: 1}
+            else:
+                mod["endpoint"] = "reports"
+                mod["query"] = {"report": report["slug"]}
+            modules.append(mod)
+            if len(modules) >= limit:
+                return modules
+    return modules
+
+
+def get_workspace_ticket_types(db, slug=None):
+    module_ids = set(_department_workflow_module_ids(slug))
+    ticket_types = []
+    for group_key, group_modules in APPROVAL_MODULE_GROUPS.items():
+        scoped = [module for module in group_modules if not module_ids or module in module_ids]
+        if not scoped:
+            continue
+        count = _pending_workflow_count(db, tuple(scoped))
+        meta = WORKFLOW_TICKET_TYPE_META.get(
+            group_key,
+            {"label": group_key.replace("_", " ").title(), "icon": "fa-ticket"},
+        )
+        ticket_types.append(
+            {
+                "endpoint": "approvals",
+                "query": {"module": scoped[0]},
+                "label": meta["label"],
+                "icon": meta["icon"],
+                "description": "Workflow pending items",
+                "open_count": count or None,
+            }
+        )
+    return ticket_types
+
+
+def enrich_portal_menu_open_counts(db, menu):
+    enriched = []
+    for item in menu:
+        row = dict(item)
+        module_id = ENDPOINT_WORKFLOW_MODULE.get(item.get("endpoint"))
+        if module_id:
+            count = _pending_workflow_count(db, (module_id,))
+            if count:
+                row["open_count"] = count
+        enriched.append(row)
+    return enriched
+
+
+def command_centre_cards_to_modules(cards):
+    modules = []
+    for card in cards:
+        modules.append(
+            {
+                "href": url_for("department_portal", slug=card["slug"]),
+                "label": card["card_label"],
+                "icon": card["icon"],
+                "description": card.get("description", ""),
+                "open_count": _workspace_open_items_count(get_db(), card["slug"]) or None,
+            }
+        )
+    return modules
+
+
+def _command_centre_sidebar_context(db, active_slug="command-centre", show_sidebar=False):
+    """Layout context for Command Centre pages.
+
+    Main dashboard and department workspaces use the in-page dept grid / left tool
+    rail only — not the global command-centre sidebar (avoids duplicate navigation).
+    """
+    username = session.get("username") or "Administrator"
+    welcome = session.get("employee_name") or (username.title() if username.islower() else username)
+    role_label = session.get("role") or "Owner"
+    try:
+        if is_super_admin_user():
+            role_label = "Owner"
+    except Exception:
+        pass
+    return {
+        "welcome_name": welcome,
+        "show_command_sidebar": show_sidebar,
+        "command_active_slug": active_slug,
+        "command_sidebar_items": get_command_centre_sidebar_items(db) if show_sidebar else [],
+        "command_centre_branch": session.get("branch", "Head Office"),
+        "command_user_role": role_label,
+    }
+
+
 def _command_centre_sidebar_badges(db):
     badges = {}
     try:
@@ -8820,6 +9090,12 @@ def _command_centre_sidebar_badges(db):
         _prepare_plant_db(db)
         plant = plant_dashboard_stats(db)
         badges["mechanical"] = plant.get("open_maintenance_jobs") or 0
+    except Exception:
+        pass
+    badges["administration"] = 0
+    try:
+        _prepare_office_fleet_db(db)
+        badges["administration"] = office_dashboard_stats(db).get("expiry_alerts") or 0
     except Exception:
         pass
     return badges
@@ -9051,16 +9327,22 @@ def get_command_centre_kpis(db):
 
 
 def get_command_centre_cards(db):
+    meta_by_slug = {meta["slug"]: meta for meta in COMMAND_CENTRE_CARD_META}
     cards = []
-    for meta in COMMAND_CENTRE_CARD_META:
-        portal = get_department_portal(meta["slug"])
+    for slug, label in MAIN_DASHBOARD_DEPARTMENT_SLUGS:
+        portal = get_department_portal(slug)
         if not portal:
+            continue
+        canonical_slug = portal["slug"]
+        meta = meta_by_slug.get(slug) or meta_by_slug.get(canonical_slug)
+        if not meta:
             continue
         cards.append(
             {
                 **meta,
-                "card_label": meta["card_label"],
-                "stat_pills": _command_centre_card_stats(db, meta["slug"]),
+                "slug": slug,
+                "card_label": label,
+                "stat_pills": _command_centre_card_stats(db, canonical_slug),
             }
         )
     return cards
@@ -9096,19 +9378,110 @@ def get_command_centre_recent_activity(db, limit=6):
     ]
 
 
+def get_command_centre_workflow_stat_cards(db):
+    """Aggregated workflow KPIs for the main Command Centre dashboard."""
+    return get_workspace_standard_stat_cards(db)
+
+
+def _department_open_count(db, slug, badges):
+    open_count = badges.get(slug, 0) or _workspace_open_items_count(db, slug)
+    return open_count if open_count else 0
+
+
+def get_command_centre_department_modules(db):
+    """Department launcher tiles — each links to /dept/<slug> with open counts."""
+    badges = _command_centre_sidebar_badges(db)
+    meta_by_slug = {meta["slug"]: meta for meta in COMMAND_CENTRE_CARD_META}
+    modules = []
+    for portal in get_department_portals():
+        slug = portal["slug"]
+        meta = meta_by_slug.get(slug, {})
+        open_count = _department_open_count(db, slug, badges)
+        modules.append(
+            {
+                "href": url_for("department_portal", slug=slug),
+                "label": meta.get("card_label") or portal.get("card_label") or portal["title"],
+                "icon": portal.get("icon") or meta.get("icon") or "fa-folder",
+                "description": meta.get("description") or portal.get("summary_title") or "",
+                "open_count": open_count if open_count else None,
+            }
+        )
+    return modules
+
+
+def get_command_centre_report_modules():
+    """Quick report launcher tiles with Run action."""
+    return [
+        {
+            "endpoint": "reports",
+            "label": "Operational Reports",
+            "icon": "fa-file-excel",
+            "description": "Attendance, salary & operational exports",
+            "action_label": "Run",
+        },
+        {
+            "endpoint": "accounts_reports",
+            "label": "Financial Reports",
+            "icon": "fa-chart-line",
+            "description": "P&L, balance sheet & ledger",
+            "action_label": "Run",
+        },
+        {
+            "endpoint": "cost_planning_reports",
+            "label": "Project Reports",
+            "icon": "fa-diagram-project",
+            "description": "Cost planning & BOQ analysis",
+            "action_label": "Run",
+        },
+        {
+            "endpoint": "inventory",
+            "label": "Store Reports",
+            "icon": "fa-warehouse",
+            "description": "Stock register & inventory",
+            "action_label": "Run",
+        },
+    ]
+
+
+def get_command_centre_ticket_types(db):
+    """Help-desk / workflow ticket entry points for the main dashboard."""
+    pending_approvals = get_dashboard_stats(db).get("pending_approvals_count") or 0
+    support_open = 0
+    if _table_exists(db, "erp_support_tickets"):
+        support_open = _safe_scalar_count(
+            db,
+            "SELECT COUNT(*) AS c FROM erp_support_tickets WHERE status IN ('Open', 'In Progress')",
+        )
+    tickets = [
+        {
+            "endpoint": "approvals",
+            "label": "Workflow approvals",
+            "icon": "fa-clipboard-check",
+            "description": "Pending checker & approver queue",
+            "open_count": pending_approvals if pending_approvals else None,
+        },
+        {
+            "endpoint": "help_desk",
+            "label": "Help desk",
+            "icon": "fa-circle-question",
+            "description": "User manual & tutorials",
+        },
+    ]
+    if _table_exists(db, "erp_support_tickets"):
+        tickets.append(
+            {
+                "endpoint": "customer_support_tickets",
+                "label": "Support tickets",
+                "icon": "fa-headset",
+                "description": "ERP support & issue tracking",
+                "open_count": support_open if support_open else None,
+            }
+        )
+    return tickets
+
+
 def render_choice_b_dashboard():
     db = get_db()
-    username = session.get("username") or "Administrator"
-    welcome = session.get("employee_name") or (
-        username.title() if username.islower() else username
-    )
-    role_label = session.get("role") or "Owner"
-    try:
-        if is_super_admin_user():
-            role_label = "Owner"
-    except Exception:
-        app.logger.exception("Super admin check failed on dashboard render")
-    branch = session.get("branch", "Head Office")
     month_year = datetime.now().strftime("%b %Y")
 
     def _dashboard_payload(getter, default, label):
@@ -9123,43 +9496,30 @@ def render_choice_b_dashboard():
         {},
         "user_dashboard_prefs",
     )
-    all_kpis = _dashboard_payload(lambda: get_command_centre_kpis(db), [], "command_centre_kpis")
-    all_cards = _dashboard_payload(lambda: get_command_centre_cards(db), [], "command_centre_cards")
-    personalized_kpis = filter_command_centre_kpis(all_kpis, user_prefs.get("dashboard_cards"))
-    personalized_cards = filter_command_centre_dept_cards(
-        all_cards, user_prefs.get("favorite_modules")
+    favorite_modules = user_prefs.get("favorite_modules") if user_prefs else None
+    dashboard_cards = user_prefs.get("dashboard_cards") if user_prefs else None
+
+    command_centre_kpis = _dashboard_payload(
+        lambda: get_command_centre_kpis(db),
+        [],
+        "command_centre_kpis",
     )
-    personalized_quick_actions = filter_command_centre_quick_actions(
-        user_prefs.get("quick_actions")
+    command_centre_cards = _dashboard_payload(
+        lambda: get_command_centre_cards(db),
+        [],
+        "command_centre_cards",
     )
+    sidebar_context = _command_centre_sidebar_context(db, active_slug="command-centre")
 
     return render_template(
         "dashboard.html",
-        welcome_name=welcome,
         department_portals=get_department_portals(),
-        show_command_sidebar=True,
-        command_sidebar_items=_dashboard_payload(
-            lambda: get_command_centre_sidebar_items(db), [], "command_sidebar_items"
-        ),
-        command_centre_kpis=personalized_kpis,
-        command_centre_cards=personalized_cards,
-        command_centre_quick_actions=personalized_quick_actions,
-        command_centre_activity=_dashboard_payload(
-            lambda: get_command_centre_recent_activity(db),
-            [
-                {
-                    "title": "No recent activity",
-                    "detail": "Workflow actions will appear here.",
-                    "time": "—",
-                    "tone": "muted",
-                }
-            ],
-            "command_centre_activity",
-        ),
-        command_centre_branch=branch,
+        command_centre_kpis=command_centre_kpis,
+        command_centre_cards=command_centre_cards,
+        command_centre_bottom_widgets=MAIN_DASHBOARD_BOTTOM_WIDGETS,
         command_centre_month=month_year,
-        command_user_role=role_label,
         user_dashboard_prefs=user_prefs,
+        **sidebar_context,
     )
 
 
@@ -10476,16 +10836,6 @@ def projects():
         "SELECT p.*, c.client_name, c.company_name FROM projects p "
         "LEFT JOIN clients c ON p.client_id = c.id ORDER BY p.id DESC"
     )
-    rows = apply_list_filters(
-        rows,
-        status=request.args.get("status") or None,
-        status_field="status",
-        date_from=request.args.get("date_from") or None,
-        date_to=request.args.get("date_to") or None,
-        date_field="created_at",
-        search=request.args.get("q") or None,
-        search_fields=("project_name", "project_code", "client_name", "company_name", "gov_department"),
-    )
     project_ids = [row["id"] for row in rows]
     hub_index = _build_project_hub_index(db, project_ids)
     if view_project_id and view_project_id not in project_ids and not view_project:
@@ -10520,18 +10870,6 @@ def projects():
     if bill_project_id:
         project_bill_submissions = _load_project_client_bill_submissions(db, bill_project_id)
         bill_submission_summary = _bill_submission_summary(project_bill_submissions)
-    framework_ctx = module_page_context(
-        PROJECTS_MODULE,
-        current_label=(
-            "View Project"
-            if view_project
-            else "Edit Project"
-            if editing_project
-            else "New Project"
-            if show_project_form and not editing_project
-            else PROJECTS_MODULE.list_label
-        ),
-    )
     return render_template(
         "projects.html",
         rows=rows,
@@ -10558,53 +10896,6 @@ def projects():
         module_id=module_id,
         show_project_form=show_project_form,
         module_active_anchor=module_active_anchor,
-        **framework_ctx,
-    )
-
-
-@app.route("/projects/export")
-@login_required
-def projects_export():
-    db = get_db()
-    rows = query_db(
-        "SELECT p.project_code, p.project_name, p.project_type, p.gov_department, "
-        "p.private_client_name, c.company_name, c.client_name, p.location, "
-        "p.approved_total_amount, p.status, p.approval_status, p.created_at "
-        "FROM projects p LEFT JOIN clients c ON p.client_id = c.id ORDER BY p.id DESC"
-    )
-    rows = apply_list_filters(
-        rows,
-        status=request.args.get("status") or None,
-        status_field="status",
-        date_from=request.args.get("date_from") or None,
-        date_to=request.args.get("date_to") or None,
-        date_field="created_at",
-    )
-    if not rows:
-        flash("No projects to export.")
-        return redirect(url_for("projects"))
-    buffer, filename = export_rows_to_excel(
-        rows,
-        "projects",
-        columns=[
-            ("project_code", "Project No."),
-            ("project_name", "Project Name"),
-            ("project_type", "Type"),
-            ("gov_department", "Department"),
-            ("company_name", "Client Company"),
-            ("client_name", "Client"),
-            ("location", "Location"),
-            ("approved_total_amount", "Approved Total"),
-            ("status", "Status"),
-            ("approval_status", "Workflow"),
-            ("created_at", "Created At"),
-        ],
-    )
-    return send_file(
-        buffer,
-        as_attachment=True,
-        download_name=filename,
-        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
 
@@ -10873,6 +11164,9 @@ def attendance():
     attendance_mode = request.args.get("mode", "daily")
     select_trade = request.args.get("select_trade", type=int)
     select_designation = request.args.get("select_designation", type=int)
+    subcontractor_nav = request.args.get("nav") == "subcontract"
+    if subcontractor_nav:
+        attendance_mode = "daily"
     view_record = edit_record = view_monthly_record = edit_monthly_record = None
     edit_worker_ctx = {"staff_type": "", "subcontractor_id": ""}
     monthly_wf_ctx = {}
@@ -10974,6 +11268,28 @@ def attendance():
                 flash(str(exc))
                 return redirect(url_for(endpoint, mode="monthly") + "#monthly-attendance")
 
+        if form_action == "save_sub_bulk":
+            try:
+                saved_count = save_bulk_subcontractor_attendance(
+                    db,
+                    request.form,
+                    username=session.get("username", ""),
+                    create_approval_request=create_approval_request,
+                    module_id=module_id,
+                    table=table,
+                    user_id=session.get("user_id"),
+                )
+                db.commit()
+                flash(
+                    f"Saved {saved_count} attendance record(s). Status: Pending Checker."
+                )
+                nav_q = "?nav=subcontract" if subcontractor_nav else ""
+                return redirect(url_for(endpoint) + nav_q + "#sub-bulk-attendance")
+            except ValueError as exc:
+                flash(str(exc))
+                nav_q = "?nav=subcontract" if subcontractor_nav else ""
+                return redirect(url_for(endpoint) + nav_q + "#sub-bulk-attendance")
+
         worker_ref = request.form.get("worker_id", "")
         worker_id, worker_source = parse_attendance_worker_ref(worker_ref)
         project_id = request.form.get("project_id", "")
@@ -11038,7 +11354,7 @@ def attendance():
         db.commit()
         flash("Saved. Status: Pending Checker.")
         return redirect(url_for(endpoint))
-    rows = query_db(
+    rows_sql = (
         "SELECT a.*, "
         "COALESCE(w.worker_name, s.staff_name) AS worker_name, "
         "COALESCE(w.worker_code, s.employee_code) AS worker_code, "
@@ -11048,8 +11364,15 @@ def attendance():
         f"{ATTENDANCE_WORKER_JOIN_SQL} "
         "LEFT JOIN projects p ON a.project_id = p.id "
         f"{ATTENDANCE_MASTER_JOIN_SQL} "
-        "ORDER BY a.id DESC"
     )
+    if subcontractor_nav:
+        rows_sql += (
+            "WHERE COALESCE(w.worker_category, '') = 'Sub Contractor Staff' "
+            "ORDER BY a.id DESC"
+        )
+    else:
+        rows_sql += "ORDER BY a.id DESC"
+    rows = query_db(rows_sql)
     return render_template(
         "attendance.html",
         rows=rows,
@@ -11064,6 +11387,8 @@ def attendance():
         select_trade=select_trade,
         select_designation=select_designation,
         attendance_mode=attendance_mode,
+        subcontractor_nav=subcontractor_nav,
+        sub_attendance_statuses=SUBCONTRACTOR_ATTENDANCE_STATUSES,
         view_record=view_record,
         edit_record=edit_record,
         view_monthly_record=view_monthly_record,
@@ -12473,38 +12798,6 @@ def corporate_reports_hub():
     )
 
 
-@app.route("/reports/run")
-@login_required
-def report_run():
-    """Standard report runner — routes to print, screen, or export handlers."""
-    slug = (request.args.get("report") or "").strip()
-    if not slug:
-        flash("Select a report to run.")
-        return redirect(url_for("corporate_reports_hub"))
-    report_def = get_report_def(slug)
-    if not report_def:
-        flash("Unknown report type.")
-        return redirect(url_for("corporate_reports_hub"))
-    action = (request.args.get("action") or "view").lower()
-    if action == "pdf":
-        action = "view"
-    target = report_run_target(slug, report_def, request.args)
-    if target.get("error") == "wired_record_required":
-        flash("Enter the record ID for this report, then click Run.")
-        return redirect(url_for("corporate_reports_hub"))
-    if target.get("error"):
-        flash("This report is not configured for the standard runner.")
-        return redirect(url_for("corporate_reports_hub"))
-    values = dict(target.get("values") or {})
-    if action == "excel" and report_def.get("status") != "wired":
-        return redirect(url_for("corporate_report_export", slug=slug, **request.args))
-    if request.args.get("project_id"):
-        values["project_id"] = request.args.get("project_id")
-    if request.args.get("print") == "1":
-        values["print"] = "1"
-    return redirect(url_for(target["endpoint"], **values))
-
-
 @app.route("/reports/standard/<slug>/print")
 @login_required
 def corporate_report_stub_print(slug):
@@ -12602,6 +12895,65 @@ def corporate_report_verify():
         doc_number=doc_number,
         code=code,
     )
+
+
+def _department_tabs_payload(department_slug: str) -> tuple[dict | None, dict | None, list[dict]]:
+    portal = get_department_portal(department_slug)
+    nav_slug = portal["nav_slug"] if portal else department_slug
+    nav_group = get_nav_group_by_slug(nav_slug)
+    catalog = build_department_tab_catalog(department_slug, portal=portal, nav_group=nav_group)
+    return portal, nav_group, catalog
+
+
+@app.route("/api/settings/users/<int:user_id>/department-tabs", methods=["GET"])
+@admin_required
+def api_user_department_tabs_get(user_id):
+    department_slug = (request.args.get("department") or "").strip()
+    if not department_slug:
+        return jsonify({"error": "department query parameter is required"}), 400
+    valid_slugs = {slug for slug, _ in PERMISSION_DEPARTMENT_CHOICES}
+    if department_slug not in valid_slugs:
+        return jsonify({"error": "Unknown department"}), 400
+    user = query_db("SELECT id FROM users WHERE id=?", (user_id,), one=True)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    _, _, catalog = _department_tabs_payload(department_slug)
+    db = get_db()
+    tabs = get_user_department_tab_state(db, user_id, department_slug, catalog)
+    dept_label = dict(PERMISSION_DEPARTMENT_CHOICES).get(department_slug, department_slug)
+    return jsonify(
+        {
+            "user_id": user_id,
+            "department": department_slug,
+            "department_label": dept_label,
+            "tabs": tabs,
+        }
+    )
+
+
+@app.route("/api/settings/users/<int:user_id>/department-tabs", methods=["POST"])
+@admin_required
+def api_user_department_tabs_save(user_id):
+    payload = request.get_json(silent=True) or {}
+    department_slug = (payload.get("department") or "").strip()
+    granted_tabs = payload.get("tabs") or []
+    if not department_slug:
+        return jsonify({"error": "department is required"}), 400
+    valid_slugs = {slug for slug, _ in PERMISSION_DEPARTMENT_CHOICES}
+    if department_slug not in valid_slugs:
+        return jsonify({"error": "Unknown department"}), 400
+    if not isinstance(granted_tabs, list):
+        return jsonify({"error": "tabs must be a list"}), 400
+    user = query_db("SELECT id FROM users WHERE id=?", (user_id,), one=True)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    _, _, catalog = _department_tabs_payload(department_slug)
+    db = get_db()
+    save_user_department_tab_permissions(
+        db, user_id, department_slug, [str(k) for k in granted_tabs], catalog
+    )
+    db.commit()
+    return jsonify({"ok": True, "saved": len(granted_tabs)})
 
 
 @app.route("/settings/users", methods=["GET", "POST"])
@@ -12744,6 +13096,7 @@ def user_settings():
         workflow_modules=workflow_modules,
         maker_assignments=maker_assignments,
         max_maker_slots=MAX_MAKER_ASSIGNMENTS,
+        permission_departments=PERMISSION_DEPARTMENT_CHOICES,
     )
 
 
@@ -14339,6 +14692,28 @@ def api_subcontractor_workers(subcontractor_id):
         (subcontractor_id,),
     )
     return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/subcontractors/<int:subcontractor_id>/attendance-trades")
+@login_required
+def api_subcontractor_attendance_trades(subcontractor_id):
+    db = get_db()
+    return jsonify(list_trades_for_subcontractor(db, subcontractor_id))
+
+
+@app.route("/api/subcontractors/<int:subcontractor_id>/attendance-workers")
+@login_required
+def api_subcontractor_attendance_workers(subcontractor_id):
+    db = get_db()
+    trade_id = request.args.get("trade_id", type=int)
+    trade_name = request.args.get("trade_name", "").strip() or None
+    workers = list_subcontractor_workers_for_attendance(
+        db,
+        subcontractor_id,
+        trade_id=trade_id,
+        trade_name=trade_name,
+    )
+    return jsonify(workers)
 
 
 @app.route("/api/dpr/workers")

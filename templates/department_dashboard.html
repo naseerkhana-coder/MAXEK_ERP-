@@ -2,7 +2,18 @@
 {% from 'macros/erp_ui.html' import erp_module_grid %}
 {% set page_title = hub_title %}
 {% set breadcrumbs = breadcrumbs_html %}
+{% block body_class %} dashboard-mode{% if command_centre_mode %} command-centre-mode{% endif %}{% endblock %}
 {% block content %}
+{% if command_centre_mode %}
+<header class="cc-page-header" style="margin-bottom: 1rem;">
+  <div class="cc-page-header-main">
+    <h1 class="cc-page-title">{{ hub_title }}</h1>
+    {% if command_centre_month %}
+    <p class="cc-page-subtitle">Select a department to open its workspace · {{ command_centre_branch|default(selected_branch) }} · {{ command_centre_month }}</p>
+    {% endif %}
+  </div>
+</header>
+{% endif %}
 <div class="erp-summary-grid erp-summary-grid--stats" style="margin-bottom: 1rem;">
   {% for card in stat_cards %}
   <div class="erp-stat-card">
@@ -12,4 +23,30 @@
   {% endfor %}
 </div>
 {{ erp_module_grid(modules, module_section_title) }}
+{% if report_modules %}
+{{ erp_module_grid(report_modules, report_section_title|default('Reports'), action_style='run') }}
+{% endif %}
+{% if ticket_types %}
+<section class="erp-module-section">
+  <h3 class="erp-module-section-title">{{ ticket_section_title|default('Ticket types') }}</h3>
+  <div class="erp-module-grid">
+    {% for ticket in ticket_types %}
+    {% set ticket_href = ticket.href if ticket.get('href') else url_for(ticket.endpoint, **(ticket.get('query') or {})) %}
+    <a href="{{ ticket_href }}" class="erp-module-tile">
+      <span class="erp-module-tile-icon"><i class="fa-solid {{ ticket.icon }}" aria-hidden="true"></i></span>
+      <span class="erp-module-tile-body">
+        <span class="erp-module-tile-label">{{ ticket.label }}</span>
+        {% if ticket.get('description') %}
+        <span class="erp-module-tile-desc">{{ ticket.description }}</span>
+        {% endif %}
+      </span>
+      {% if ticket.get('open_count') %}
+      <span class="erp-module-tile-open">{{ ticket.open_count }} Open</span>
+      {% endif %}
+      <i class="fa-solid fa-chevron-right erp-module-tile-chevron" aria-hidden="true"></i>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
 {% endblock %}

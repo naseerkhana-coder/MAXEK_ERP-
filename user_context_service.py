@@ -41,10 +41,15 @@ def ensure_user_context_schema(db) -> None:
             dashboard_cards TEXT,
             quick_actions TEXT,
             reports TEXT,
+            ui_theme TEXT,
             updated_at TEXT
         )
         """
     )
+    cols = {r[1] for r in db.execute("PRAGMA table_info(user_dashboard_preferences)").fetchall()}
+    if "ui_theme" not in cols:
+        db.execute("ALTER TABLE user_dashboard_preferences ADD COLUMN ui_theme TEXT")
+        db.commit()
 
 
 def load_user_context(db, user_id: int) -> dict[str, Any] | None:

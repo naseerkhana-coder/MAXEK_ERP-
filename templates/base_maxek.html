@@ -1,6 +1,6 @@
 <!doctype html>
 
-<html lang="en">
+<html lang="en" data-theme="{{ ui_theme|default('command-dark') }}">
 
   <head>
 
@@ -12,11 +12,32 @@
 
     <title>{% block title %}MAXEK ERP{% endblock %}</title>
 
+    <script>
+    (function () {
+      var storageKey = 'maxek-ui-theme';
+      var fallback = document.documentElement.getAttribute('data-theme') || 'command-dark';
+      var allowed = { 'command-dark': 1, 'pro-light': 1, 'ultra-color': 1 };
+      var theme = fallback;
+      try {
+        var stored = localStorage.getItem(storageKey);
+        if (stored && allowed[stored]) {
+          theme = stored;
+        }
+      } catch (err) {
+        theme = fallback;
+      }
+      if (!allowed[theme]) {
+        theme = 'command-dark';
+      }
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+    </script>
+
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/maxek-dashboard.css') }}?v=20260623-dashfix">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/maxek-table-standards.css') }}?v=20260623-dashfix">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/maxek-field-standards.css') }}?v=20260623-dashfix">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/maxek-dashboard.css') }}?v=20260627-themes">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/maxek-table-standards.css') }}?v=20260626-entrypanels">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/maxek-field-standards.css') }}?v=20260626-entrypanels">
 
     {% block head_extra %}{% endblock %}
 
@@ -31,7 +52,7 @@
     {% if show_command_sidebar %}
     {{ erp_command_sidebar(
       command_sidebar_items,
-      active_slug='command-centre',
+      active_slug=command_active_slug|default('command-centre'),
       user_name=welcome_name or session.get('employee_name') or session.get('username') or 'Administrator',
       user_role=command_user_role|default(session.get('role') or 'Owner'),
       user_branch=command_centre_branch|default(selected_branch),
@@ -195,6 +216,46 @@
 
 
 
+          <div class="maxek-theme-switcher" data-theme-switcher>
+
+            <button type="button" class="header-icon-btn" data-theme-toggle title="Dashboard theme" aria-expanded="false" aria-haspopup="true">
+
+              <i class="fa-solid fa-palette"></i>
+
+            </button>
+
+            <div class="maxek-theme-menu" hidden role="menu" aria-label="Choose dashboard theme">
+
+              <button type="button" class="maxek-theme-option" data-theme-id="command-dark" role="menuitem">
+
+                <span class="maxek-theme-swatch maxek-theme-swatch--command-dark" aria-hidden="true"></span>
+
+                Command Dark
+
+              </button>
+
+              <button type="button" class="maxek-theme-option" data-theme-id="pro-light" role="menuitem">
+
+                <span class="maxek-theme-swatch maxek-theme-swatch--pro-light" aria-hidden="true"></span>
+
+                Pro Light
+
+              </button>
+
+              <button type="button" class="maxek-theme-option" data-theme-id="ultra-color" role="menuitem">
+
+                <span class="maxek-theme-swatch maxek-theme-swatch--ultra-color" aria-hidden="true"></span>
+
+                Ultra Color
+
+              </button>
+
+            </div>
+
+          </div>
+
+
+
           <a class="header-icon-btn" href="{{ url_for('settings') }}" title="Settings">
 
             <i class="fa-solid fa-gear"></i>
@@ -237,7 +298,7 @@
 
       {% set nav_group = current_nav_group|default({'slug': 'dashboard', 'label': 'Dashboard', 'icon': 'fa-gauge-high'}) %}
 
-      {% set show_department_subbar = not hide_module_nav and sub_toolbar_items and (nav_group.get('slug') != 'dashboard' or request.endpoint in ['dashboard', 'dashboard_choice_b']) %}
+      {% set show_department_subbar = not hide_module_nav and sub_toolbar_items and (nav_group.get('slug') != 'dashboard' or request.endpoint in ['dashboard', 'dashboard_choice_b']) and request.endpoint != 'department_portal' %}
 
       {% if show_department_subbar %}
 
@@ -389,10 +450,9 @@
     {% include 'partials/ai_assistant_panel.html' %}
     {% endif %}
 
-    <script src="{{ url_for('static', filename='js/maxek-ui.js') }}?v=20260623-shell"></script>
-    <script src="{{ url_for('static', filename='js/erp-framework.js') }}?v=20260626-framework"></script>
+    <script src="{{ url_for('static', filename='js/maxek-ui.js') }}?v=20260627-themes"></script>
     <script src="{{ url_for('static', filename='js/dob-age.js') }}?v=20260623-fieldwidth"></script>
-    <script src="{{ url_for('static', filename='js/data-entry.js') }}?v=20260623-fieldwidth"></script>
+    <script src="{{ url_for('static', filename='js/data-entry.js') }}?v=20260626-entrypanels"></script>
 
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
     {% if session.get('user_id') %}

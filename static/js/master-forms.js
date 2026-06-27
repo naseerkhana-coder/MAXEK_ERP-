@@ -349,6 +349,119 @@
     if (countRows() >= max) addBtn.disabled = true;
   }
 
+  function initTabPermissions() {
+    var panel = document.querySelector('[data-tab-permissions-panel]');
+    if (!panel) return;
+    var userId = panel.querySelector('[data-perm-user-id]');
+    var deptSelect = panel.querySelector('[data-perm-department]');
+    var grid = panel.querySelector('[data-perm-grid]');
+    var emptyHint = panel.querySelector('[data-perm-empty]');
+    var statusEl = panel.querySelector('[data-perm-status]');
+    var saveBtn = panel.querySelector('[data-perm-save]');
+    if (!userId || !deptSelect || !grid || !saveBtn) return;
+
+    var currentDept = '';
+
+    function setStatus(msg, isError) {
+      if (!statusEl) return;
+      if (!msg) {
+        statusEl.hidden = true;
+        statusEl.textContent = '';
+        return;
+      }
+      statusEl.hidden = false;
+      statusEl.textContent = msg;
+      statusEl.style.color = isError ? 'var(--erp-danger, #c0392b)' : '';
+    }
+
+    function renderTabs(tabs) {
+      grid.innerHTML = '';
+      if (!tabs || !tabs.length) {
+        grid.hidden = true;
+        if (emptyHint) {
+          emptyHint.hidden = false;
+          emptyHint.textContent = 'No modules configured for this department.';
+        }
+        saveBtn.disabled = true;
+        return;
+      }
+      tabs.forEach(function (tab) {
+        var label = document.createElement('label');
+        var input = document.createElement('input');
+        input.type = 'checkbox';
+        input.name = 'perm_tab';
+        input.value = tab.tab_key;
+        if (tab.granted) input.checked = true;
+        label.appendChild(input);
+        label.appendChild(document.createTextNode(' ' + (tab.label || tab.tab_key)));
+        grid.appendChild(label);
+      });
+      grid.hidden = false;
+      if (emptyHint) emptyHint.hidden = true;
+      saveBtn.disabled = false;
+    }
+
+    function loadTabs() {
+      var dept = deptSelect.value;
+      currentDept = dept;
+      if (!dept) {
+        grid.hidden = true;
+        saveBtn.disabled = true;
+        if (emptyHint) {
+          emptyHint.hidden = false;
+          emptyHint.textContent = 'Choose a department to load its module list.';
+        }
+        setStatus('');
+        return;
+      }
+      setStatus('Loading modules…');
+      fetch(
+        '/api/settings/users/' + encodeURIComponent(userId.value) + '/department-tabs?department='
+          + encodeURIComponent(dept),
+        { credentials: 'same-origin' }
+      )
+        .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+        .then(function (result) {
+          if (!result.ok) throw new Error((result.data && result.data.error) || 'Load failed');
+          if (deptSelect.value !== currentDept) return;
+          renderTabs(result.data.tabs || []);
+          setStatus('');
+        })
+        .catch(function (err) {
+          setStatus(err.message || 'Could not load tab list', true);
+        });
+    }
+
+    deptSelect.addEventListener('change', loadTabs);
+
+    saveBtn.addEventListener('click', function () {
+      var dept = deptSelect.value;
+      if (!dept) return;
+      var keys = [];
+      grid.querySelectorAll('input[name="perm_tab"]:checked').forEach(function (el) {
+        keys.push(el.value);
+      });
+      saveBtn.disabled = true;
+      setStatus('Saving…');
+      fetch('/api/settings/users/' + encodeURIComponent(userId.value) + '/department-tabs', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ department: dept, tabs: keys }),
+      })
+        .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+        .then(function (result) {
+          if (!result.ok) throw new Error((result.data && result.data.error) || 'Save failed');
+          setStatus('Tab access saved (' + (result.data.saved || keys.length) + ' modules).');
+          saveBtn.disabled = false;
+        })
+        .catch(function (err) {
+          setStatus(err.message || 'Save failed', true);
+          saveBtn.disabled = false;
+        });
+    });
+  }
+
   function initProjectClientModal() {
     var projectForm = document.querySelector('[data-master-form="project"]');
     var modal = document.getElementById('new-client-modal');
@@ -426,5 +539,6 @@
     initStaffPicker();
     toggleMakerPanel();
     initMakerRows();
+    initTabPermissions();
   });
 })();

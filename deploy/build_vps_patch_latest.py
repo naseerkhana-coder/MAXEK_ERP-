@@ -19,6 +19,8 @@ FROM_IMPORT_RE = re.compile(r"^from ([a-z_][a-z0-9_]*) import", re.M)
 PATCH_UI = [
     "templates/base_maxek.html",
     "templates/dashboard.html",
+    "templates/department_dashboard.html",
+    "templates/department_workspace.html",
     "templates/material_request.html",
     "templates/module_request.html",
     "templates/macros/erp_ui.html",
@@ -30,6 +32,7 @@ PATCH_UI = [
     "templates/projects.html",
     "templates/clients.html",
     "templates/staff.html",
+    "templates/users.html",
     "templates/workers.html",
     "templates/login.html",
     "static/css/maxek-login.css",
@@ -37,6 +40,11 @@ PATCH_UI = [
     "static/css/maxek-table-standards.css",
     "static/css/maxek-field-standards.css",
     "templates/boq.html",
+    "templates/dpr.html",
+    "templates/attendance.html",
+    "static/js/attendance-form.js",
+    "static/js/attendance-monthly.js",
+    "static/js/data-entry.js",
     "static/css/maxek-dashboard.css",
     "static/js/master-forms.js",
     "static/js/boq-forms.js",
@@ -48,6 +56,7 @@ PATCH_UI = [
 
 REQUIRED_PY = (
     "app.py",
+    "erp_framework.py",
     "super_admin_service.py",
     "store_service.py",
     "workflow_service.py",
@@ -74,6 +83,9 @@ def collect_files() -> list[str]:
     files.add("app.py")
     if (ROOT / "wsgi.py").is_file():
         files.add("wsgi.py")
+    for name in REQUIRED_PY:
+        if (ROOT / name).is_file():
+            files.add(name)
     for rel in PATCH_UI:
         path = ROOT / rel
         if path.is_file():

@@ -1,3 +1,120 @@
+(function () {
+  var THEME_STORAGE_KEY = 'maxek-ui-theme';
+  var VALID_THEMES = ['command-dark', 'pro-light', 'ultra-color'];
+  var DEFAULT_THEME = 'command-dark';
+
+  function normalizeTheme(theme) {
+    return VALID_THEMES.indexOf(theme) >= 0 ? theme : DEFAULT_THEME;
+  }
+
+  function getStoredTheme() {
+    try {
+      return normalizeTheme(localStorage.getItem(THEME_STORAGE_KEY) || '');
+    } catch (err) {
+      return DEFAULT_THEME;
+    }
+  }
+
+  function applyTheme(theme, options) {
+    var opts = options || {};
+    var normalized = normalizeTheme(theme);
+    document.documentElement.setAttribute('data-theme', normalized);
+    if (opts.persist !== false) {
+      try {
+        localStorage.setItem(THEME_STORAGE_KEY, normalized);
+      } catch (err) {
+        /* ignore storage errors */
+      }
+    }
+    document.querySelectorAll('[data-theme-id]').forEach(function (btn) {
+      var isSelected = btn.getAttribute('data-theme-id') === normalized;
+      btn.classList.toggle('is-selected', isSelected);
+      btn.setAttribute('aria-checked', isSelected ? 'true' : 'false');
+    });
+    return normalized;
+  }
+
+  function persistThemeToServer(theme) {
+    var body = JSON.stringify({ ui_theme: theme });
+    fetch('/api/erp/dashboard-preferences', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: body,
+    }).catch(function () {
+      /* offline or guest — localStorage is enough */
+    });
+  }
+
+  function initThemeSwitcher() {
+    var root = document.querySelector('[data-theme-switcher]');
+    if (!root) return;
+
+    var toggle = root.querySelector('[data-theme-toggle]');
+    var menu = root.querySelector('.maxek-theme-menu');
+    var serverTheme = normalizeTheme(document.documentElement.getAttribute('data-theme') || DEFAULT_THEME);
+    var activeTheme = getStoredTheme();
+
+    if (!localStorage.getItem(THEME_STORAGE_KEY)) {
+      activeTheme = serverTheme;
+      applyTheme(activeTheme, { persist: true });
+    } else {
+      applyTheme(activeTheme, { persist: false });
+    }
+
+    function closeMenu() {
+      if (!menu) return;
+      menu.hidden = true;
+      toggle?.setAttribute('aria-expanded', 'false');
+      toggle?.classList.remove('is-active');
+    }
+
+    function openMenu() {
+      if (!menu) return;
+      menu.hidden = false;
+      toggle?.setAttribute('aria-expanded', 'true');
+      toggle?.classList.add('is-active');
+    }
+
+    toggle?.addEventListener('click', function (event) {
+      event.stopPropagation();
+      if (menu?.hidden) {
+        openMenu();
+      } else {
+        closeMenu();
+      }
+    });
+
+    root.querySelectorAll('[data-theme-id]').forEach(function (button) {
+      button.addEventListener('click', function () {
+        var next = applyTheme(button.getAttribute('data-theme-id') || DEFAULT_THEME);
+        persistThemeToServer(next);
+        closeMenu();
+      });
+    });
+
+    document.addEventListener('click', function (event) {
+      if (!root.contains(event.target)) {
+        closeMenu();
+      }
+    });
+
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') {
+        closeMenu();
+      }
+    });
+  }
+
+  window.MaxekTheme = {
+    apply: applyTheme,
+    get: getStoredTheme,
+    valid: VALID_THEMES.slice(),
+  };
+
+  document.addEventListener('DOMContentLoaded', initThemeSwitcher);
+})();
+
 document.addEventListener('DOMContentLoaded', function () {
   const layout = document.querySelector('.maxek-layout');
   const sidebar = document.querySelector('.command-centre-rail') || document.querySelector('.maxek-mobile-nav') || document.querySelector('.tool-rail');
@@ -186,6 +303,11 @@ document.addEventListener('DOMContentLoaded', function () {
       });
     });
   }
+
+  bindAnchorLinks('.dept-tool-ticket[data-module-anchor]', {
+    container: '.dept-workspace-tools',
+    link: '.dept-tool-ticket',
+  });
 
   bindAnchorLinks('.maxek-top-nav-dropdown-link[data-module-anchor]', {
     container: '.maxek-top-nav-dropdown',
@@ -826,4 +948,185 @@ document.addEventListener('DOMContentLoaded', function () {
   document.querySelectorAll('.global-search-cat').forEach(function (btn, index) {
     if (index === 0) btn.classList.add('is-active');
   });
+
+  /* Data-entry panels: compact header with back/close, list toggle */
+  var ENTRY_PANEL_LIST_MAP = {
+    'dpr-form': 'dpr-measurements-list',
+    'boq-form': 'boq-list',
+    'grn-form': 'grn-register',
+    'po-form': 'po-register',
+  };
+
+  function isDataEntryPanel(el) {
+    if (!el) return false;
+    if (el.classList.contains('erp-module-form-panel') && el.hasAttribute('data-entry-panel')) return true;
+    if (el.classList.contains('erp-data-entry-panel') && el.id) return true;
+    return !!(el.id && ENTRY_PANEL_LIST_MAP[el.id]);
+  }
+
+  function findEntryListId(panel) {
+    if (!panel) return '';
+    const explicit = panel.getAttribute('data-entry-list');
+    if (explicit) return explicit;
+    if (panel.id && ENTRY_PANEL_LIST_MAP[panel.id]) return ENTRY_PANEL_LIST_MAP[panel.id];
+    const layout = panel.closest('.module-layout, .erp-module-layout');
+    if (!layout) return '';
+    const tablePanel = layout.querySelector('.erp-module-table-panel[id], .erp-table-panel[id], [data-erp-table][id]');
+    return tablePanel ? tablePanel.id : '';
+  }
+
+  function showDataEntryPanel(panel) {
+    if (!panel) return;
+    const layout = panel.closest('.module-layout, .erp-module-layout');
+    panel.removeAttribute('hidden');
+    if (layout) {
+      layout.classList.remove('module-layout--list-only');
+      layout.querySelectorAll('.erp-module-table-panel, .erp-table-panel, [data-erp-table]').forEach(function (el) {
+        if (el.id && el.id !== findEntryListId(panel)) {
+          el.removeAttribute('hidden');
+        }
+      });
+    }
+    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    panel.dispatchEvent(new CustomEvent('maxek:entry-opened', { bubbles: true }));
+  }
+
+  function hideDataEntryPanel(panel, options) {
+    if (!panel) return;
+    const opts = options || {};
+    const layout = panel.closest('.module-layout, .erp-module-layout');
+    const listId = findEntryListId(panel);
+    panel.setAttribute('hidden', '');
+    if (layout) {
+      layout.classList.add('module-layout--list-only');
+      if (listId) {
+        const listEl = document.getElementById(listId);
+        if (listEl) listEl.removeAttribute('hidden');
+      }
+    }
+    const base = window.location.pathname + window.location.search;
+    if (listId) {
+      history.replaceState(null, '', base + '#' + listId);
+      if (opts.scrollToList) {
+        const listEl = document.getElementById(listId);
+        if (listEl) listEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    } else if (opts.scrollToList) {
+      history.replaceState(null, '', base);
+    }
+    panel.dispatchEvent(new CustomEvent('maxek:entry-closed', { bubbles: true }));
+  }
+
+  function wireEntryListAnchors() {
+    Object.keys(ENTRY_PANEL_LIST_MAP).forEach(function (panelId) {
+      const panel = document.getElementById(panelId);
+      if (!panel || panel.getAttribute('data-entry-list')) return;
+      panel.setAttribute('data-entry-list', ENTRY_PANEL_LIST_MAP[panelId]);
+      if (!panel.hasAttribute('data-entry-panel')) {
+        panel.setAttribute('data-entry-panel', '');
+      }
+    });
+  }
+
+  function ensureDataEntryHeaders() {
+    document.querySelectorAll(
+      '.erp-module-form-panel[data-entry-panel], '
+      + '.erp-form-card.erp-data-entry-panel[id], '
+      + '#dpr-form, #boq-form, #grn-form, #po-form'
+    ).forEach(function (panel) {
+      if (panel.querySelector('.erp-data-entry-header')) return;
+      const titleEl = panel.querySelector(':scope > .erp-form-title');
+      if (!titleEl) return;
+      panel.classList.add('erp-data-entry-panel');
+      if (!panel.hasAttribute('data-entry-panel')) {
+        panel.setAttribute('data-entry-panel', '');
+      }
+      const header = document.createElement('div');
+      header.className = 'erp-data-entry-header';
+      header.setAttribute('role', 'toolbar');
+      header.setAttribute('aria-label', 'Entry navigation');
+      const titleWrap = document.createElement('div');
+      titleWrap.className = 'erp-data-entry-header__title';
+      const backBtn = document.createElement('button');
+      backBtn.type = 'button';
+      backBtn.className = 'erp-data-entry-nav erp-data-entry-nav--back';
+      backBtn.setAttribute('data-entry-back', '');
+      backBtn.setAttribute('aria-label', 'Back to list');
+      backBtn.innerHTML = '<i class="fa-solid fa-arrow-left" aria-hidden="true"></i>';
+      const closeBtn = document.createElement('button');
+      closeBtn.type = 'button';
+      closeBtn.className = 'erp-data-entry-nav erp-data-entry-nav--close';
+      closeBtn.setAttribute('data-entry-close', '');
+      closeBtn.setAttribute('aria-label', 'Close entry');
+      closeBtn.innerHTML = '<i class="fa-solid fa-xmark" aria-hidden="true"></i>';
+      titleWrap.appendChild(backBtn);
+      titleWrap.appendChild(titleEl);
+      header.appendChild(titleWrap);
+      header.appendChild(closeBtn);
+      panel.insertBefore(header, panel.firstChild);
+    });
+  }
+
+  function initDataEntryPanels() {
+    wireEntryListAnchors();
+    ensureDataEntryHeaders();
+    const hash = (window.location.hash || '').replace('#', '');
+    if (hash) {
+      const hashPanel = document.getElementById(hash);
+      if (isDataEntryPanel(hashPanel)) {
+        showDataEntryPanel(hashPanel);
+        return;
+      }
+    }
+    document.querySelectorAll('[data-entry-panel]').forEach(function (panel) {
+      if (!panel.hasAttribute('hidden')) {
+        const layout = panel.closest('.module-layout, .erp-module-layout');
+        if (layout) layout.classList.remove('module-layout--list-only');
+      }
+    });
+  }
+
+  initDataEntryPanels();
+
+  document.addEventListener('click', function (event) {
+    const closeBtn = event.target.closest('[data-entry-close]');
+    if (closeBtn) {
+      event.preventDefault();
+      hideDataEntryPanel(closeBtn.closest('.erp-module-form-panel, .erp-data-entry-panel, .erp-form-card[data-entry-panel]'), { scrollToList: true });
+      return;
+    }
+    const backBtn = event.target.closest('[data-entry-back]');
+    if (backBtn) {
+      event.preventDefault();
+      const panel = backBtn.closest('.erp-module-form-panel, .erp-data-entry-panel, .erp-form-card[data-entry-panel]');
+      if (!panel) return;
+      const href = panel.getAttribute('data-entry-back-href') || backBtn.getAttribute('data-back-href');
+      if (href) {
+        hideDataEntryPanel(panel, { scrollToList: true });
+        return;
+      }
+      hideDataEntryPanel(panel, { scrollToList: true });
+    }
+  });
+
+  document.querySelectorAll('a[href*="#"]').forEach(function (link) {
+    link.addEventListener('click', function () {
+      let hash = '';
+      try {
+        hash = new URL(link.href, window.location.origin).hash.replace('#', '');
+      } catch (err) {
+        return;
+      }
+      if (!hash) return;
+      const panel = document.getElementById(hash);
+      if (panel && isDataEntryPanel(panel)) {
+        window.setTimeout(function () { showDataEntryPanel(panel); }, 0);
+      }
+    });
+  });
+
+  window.MaxekDataEntryPanels = {
+    show: showDataEntryPanel,
+    hide: hideDataEntryPanel,
+  };
 });

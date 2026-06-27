@@ -168,6 +168,7 @@ def api_dashboard_preferences():
         dashboard_cards=data.get("dashboard_cards"),
         quick_actions=data.get("quick_actions"),
         reports=data.get("reports"),
+        ui_theme=data.get("ui_theme"),
     )
     return jsonify({"ok": True, "preferences": prefs})
 

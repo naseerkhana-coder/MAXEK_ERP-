@@ -27,17 +27,21 @@
     </div>
   </header>
 
-  <section class="cc-kpi-row" aria-label="Key performance indicators">
+  <section class="erp-summary-grid erp-summary-grid--stats cc-kpi-row cc-kpi-row--main" aria-label="Key performance indicators">
     {% for kpi in command_centre_kpis %}
-    <div class="cc-kpi-card">
-      <p class="cc-kpi-label">{{ kpi.label }}</p>
-      <strong class="cc-kpi-value">{{ kpi.value }}</strong>
-      <span class="cc-kpi-hint cc-kpi-hint--{{ kpi.hint_tone }}">{{ kpi.hint }}</span>
+    <div class="erp-stat-card cc-kpi-card">
+      <span>{{ kpi.label }}</span>
+      <strong{% if kpi.get('hint_tone') == 'warn' %} class="cc-kpi-warn"{% elif kpi.get('hint_tone') == 'danger' %} class="cc-kpi-danger"{% endif %}>
+        {{ kpi.value }}
+        {% if kpi.hint %}<small class="cc-kpi-hint cc-kpi-hint--{{ kpi.hint_tone|default('muted') }}">{{ kpi.hint }}</small>{% endif %}
+      </strong>
     </div>
     {% endfor %}
   </section>
 
-  <section class="cc-dept-grid" aria-label="Department workspaces">
+  <section class="cc-dept-section" aria-labelledby="cc-dept-section-title">
+    <h2 class="cc-dept-section-title" id="cc-dept-section-title">Departments</h2>
+    <div class="cc-dept-grid cc-dept-grid--main">
     {% for card in command_centre_cards %}
     <a
       href="{{ url_for('department_portal', slug=card.slug) }}"
@@ -57,53 +61,28 @@
       </span>
     </a>
     {% endfor %}
-
-    <div class="cc-dept-card cc-dept-card--more" aria-label="More modules">
-      <span class="cc-dept-card-icon cc-dept-card-icon--muted"><i class="fa-solid fa-plus" aria-hidden="true"></i></span>
-      <span class="cc-dept-card-title">More modules</span>
-      <span class="cc-dept-card-desc">QC, Tender, Procurement, Reports and other hubs</span>
-      <span class="cc-dept-card-stats cc-dept-card-stats--links">
-        <a href="{{ url_for('department_portal', slug='qc') }}" class="cc-dept-more-link">QC</a>
-        <a href="{{ url_for('department_portal', slug='tender') }}" class="cc-dept-more-link">Tender</a>
-        <a href="{{ url_for('department_portal', slug='procurement') }}" class="cc-dept-more-link">Procurement</a>
-        <a href="{{ url_for('department_portal', slug='reports') }}" class="cc-dept-more-link">Reports</a>
-      </span>
     </div>
   </section>
 
-  <section class="cc-bottom-row">
-    <div class="cc-panel cc-activity-panel">
+  <section class="cc-bottom-row cc-bottom-row--widgets" aria-label="Live feeds">
+    {% for widget in command_centre_bottom_widgets %}
+    <div class="cc-panel cc-widget-panel">
       <div class="cc-panel-head">
-        <h2>Recent activity</h2>
-        <a href="{{ url_for('approvals') }}" class="cc-panel-link">View all</a>
-      </div>
-      <ul class="cc-activity-list">
-        {% for item in command_centre_activity %}
-        <li class="cc-activity-item">
-          <span class="cc-activity-dot cc-activity-dot--{{ item.tone }}"></span>
-          <div class="cc-activity-body">
-            <strong>{{ item.title }}</strong>
-            <span>{{ item.detail }}</span>
+        <div class="cc-widget-head">
+          <span class="cc-widget-icon"><i class="fa-solid {{ widget.icon }}" aria-hidden="true"></i></span>
+          <div>
+            <h2>{{ widget.title }}</h2>
+            {% if widget.get('subtitle') %}
+            <p class="cc-widget-subtitle">{{ widget.subtitle }}</p>
+            {% endif %}
           </div>
-          <time class="cc-activity-time">{{ item.time }}</time>
-        </li>
-        {% endfor %}
-      </ul>
-    </div>
-
-    <div class="cc-panel cc-quick-panel">
-      <div class="cc-panel-head">
-        <h2>Quick actions</h2>
+        </div>
       </div>
-      <div class="cc-quick-actions">
-        {% for action in command_centre_quick_actions %}
-        <a href="{{ url_for(action.endpoint) }}" class="cc-quick-action">
-          <i class="fa-solid {{ action.icon }}" aria-hidden="true"></i>
-          <span>{{ action.label }}</span>
-        </a>
-        {% endfor %}
+      <div class="cc-widget-placeholder">
+        <p>{{ widget.placeholder }}</p>
       </div>
     </div>
+    {% endfor %}
   </section>
 
 </div>
