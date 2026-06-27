@@ -8417,6 +8417,7 @@ def department_portal(slug):
         "department_workspace.html",
         portal=portal_view,
         stat_cards=stat_cards,
+        page_title=portal_view.get("title") or portal_view.get("card_label"),
         report_modules=build_workspace_report_modules(portal["slug"]),
         ticket_types=get_workspace_ticket_types(db, portal["slug"]),
         **_command_centre_sidebar_context(db, active_slug=portal["slug"]),
