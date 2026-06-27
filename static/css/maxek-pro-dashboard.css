@@ -1,42 +1,49 @@
-/* MAXEK Pro Dashboard — modern dark ERP shell (Dash_Board_Pro_3 inspired) */
+/* MAXEK Pro Dashboard — Midnight Blue Executive theme */
 
 :root,
 [data-theme="command-dark"] {
-  --pro-bg: #0B0B0F;
-  --pro-bg-elevated: #12121A;
-  --pro-sidebar: #0D0D12;
-  --pro-card: #14141c;
-  --pro-card-hover: #1a1a24;
-  --pro-border: rgba(255, 255, 255, 0.08);
-  --pro-text: #F3F4F6;
-  --pro-muted: #9CA3AF;
-  --pro-pink: #FF4D97;
-  --pro-green: #4ADE80;
-  --pro-blue: #3B82F6;
+  --pro-bg: #0f172a;
+  --pro-bg-elevated: #1e293b;
+  --pro-sidebar: #1e293b;
+  --pro-card: #1e293b;
+  --pro-card-hover: #334155;
+  --pro-border: rgba(148, 163, 184, 0.2);
+  --pro-text: #f1f5f9;
+  --pro-muted: #94a3b8;
+  --pro-accent: #3b82f6;
+  --pro-accent-glow: rgba(59, 130, 246, 0.28);
+  --pro-emerald: #10b981;
+  --pro-green: #10b981;
+  --pro-blue: #3b82f6;
   --pro-sidebar-width: 248px;
   --pro-sidebar-collapsed: 72px;
   --pro-content-max-compact: min(calc(100% - 40px), 960px);
   --pro-content-max-wide: min(calc(100% - 40px), 1200px);
 }
 
-/* Pro shell always uses dark surfaces — accent colors only on icons/borders */
+/* Pro shell always uses dark slate surfaces — blue accent on nav/KPI highlights */
 .maxek-layout.pro-dashboard-mode {
-  --pro-bg: #0B0B0F;
-  --pro-bg-elevated: #12121A;
-  --pro-sidebar: #0D0D12;
-  --pro-card: #14141c;
-  --pro-card-hover: #1a1a24;
-  --pro-border: rgba(255, 255, 255, 0.08);
-  --pro-text: #F3F4F6;
-  --pro-muted: #9CA3AF;
-  --bg-card-dark: #14141c;
-  --bg-dark-ops: #0B0B0F;
-  --text-main: #F3F4F6;
-  --text-muted: #9CA3AF;
-  --border-subtle: rgba(255, 255, 255, 0.08);
-  --maxek-card-bg: #14141c;
-  --maxek-header-bg: #0B0B0F;
-  --maxek-toolbar-bg: #12121A;
+  --pro-bg: #0f172a;
+  --pro-bg-elevated: #1e293b;
+  --pro-sidebar: #1e293b;
+  --pro-card: #1e293b;
+  --pro-card-hover: #334155;
+  --pro-border: rgba(148, 163, 184, 0.2);
+  --pro-text: #f1f5f9;
+  --pro-muted: #94a3b8;
+  --pro-accent: #3b82f6;
+  --pro-accent-glow: rgba(59, 130, 246, 0.28);
+  --pro-emerald: #10b981;
+  --pro-green: #10b981;
+  --pro-blue: #3b82f6;
+  --bg-card-dark: #1e293b;
+  --bg-dark-ops: #0f172a;
+  --text-main: #f1f5f9;
+  --text-muted: #94a3b8;
+  --border-subtle: rgba(148, 163, 184, 0.2);
+  --maxek-card-bg: #1e293b;
+  --maxek-header-bg: #0f172a;
+  --maxek-toolbar-bg: #1e293b;
 }
 
 /* Hide default ERP chrome on pro dashboard landing */
@@ -222,7 +229,7 @@
   height: 16px;
   padding: 0 4px;
   border-radius: 999px;
-  background: var(--pro-pink);
+  background: var(--pro-accent);
   color: #fff;
   font-size: 10px;
   font-weight: 700;
@@ -244,9 +251,9 @@
 }
 
 .pro-dash-nav-item.is-active {
-  background: rgba(59, 130, 246, 0.16);
+  background: rgba(59, 130, 246, 0.18);
   color: var(--pro-text);
-  box-shadow: none;
+  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.22);
   border-radius: 999px;
 }
 
@@ -255,15 +262,15 @@
 }
 
 .pro-dash-sidebar--department .pro-dash-nav-item.is-active {
-  background: color-mix(in srgb, var(--dept-accent, var(--pro-pink)) 18%, transparent);
+  background: color-mix(in srgb, var(--dept-accent, var(--pro-accent)) 18%, transparent);
 }
 
 .pro-dash-sidebar--department .pro-dash-nav-item.is-active i {
-  color: var(--dept-accent, var(--pro-pink));
+  color: var(--dept-accent, var(--pro-accent));
 }
 
 .pro-dash-sidebar--department .pro-dash-nav-dept-head i {
-  color: var(--dept-accent, var(--pro-pink));
+  color: var(--dept-accent, var(--pro-accent));
 }
 
 /* Sidebar */
@@ -276,8 +283,8 @@
   width: var(--pro-sidebar-width);
   z-index: 1100;
   flex-shrink: 0;
-  background: var(--pro-sidebar);
-  border-right: 1px solid var(--pro-border);
+  background: linear-gradient(180deg, #1e293b 0%, #172554 55%, #0f172a 100%);
+  border-right: 1px solid rgba(148, 163, 184, 0.16);
   display: flex;
   flex-direction: column;
   padding: 12px 10px;
@@ -336,8 +343,30 @@
   letter-spacing: 0.04em;
 }
 
-.pro-dash-brand-text span {
-  color: var(--pro-pink);
+.pro-dash-brand-text span,
+.pro-dash-brand-text .pro-dash-brand-accent {
+  color: var(--pro-accent);
+}
+
+.pro-dash-sidebar--executive .pro-dash-nav-item.is-active {
+  position: relative;
+}
+
+.pro-dash-sidebar--executive .pro-dash-nav-item.is-active::before {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--dept-accent, var(--pro-blue));
+  box-shadow: 0 0 10px var(--pro-accent-glow);
+}
+
+.pro-dash-sidebar--executive.pro-dash-sidebar--department .pro-dash-nav-item.is-active::before {
+  background: var(--dept-accent, var(--pro-blue));
 }
 
 .pro-dash-shell.is-sidebar-collapsed .pro-dash-brand-text,
@@ -519,7 +548,7 @@
   height: 18px;
   padding: 0 5px;
   border-radius: 999px;
-  background: var(--pro-pink);
+  background: var(--pro-accent);
   color: #fff;
   font-size: 10px;
   font-weight: 700;
@@ -542,7 +571,7 @@
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--pro-pink), var(--pro-blue));
+  background: linear-gradient(135deg, var(--pro-blue), var(--pro-emerald));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -652,7 +681,8 @@
 
 .pro-dash-tab.is-active {
   color: var(--pro-text);
-  border-bottom-color: #fff;
+  border-bottom-color: var(--pro-blue);
+  box-shadow: 0 4px 18px -6px var(--pro-accent-glow);
 }
 
 .pro-dash-tab--add {
@@ -731,6 +761,7 @@
   flex-direction: column;
   gap: 2px;
   min-height: 72px;
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.05), 0 6px 22px -10px var(--pro-accent-glow);
 }
 
 .pro-dash-kpi-label {
@@ -749,7 +780,7 @@
   color: var(--pro-muted);
 }
 
-.pro-dash-kpi-hint--warn { color: #FBBF24; }
+.pro-dash-kpi-hint--warn { color: #94a3b8; }
 .pro-dash-kpi-hint--ok { color: var(--pro-green); }
 .pro-dash-kpi-hint--danger { color: #F87171; }
 
@@ -1215,9 +1246,9 @@
 }
 
 .pro-dash-home-icon--finance {
-  background: rgba(255, 77, 151, 0.12);
-  color: var(--pro-pink);
-  border-color: rgba(255, 77, 151, 0.22);
+  background: rgba(16, 185, 129, 0.12);
+  color: var(--pro-emerald);
+  border-color: rgba(16, 185, 129, 0.24);
 }
 
 .pro-dash-home-eyebrow {
@@ -1312,6 +1343,7 @@
   border: 1px solid var(--pro-border);
   border-left: 3px solid var(--pro-blue);
   border-radius: 12px;
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.06), 0 8px 28px -12px var(--pro-accent-glow);
 }
 
 .maxek-layout.pro-dashboard-mode .pro-dash-stat-card span {
@@ -1330,7 +1362,7 @@
   color: var(--pro-muted);
 }
 
-.pro-dash-stat-hint--warn { color: #a8a29e; }
+.pro-dash-stat-hint--warn { color: #94a3b8; }
 .pro-dash-stat-hint--ok { color: var(--pro-green); }
 .pro-dash-stat-hint--danger { color: #F87171; }
 

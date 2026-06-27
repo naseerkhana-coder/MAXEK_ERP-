@@ -1,6 +1,6 @@
 {% from 'macros/erp_ui.html' import mark_nav_item_active %}
 {% set dept_shell_slug = department_portal_slug|default(request.view_args.get('slug', active_toolbar_slug)) %}
-<aside class="pro-dash-sidebar{% if pro_shell_department_portal|default(false) %} pro-dash-sidebar--department{% endif %}" data-pro-dash-sidebar aria-label="Main navigation"{% if dept_portal_accent %} style="--dept-accent: {{ dept_portal_accent }};"{% endif %}>
+<aside class="pro-dash-sidebar pro-dash-sidebar--executive{% if pro_shell_department_portal|default(false) %} pro-dash-sidebar--department{% endif %}" data-pro-dash-sidebar aria-label="Main navigation"{% if dept_portal_accent %} style="--dept-accent: {{ dept_portal_accent }};"{% endif %}>
   <div class="pro-dash-sidebar-top">
     <a class="pro-dash-brand" href="{{ url_for('dashboard') }}">
       <img
@@ -11,7 +11,7 @@
         height="32"
         aria-hidden="true"
       >
-      <span class="pro-dash-brand-text">MAX<span>EK</span></span>
+      <span class="pro-dash-brand-text">MAX<span class="pro-dash-brand-accent">EK</span></span>
     </a>
     <button type="button" class="pro-dash-sidebar-collapse" data-pro-sidebar-collapse title="Collapse sidebar" aria-label="Collapse sidebar">
       <i class="fa-solid fa-angles-left" aria-hidden="true"></i>

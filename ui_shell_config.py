@@ -385,24 +385,24 @@ DEPARTMENT_PORTAL_SLUG_ALIASES: dict[str, str] = {
     "consultancy": "consultancy",
 }
 
-# Department portal accent colors — icons and left borders only, never card backgrounds.
+# Department portal accent colors — blue/slate family harmonized with Midnight Blue Executive
 DEPARTMENT_PORTAL_ACCENTS: dict[str, str] = {
     "accounts": "#3b82f6",
-    "projects": "#8b5cf6",
-    "store": "#14b8a6",
-    "hr-payroll": "#ec4899",
-    "vehicle": "#0ea5e9",
-    "planning-wbs": "#14b8a6",
+    "projects": "#6366f1",
+    "store": "#0ea5e9",
+    "hr-payroll": "#818cf8",
+    "vehicle": "#38bdf8",
+    "planning-wbs": "#06b6d4",
     "plant-machinery": "#10b981",
     "engineering": "#14b8a6",
     "administration": "#64748b",
-    "qc": "#06b6d4",
-    "subcontract": "#ef4444",
-    "consultancy": "#0f766e",
-    "procurement": "#f97316",
-    "tender": "#a855f7",
+    "qc": "#22d3ee",
+    "subcontract": "#4f46e5",
+    "consultancy": "#0284c7",
+    "procurement": "#2563eb",
+    "tender": "#7c3aed",
     "reports": "#6366f1",
-    "mechanical": "#10b981",
+    "mechanical": "#059669",
 }
 
 

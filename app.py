@@ -8915,13 +8915,13 @@ def _build_dashboard_chart_series(stats):
             {
                 "key": "revenue",
                 "label": "Revenue",
-                "color": "#FF4D97",
+                "color": "#3b82f6",
                 "points": _wave(active * 3, 6, 0),
             },
             {
                 "key": "workforce",
                 "label": "Workforce",
-                "color": "#4ADE80",
+                "color": "#10b981",
                 "points": _wave(workforce / 8, 8, 1),
             },
             {
@@ -8938,11 +8938,11 @@ def _build_dashboard_chart_series(stats):
             },
         ],
         "expense_rows": [
-            {"label": "Labour & Wages", "pct": 38, "color": "#FF4D97"},
-            {"label": "Materials", "pct": 27, "color": "#3B82F6"},
-            {"label": "Plant & Equipment", "pct": 18, "color": "#4ADE80"},
-            {"label": "Overheads", "pct": 11, "color": "#F59E0B"},
-            {"label": "Subcontract", "pct": 6, "color": "#A78BFA"},
+            {"label": "Labour & Wages", "pct": 38, "color": "#3b82f6"},
+            {"label": "Materials", "pct": 27, "color": "#6366f1"},
+            {"label": "Plant & Equipment", "pct": 18, "color": "#10b981"},
+            {"label": "Overheads", "pct": 11, "color": "#64748b"},
+            {"label": "Subcontract", "pct": 6, "color": "#0ea5e9"},
         ],
     }
 

@@ -133,7 +133,7 @@
         </ul>
         {% elif widget.chart_type == 'scatter' %}
         <svg class="pro-dash-mini-chart" viewBox="0 0 100 50" aria-hidden="true">
-          <polyline fill="none" stroke="#FF4D97" stroke-width="1.2" points="5,40 20,28 35,32 50,18 65,24 80,12 95,20"/>
+          <polyline fill="none" stroke="#3b82f6" stroke-width="1.2" points="5,40 20,28 35,32 50,18 65,24 80,12 95,20"/>
           <polyline fill="none" stroke="#3B82F6" stroke-width="1.2" points="5,35 20,38 35,22 50,30 65,16 80,26 95,14"/>
         </svg>
         {% elif widget.chart_type == 'lines' %}
@@ -144,10 +144,10 @@
         {% else %}
         <div class="pro-dash-bar-chart">
           {% set bars = [
-            ('Projects', dashboard_stats.active_projects|default(0), '#FF4D97'),
-            ('Approvals', dashboard_stats.pending_approvals_count|default(0), '#3B82F6'),
-            ('DPR Today', dashboard_stats.dpr_today_count|default(0), '#4ADE80'),
-            ('Store MR', dashboard_stats.pending_mrs|default(0), '#14B8A6')
+            ('Projects', dashboard_stats.active_projects|default(0), '#3b82f6'),
+            ('Approvals', dashboard_stats.pending_approvals_count|default(0), '#6366f1'),
+            ('DPR Today', dashboard_stats.dpr_today_count|default(0), '#10b981'),
+            ('Store MR', dashboard_stats.pending_mrs|default(0), '#0ea5e9')
           ] %}
           {% set max_bar = [bars[0][1], bars[1][1], bars[2][1], bars[3][1]]|max %}
           {% set max_bar = max_bar if max_bar > 0 else 1 %}
