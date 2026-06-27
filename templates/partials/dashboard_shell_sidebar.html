@@ -29,7 +29,7 @@
   </div>
 
   <nav class="pro-dash-nav">
-    <a class="pro-dash-nav-item is-active" href="{{ url_for('dashboard') }}">
+    <a class="pro-dash-nav-item{% if request.endpoint in ['dashboard', 'dashboard_choice_b'] %} is-active{% endif %}" href="{{ url_for('dashboard') }}">
       <i class="fa-solid fa-gauge-high" aria-hidden="true"></i>
       <span class="pro-dash-nav-label">Dashboard</span>
     </a>
@@ -44,7 +44,7 @@
       </summary>
       <div class="pro-dash-nav-group-items">
         {% for item in dashboard_shell_favorites|default([]) %}
-        <a class="pro-dash-nav-item pro-dash-nav-item--sub" href="{{ safe_url_for(item.endpoint) }}">
+        <a class="pro-dash-nav-item pro-dash-nav-item--sub{% if request.endpoint == item.endpoint or request.endpoint in item.get('active_endpoints', [item.endpoint]) %} is-active{% endif %}" href="{{ safe_url_for(item.endpoint) }}">
           <i class="fa-solid {{ item.icon }}" aria-hidden="true"></i>
           <span class="pro-dash-nav-label">{{ item.label }}</span>
         </a>
@@ -63,7 +63,7 @@
       </summary>
       <div class="pro-dash-nav-group-items">
         {% for item in group.get('items', []) %}
-        <a class="pro-dash-nav-item pro-dash-nav-item--sub" href="{{ safe_url_for(item.endpoint, **(item.get('query') or {})) }}">
+        <a class="pro-dash-nav-item pro-dash-nav-item--sub{% if request.endpoint == item.endpoint or request.endpoint in item.get('active_endpoints', [item.endpoint]) %} is-active{% endif %}" href="{{ safe_url_for(item.endpoint, **(item.get('query') or {})) }}">
           <i class="fa-solid {{ item.icon }}" aria-hidden="true"></i>
           <span class="pro-dash-nav-label">{{ item.label }}</span>
         </a>
@@ -85,5 +85,9 @@
       <strong>{{ welcome_name or session.get('employee_name') or session.get('username') or 'Administrator' }}</strong>
       <span>{{ command_centre_branch|default(selected_branch) }} · {{ command_user_role|default(session.get('role') or 'Owner') }}</span>
     </div>
+    <a class="pro-dash-logout-btn" href="{{ url_for('logout') }}" title="Sign out" aria-label="Sign out">
+      <i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i>
+      <span class="pro-dash-nav-label">Sign out</span>
+    </a>
   </div>
 </aside>

@@ -1,20 +1,10 @@
 {% extends 'base_maxek.html' %}
 
-{% block body_class %} dashboard-mode pro-dashboard-mode{% endblock %}
+{% block body_class %} dashboard-mode{% endblock %}
 
 {% block title %}Dashboard — MAXEK ERP{% endblock %}
 
-{% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/maxek-pro-dashboard.css') }}?v=20260627-pro">
-{% endblock %}
-
 {% block content %}
-<div class="pro-dash-shell" data-pro-dash-shell>
-  {% include 'partials/dashboard_shell_sidebar.html' %}
-
-  <div class="pro-dash-main">
-    {% include 'partials/dashboard_shell_header.html' %}
-
     <div class="pro-dash-content" data-pro-dash-panel="default">
       <section class="pro-dash-kpi-strip" aria-label="Key performance indicators">
         {% for kpi in command_centre_kpis %}
@@ -160,10 +150,4 @@
         Open <a href="{{ url_for('accounts_hub') }}">Accounts Hub</a> for journals, GST, ledgers &amp; reports.
       </p>
     </div>
-  </div>
-</div>
-{% endblock %}
-
-{% block scripts %}
-<script src="{{ url_for('static', filename='js/maxek-pro-dashboard.js') }}?v=20260627-pro"></script>
 {% endblock %}

@@ -7656,6 +7656,21 @@ def module_sub_toolbar_for_request(endpoint):
     return None, None
 
 
+PRO_SHELL_EXCLUDED_ENDPOINTS = frozenset({"login", "logout"})
+
+
+def endpoint_uses_pro_shell(endpoint):
+    """Use the pro sidebar shell on authenticated HTML pages (not login/print)."""
+    if not session.get("user_id"):
+        return False
+    ep = endpoint or ""
+    if ep in PRO_SHELL_EXCLUDED_ENDPOINTS:
+        return False
+    if ep.endswith("_print"):
+        return False
+    return True
+
+
 def get_approval_widgets():
     if not session.get("user_id"):
         return {"maker": 0, "checker": 0, "approver": 0}
@@ -7824,6 +7839,17 @@ def inject_maxek_layout():
         ui_theme = normalize_ui_theme(load_dashboard_preferences(db, user_id).get("ui_theme"))
     except Exception:
         ui_theme = normalize_ui_theme(None)
+    username_display = session.get("employee_name") or (
+        username.title() if username.islower() else username
+    )
+    use_pro_shell = endpoint_uses_pro_shell(request.endpoint)
+    pro_shell_dashboard = request.endpoint in ("dashboard", "dashboard_choice_b")
+    role_label = session.get("role") or "Owner"
+    try:
+        if is_super_admin_user():
+            role_label = "Owner"
+    except Exception:
+        pass
     return {
         "nav_groups": visible_nav_groups,
         "nav_items": [
@@ -7868,7 +7894,7 @@ def inject_maxek_layout():
         "maker_status_message": maker_status_message,
         "format_decimal_hours": format_decimal_hours,
         "safe_url_for": safe_url_for,
-        "hide_module_nav": on_department_portal or request.endpoint in ("dashboard", "dashboard_choice_b"),
+        "hide_module_nav": use_pro_shell or on_department_portal or request.endpoint in ("dashboard", "dashboard_choice_b"),
         "department_portals": get_department_portals(),
         "main_toolbar": main_toolbar,
         "active_toolbar_slug": active_toolbar_slug,
@@ -7881,9 +7907,16 @@ def inject_maxek_layout():
         "header_projects": header_projects,
         "selected_project_id": session.get("selected_project_id"),
         "status_strip": status_strip,
-        "hide_quick_panel": request.endpoint in ("login", "dashboard", "dashboard_choice_b", "department_portal"),
-        "hide_action_panel": request.endpoint in ("login", "dashboard", "dashboard_choice_b", "department_portal"),
+        "hide_quick_panel": use_pro_shell or request.endpoint in ("login", "dashboard", "dashboard_choice_b", "department_portal"),
+        "hide_action_panel": use_pro_shell or request.endpoint in ("login", "dashboard", "dashboard_choice_b", "department_portal"),
         "ui_theme": ui_theme,
+        "use_pro_shell": use_pro_shell,
+        "pro_shell_dashboard": pro_shell_dashboard,
+        "welcome_name": username_display,
+        "command_centre_branch": session.get("branch", branch_options[0] if branch_options else "Head Office"),
+        "command_user_role": role_label,
+        "dashboard_shell_favorites": DASHBOARD_SHELL_FAVORITES,
+        "dashboard_shell_nav_groups": DASHBOARD_SHELL_NAV_GROUPS,
     }
 
 

@@ -77,6 +77,130 @@
   align-content: start;
 }
 
+/* Dashboard host wraps tab panels on the main dashboard route */
+.pro-dash-dashboard-host {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.pro-dash-dashboard-host > .pro-dash-content {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Module pages — scrollable content, not dashboard grid */
+.pro-dash-content--module {
+  display: block;
+  grid-template-rows: unset;
+  overflow: auto;
+}
+
+.pro-dash-content--module .page-header-bar--actions-only {
+  margin-bottom: 12px;
+}
+
+.pro-dash-content--module .erp-form-card,
+.pro-dash-content--module .erp-module-table-panel,
+.pro-dash-content--module .erp-table-panel {
+  color: var(--pro-text);
+}
+
+/* Module header */
+.pro-dash-header--module {
+  padding-bottom: 10px;
+}
+
+.pro-dash-module-head {
+  min-width: 0;
+}
+
+.pro-dash-module-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--pro-text);
+}
+
+.pro-dash-module-breadcrumb {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--pro-muted);
+}
+
+.pro-dash-context-select {
+  appearance: none;
+  background: var(--pro-card);
+  border: 1px solid var(--pro-border);
+  color: var(--pro-text);
+  border-radius: 8px;
+  font-size: 12px;
+  padding: 6px 10px;
+  max-width: 140px;
+}
+
+.pro-dash-header-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--pro-pink);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  margin-left: 4px;
+}
+
+.pro-dash-logout-link {
+  color: var(--pro-muted);
+}
+
+.pro-dash-logout-link:hover {
+  color: #fca5a5;
+}
+
+.pro-dash-logout-btn {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  color: var(--pro-muted);
+  text-decoration: none;
+  flex-shrink: 0;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.pro-dash-logout-btn:hover {
+  color: #fca5a5;
+  background: rgba(248, 113, 113, 0.12);
+}
+
+.pro-dash-shell.is-sidebar-collapsed .pro-dash-logout-btn .pro-dash-nav-label {
+  display: none;
+}
+
+.pro-dash-department-subbar {
+  margin-bottom: 12px;
+  border-radius: 10px;
+}
+
+.pro-dash-nav-item.is-active {
+  background: rgba(255, 77, 151, 0.14);
+  color: var(--pro-text);
+}
+
+.pro-dash-nav-item.is-active i {
+  color: var(--pro-pink);
+}
+
 /* Sidebar */
 .pro-dash-sidebar {
   width: var(--pro-sidebar-width);
@@ -270,12 +394,6 @@
   color: var(--pro-text);
 }
 
-.pro-dash-nav-item.is-active {
-  background: rgba(59, 130, 246, 0.18);
-  color: var(--pro-blue);
-  font-weight: 600;
-}
-
 .pro-dash-nav-item--sub {
   font-size: 12px;
   padding-left: 14px;
@@ -331,7 +449,6 @@
   padding: 8px 6px 4px;
   border-top: 1px solid var(--pro-border);
 }
-
 .pro-dash-user-avatar,
 .pro-dash-profile-avatar {
   width: 32px;

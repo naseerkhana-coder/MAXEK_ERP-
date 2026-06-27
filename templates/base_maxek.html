@@ -39,17 +39,21 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/maxek-table-standards.css') }}?v=20260626-entrypanels">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/maxek-field-standards.css') }}?v=20260626-entrypanels">
 
+    {% if use_pro_shell|default(false) %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/maxek-pro-dashboard.css') }}?v=20260627-pro-shell">
+    {% endif %}
+
     {% block head_extra %}{% endblock %}
 
   </head>
 
-  <body class="maxek-layout maxek-topnav-layout maxek-shell-layout{% if show_command_sidebar %} command-centre-layout{% endif %}{% block body_class %}{% endblock %}">
+  <body class="maxek-layout maxek-topnav-layout maxek-shell-layout{% if show_command_sidebar and not use_pro_shell|default(false) %} command-centre-layout{% endif %}{% if use_pro_shell|default(false) %} pro-dashboard-mode{% endif %}{% block body_class %}{% endblock %}">
 
     {% from 'macros/erp_ui.html' import erp_sub_toolbar_secondary, erp_main_toolbar, erp_command_sidebar, erp_breadcrumb, erp_department_subbar_link %}
 
     <div class="sidebar-overlay"></div>
 
-    {% if show_command_sidebar %}
+    {% if show_command_sidebar and not use_pro_shell|default(false) %}
     {{ erp_command_sidebar(
       command_sidebar_items,
       active_slug=command_active_slug|default('command-centre'),
@@ -62,7 +66,7 @@
 
 
 
-    {% if not hide_module_nav %}
+    {% if not hide_module_nav and not use_pro_shell|default(false) %}
     <nav class="maxek-mobile-nav" hidden aria-label="Mobile navigation drawer">
 
       <div class="maxek-mobile-nav-head">
@@ -83,6 +87,74 @@
     {% endif %}
 
     <main class="main-window">
+
+      {% if use_pro_shell|default(false) %}
+      <div class="pro-dash-shell" data-pro-dash-shell>
+        {% include 'partials/dashboard_shell_sidebar.html' %}
+
+        <div class="pro-dash-main">
+          {% if pro_shell_dashboard|default(false) %}
+          {% include 'partials/dashboard_shell_header.html' %}
+          {% else %}
+          {% include 'partials/dashboard_shell_module_header.html' %}
+          {% endif %}
+
+          {% set nav_group = current_nav_group|default({'slug': 'dashboard', 'label': 'Dashboard', 'icon': 'fa-gauge-high'}) %}
+          {% set show_department_subbar = sub_toolbar_items and (nav_group.get('slug') != 'dashboard' or request.endpoint in ['dashboard', 'dashboard_choice_b']) and request.endpoint != 'department_portal' %}
+
+          <div class="{% if pro_shell_dashboard|default(false) %}pro-dash-dashboard-host{% else %}pro-dash-content pro-dash-content--module{% endif %}">
+            {% if show_department_subbar and not pro_shell_dashboard|default(false) %}
+            <div class="department-subbar pro-dash-department-subbar" id="department-subbar" data-subbar-key="{{ active_toolbar_slug or nav_group.slug }}" aria-label="{{ nav_group.label }} toolbar">
+              <div class="department-subbar-title">
+                <i class="fa-solid {{ nav_group.icon }}"></i>
+                <span>{{ nav_group.label }}</span>
+              </div>
+              <div class="department-subbar-scroll">
+                {% if sub_toolbar_sections is defined and sub_toolbar_sections %}
+                {% for section in sub_toolbar_sections %}
+                {% if not loop.first %}<span class="department-subbar-divider" aria-hidden="true"></span>{% endif %}
+                <span class="department-subbar-section-label">{{ section.label }}</span>
+                {% for item in section.get('items', []) %}
+                {{ erp_department_subbar_link(item, nav_group.slug) }}
+                {% endfor %}
+                {% endfor %}
+                {% else %}
+                {% for item in sub_toolbar_items %}
+                {{ erp_department_subbar_link(item, nav_group.slug) }}
+                {% endfor %}
+                {% endif %}
+              </div>
+              <button type="button" class="department-subbar-close" data-subbar-close aria-label="Close department toolbar">
+                <i class="fa-solid fa-xmark"></i>
+              </button>
+            </div>
+            <button type="button" class="department-subbar-reopen" data-subbar-reopen aria-label="Show department toolbar" hidden>
+              <i class="fa-solid fa-bars-staggered"></i>
+              <span>Show toolbar</span>
+            </button>
+            {% endif %}
+
+            {% if module_sub_toolbar %}
+            {{ erp_sub_toolbar_secondary(module_sub_toolbar, module_sub_toolbar_label or 'Section tools') }}
+            {% endif %}
+
+            {% include 'partials/shell_flash_and_title.html' %}
+
+            {% if self.page_actions() %}
+            <div class="page-header-bar page-header-bar--actions-only">
+              <div></div>
+              <div class="page-header-actions">
+                {% block page_actions %}{% endblock %}
+              </div>
+            </div>
+            {% endif %}
+
+            {% block content %}{% endblock %}
+          </div>
+        </div>
+      </div>
+
+      {% else %}
 
       <div class="maxek-toolbar-stack">
 
@@ -370,25 +442,7 @@
 
           <div class="dashboard-body">
 
-            {% with messages = get_flashed_messages() %}
-
-            {% if messages %}
-
-            <div class="flash-messages erp-validation">
-
-              {% for message in messages %}
-
-                <div>{{ message }}</div>
-
-              {% endfor %}
-
-            </div>
-
-            {% endif %}
-
-            {% endwith %}
-
-
+            {% include 'partials/shell_flash_and_title.html' %}
 
             {% if page_title is defined and page_title %}
 
@@ -414,7 +468,7 @@
 
               <div class="page-header-actions">
 
-                {% block page_actions %}{% endblock %}
+                {{ self.page_actions() }}
 
               </div>
 
@@ -424,9 +478,7 @@
 
             {% endif %}
 
-
-
-            {% block content %}{% endblock %}
+            {{ self.content() }}
 
           </div>
 
@@ -441,6 +493,8 @@
       {% include 'partials/shell_help_center.html' %}
 
       {% include 'partials/shell_status_strip.html' %}
+
+      {% endif %}
 
     </main>
 
@@ -457,6 +511,10 @@
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
     {% if session.get('user_id') %}
     <script src="{{ url_for('static', filename='js/ai-assistant.js') }}?v=20260622-ai"></script>
+    {% endif %}
+
+    {% if use_pro_shell|default(false) %}
+    <script src="{{ url_for('static', filename='js/maxek-pro-dashboard.js') }}?v=20260627-pro-shell"></script>
     {% endif %}
 
     {% block scripts %}{% endblock %}

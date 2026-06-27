@@ -1,0 +1,56 @@
+<header class="pro-dash-header pro-dash-header--module">
+  <div class="pro-dash-module-head">
+    <h1 class="pro-dash-module-title">{{ page_title|default(current_nav_group.label|default('Module')) }}</h1>
+    {% if breadcrumb_items is defined and breadcrumb_items %}
+    {{ erp_breadcrumb(breadcrumb_items) }}
+    {% elif breadcrumbs is defined and breadcrumbs %}
+    <nav class="pro-dash-module-breadcrumb breadcrumb">{{ breadcrumbs|safe }}</nav>
+    {% endif %}
+  </div>
+
+  <div class="pro-dash-header-actions">
+    {% if context_companies %}
+    <select class="pro-dash-context-select company-select" name="company" aria-label="Company" data-company-select>
+      <option value="">Company</option>
+      {% for company in context_companies %}
+      <option value="{{ company.id }}" data-code="{{ company.code or '' }}"{% if company.id == selected_company_id %} selected{% endif %}>{{ company.name }}</option>
+      {% endfor %}
+    </select>
+    {% endif %}
+
+    <select class="pro-dash-context-select branch-select" name="branch" aria-label="Branch" data-branch-select>
+      {% for branch in branches %}
+      <option value="{{ branch }}"{% if branch == selected_branch %} selected{% endif %}>{{ branch }}</option>
+      {% endfor %}
+    </select>
+
+    <a class="pro-dash-header-link" href="{{ url_for('notifications') }}" title="Notifications">
+      <i class="fa-regular fa-bell" aria-hidden="true"></i>
+      {% if notification_count %}<span class="pro-dash-header-badge">{{ notification_count }}</span>{% endif %}
+    </a>
+
+    <a class="pro-dash-header-link" href="{{ url_for('approvals') }}" title="Pending Approvals">
+      <i class="fa-solid fa-clipboard-check" aria-hidden="true"></i>
+      {% if approval_total %}<span class="pro-dash-header-badge">{{ approval_total }}</span>{% endif %}
+    </a>
+
+    <a class="pro-dash-header-link" href="{{ url_for('help_desk') }}">
+      <i class="fa-regular fa-circle-question" aria-hidden="true"></i>
+      Help
+    </a>
+
+    <button type="button" class="pro-dash-theme-btn" data-theme-toggle title="Toggle theme" aria-label="Toggle theme">
+      <i class="fa-solid fa-sun" aria-hidden="true"></i>
+    </button>
+
+    <a class="pro-dash-profile" href="{{ url_for('settings') }}" title="Settings">
+      <span class="pro-dash-profile-avatar">{{ admin_initial }}</span>
+      <span class="pro-dash-profile-name">{{ session.get('employee_name') or session.get('username') or 'Admin' }}</span>
+    </a>
+
+    <a class="pro-dash-header-link pro-dash-logout-link" href="{{ url_for('logout') }}" title="Sign out" aria-label="Sign out">
+      <i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i>
+      Sign out
+    </a>
+  </div>
+</header>
