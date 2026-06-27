@@ -1,12 +1,55 @@
 # MAXEK ERP — Backup Guide
 
-Production VPS: **srv1704727** · App path: `/var/www/maxek-erp-flask/`
+Production VPS: **srv1704727** · App path: `/var/www/maxek-erp-flask/` · Domain: **erp.maxekindia.com**
 
 Run a backup **before every deploy** or schema change.
 
 ---
 
-## VPS — one-liner backup (run now)
+## VPS — full backup (all files + database + uploads)
+
+Use this when you need a complete snapshot off-server (tar.gz under `/var/backups/maxek-erp/`).
+
+### One-liner (run on VPS now — no script upload required)
+
+```bash
+sudo mkdir -p /var/backups/maxek-erp && sudo systemctl stop maxek-erp 2>/dev/null; sudo tar -czf /var/backups/maxek-erp/maxek-erp-full_$(date +%Y%m%d_%H%M%S).tar.gz -C /var/www --exclude='maxek-erp-flask/venv' --exclude='maxek-erp-flask/.venv' --exclude='maxek-erp-flask/__pycache__' --exclude='maxek-erp-flask/.git' --exclude='maxek-erp-flask/backups' maxek-erp-flask; sudo systemctl start maxek-erp; ls -lh /var/backups/maxek-erp/
+```
+
+Includes: app code, `database/maxek.db`, `.env`, `static/uploads`, `static/photos`, `reports`.  
+Excludes: `venv`, `__pycache__`, `.git`, in-app `backups/`.
+
+### Script (after uploading `deploy/vps_backup_full.sh`)
+
+```bash
+cd /var/www/maxek-erp-flask
+chmod +x deploy/vps_backup_full.sh
+sudo bash deploy/vps_backup_full.sh
+```
+
+Options:
+
+```bash
+sudo KEEP=14 INCLUDE_ENV=1 STOP_SERVICE=1 bash deploy/vps_backup_full.sh /var/www/maxek-erp-flask
+```
+
+Output: `/var/backups/maxek-erp/maxek-erp-full_YYYYMMDD_HHMMSS.tar.gz` plus a `.txt` manifest.
+
+### Download backup to your PC (scp)
+
+From **PowerShell** on Windows (replace timestamp and host):
+
+```powershell
+scp root@72.61.224.204:/var/backups/maxek-erp/maxek-erp-full_YYYYMMDD_HHMMSS.tar.gz "C:\Users\rajee\Documents\maxek-vps-backups\"
+```
+
+Or with WinSCP: connect to the VPS, browse to `/var/backups/maxek-erp/`, drag the `.tar.gz` to your PC.
+
+**Security:** archives may contain `.env` (secrets) and production data. Store locally encrypted or on a private drive only.
+
+---
+
+## VPS — quick DB + uploads backup (pre-deploy)
 
 SSH into the server, then:
 

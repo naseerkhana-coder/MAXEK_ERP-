@@ -113,7 +113,7 @@
     var modal = document.getElementById("boq-continue-modal");
     if (!modal || modal.hidden) return;
 
-    var dashboardUrl = modal.getAttribute("data-dashboard-url") || "/";
+    var dashboardUrl = modal.getAttribute("data-dashboard-url") || "/dept/projects";
     var yesButtons = modal.querySelectorAll("[data-boq-continue-yes]");
     var noButtons = modal.querySelectorAll("[data-boq-continue-no]");
 

@@ -14,7 +14,7 @@
     print_target='#client-records'
   ) }}
 
-  {% call erp_module_form_panel(id='add-client', title='Client Registration') %}
+  {% call erp_module_form_panel(id='add-client', title='Client Registration', list_anchor='client-records') %}
     <form method="post" class="erp-form-grid">
       <div class="erp-field"><input name="client_code_display" placeholder=" " readonly value="{{ next_client_code }}"><label>Client ID (Auto)</label></div>
       <div class="erp-field span-2"><input name="company_name" placeholder=" " required><label>Company Name</label></div>

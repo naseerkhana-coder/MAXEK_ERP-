@@ -384,12 +384,29 @@
     });
   }
 
+  function initEntryPanelSpacing() {
+    document.addEventListener('maxek:entry-opened', function (event) {
+      var panel = event.target;
+      if (!panel || !panel.classList || !panel.classList.contains('erp-data-entry-panel--wide')) return;
+      var first = panel.querySelector(
+        'input:not([type="hidden"]):not([readonly]):not([disabled]), '
+        + 'select:not([disabled]), textarea:not([readonly]):not([disabled])'
+      );
+      if (first && typeof first.focus === 'function') {
+        window.setTimeout(function () {
+          try { first.focus(); } catch (err) { /* ignore */ }
+        }, 120);
+      }
+    });
+  }
+
   function init() {
     initNumericZeroClear();
     initAutoTotals();
     initTableKeyboard();
     initAutoFocusNewRows();
     initNumberDisplayFormatting();
+    initEntryPanelSpacing();
   }
 
   if (document.readyState === 'loading') {

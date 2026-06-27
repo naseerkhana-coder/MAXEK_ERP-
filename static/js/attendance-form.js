@@ -13,6 +13,9 @@
   function setRowVisible(row, visible) {
     if (!row) return;
     row.hidden = !visible;
+    Array.prototype.forEach.call(row.querySelectorAll('select, input, textarea, button'), function (el) {
+      el.disabled = !visible;
+    });
   }
 
   function initAttendanceForm() {
@@ -44,7 +47,9 @@
     var designationRow = form.querySelector('#attendance_designation_row');
     var tradeSelect = form.querySelector('#attendance_trade_id');
     var designationSelect = form.querySelector('#attendance_designation_id');
+    var breakHoursInput = form.querySelector('#attendance_break_hours');
     var photosBase = form.getAttribute('data-photos-base') || '/static/photos/';
+    var subcontractorOnly = form.getAttribute('data-subcontractor-only') === '1';
 
     function toggleTradeDesignationRows() {
       var type = staffType ? staffType.value : '';
@@ -107,6 +112,12 @@
           syncHasValue(tradeSelect);
           setMasterFieldLocked(tradeSelect, tradeRow, false);
         }
+      }
+
+      var workingHours = option.getAttribute('data-working-hours') || '';
+      if (breakHoursInput && workingHours && !isNaN(parseFloat(workingHours))) {
+        breakHoursInput.value = workingHours;
+        syncHasValue(breakHoursInput);
       }
     }
 
@@ -292,6 +303,13 @@
     }
 
     function filterSubcontractorWorkers() {
+      var isSub = staffType && staffType.value === 'Sub Contractor Staff';
+      if (!isSub) {
+        setRowVisible(subWorkerNameRow, false);
+        setRowVisible(subWorkerIdRow, false);
+        return;
+      }
+
       var selectedSubId = subcontractorName ? subcontractorName.value : '';
       var hasSub = !!selectedSubId;
 
@@ -364,12 +382,15 @@
       setRowVisible(companyIdRow, isCompany);
       setRowVisible(subNameRow, isSub);
       setRowVisible(subIdRow, isSub);
-      setRowVisible(subWorkerNameRow, isSub && subcontractorName && !!subcontractorName.value);
-      setRowVisible(subWorkerIdRow, isSub && subcontractorName && !!subcontractorName.value);
 
       if (!isCompany) clearCompanyWorkerSelection();
-      if (!isSub) clearSubcontractorSelection();
-      if (isSub) filterSubcontractorWorkers();
+      if (!isSub) {
+        clearSubcontractorSelection();
+        setRowVisible(subWorkerNameRow, false);
+        setRowVisible(subWorkerIdRow, false);
+      } else {
+        filterSubcontractorWorkers();
+      }
 
       if (verifyPanel && !isCompany && !isSub) verifyPanel.hidden = true;
       setMasterFieldLocked(tradeSelect, tradeRow, false);
@@ -420,8 +441,9 @@
 
     form.addEventListener('submit', function (event) {
       syncWorkerRef();
-      if (tradeSelect) tradeSelect.disabled = false;
-      if (designationSelect) designationSelect.disabled = false;
+      form.querySelectorAll('select, input, textarea').forEach(function (el) {
+        el.disabled = false;
+      });
       if (!workerRef || !workerRef.value) {
         event.preventDefault();
         window.alert('Select a worker before saving attendance.');
@@ -449,6 +471,10 @@
           syncSubWorkerFromName();
         }
       }
+    } else if (subcontractorOnly && staffType) {
+      staffType.value = 'Sub Contractor Staff';
+      syncHasValue(staffType);
+      toggleStaffTypeSections();
     } else if (staffType && staffType.value) {
       toggleStaffTypeSections();
     }
@@ -460,8 +486,239 @@
     }
 
     initMasterModals();
-    if (!(staffType && staffType.value)) {
+    if (!(staffType && staffType.value) && !subcontractorOnly) {
       toggleTradeDesignationRows();
+    }
+    initSubcontractorBulkAttendance();
+  }
+
+  function initSubcontractorBulkAttendance() {
+    var bulkForm = document.querySelector('[data-sub-bulk-form]');
+    if (!bulkForm) return;
+
+    var singleCard = document.getElementById('add-attendance');
+    var bulkCard = document.getElementById('sub-bulk-attendance');
+    var modeSingleBtn = document.getElementById('sub_att_mode_single');
+    var modeBulkBtn = document.getElementById('sub_att_mode_bulk');
+    var subSelect = bulkForm.querySelector('#bulk_subcontractor_id');
+    var tradeSelect = bulkForm.querySelector('#bulk_trade_id');
+    var tbody = bulkForm.querySelector('#bulk_worker_tbody');
+    var checklistWrap = bulkForm.querySelector('#bulk_worker_checklist_wrap');
+    var selectAll = bulkForm.querySelector('#bulk_select_all');
+    var workerCount = bulkForm.querySelector('#bulk_worker_count');
+    var projectNumber = bulkForm.querySelector('#bulk_project_number');
+    var projectName = bulkForm.querySelector('#bulk_project_name');
+    var defaultStatus = bulkForm.querySelector('#bulk_default_status');
+    var applyBtn = bulkForm.querySelector('#bulk_apply_to_ticked');
+    var statusOptions = ['Present', 'Absent', 'Half Day', 'Leave'];
+    var workersCache = [];
+
+    function setSubMode(mode) {
+      var isBulk = mode === 'bulk';
+      if (singleCard) singleCard.hidden = isBulk;
+      if (bulkCard) bulkCard.hidden = !isBulk;
+      if (modeSingleBtn) {
+        modeSingleBtn.classList.toggle('erp-btn-primary', !isBulk);
+        modeSingleBtn.classList.toggle('erp-btn-ghost', isBulk);
+      }
+      if (modeBulkBtn) {
+        modeBulkBtn.classList.toggle('erp-btn-primary', isBulk);
+        modeBulkBtn.classList.toggle('erp-btn-ghost', !isBulk);
+      }
+      if (isBulk && window.location.hash === '#sub-bulk-attendance') {
+        bulkCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+
+    if (modeSingleBtn) {
+      modeSingleBtn.addEventListener('click', function () {
+        setSubMode('single');
+        if (window.history.replaceState) {
+          window.history.replaceState({}, '', window.location.pathname + window.location.search + '#add-attendance');
+        }
+      });
+    }
+    if (modeBulkBtn) {
+      modeBulkBtn.addEventListener('click', function () {
+        setSubMode('bulk');
+        if (window.history.replaceState) {
+          window.history.replaceState({}, '', window.location.pathname + window.location.search + '#sub-bulk-attendance');
+        }
+      });
+    }
+
+    if (window.location.hash === '#sub-bulk-attendance') {
+      setSubMode('bulk');
+    } else {
+      setSubMode('single');
+    }
+
+    function syncProjectFromNumber() {
+      if (!projectNumber || !projectName) return;
+      projectName.value = projectNumber.value;
+      syncHasValue(projectName);
+    }
+
+    function syncProjectFromName() {
+      if (!projectNumber || !projectName) return;
+      projectNumber.value = projectName.value;
+      syncHasValue(projectNumber);
+    }
+
+    if (projectNumber) projectNumber.addEventListener('change', syncProjectFromNumber);
+    if (projectName) projectName.addEventListener('change', syncProjectFromName);
+
+    function renderStatusSelect(workerId, selected) {
+      var html = '<select name="bulk_status_' + workerId + '" class="bulk-row-status">';
+      statusOptions.forEach(function (st) {
+        html += '<option value="' + st + '"' + (st === selected ? ' selected' : '') + '>' + st + '</option>';
+      });
+      html += '</select>';
+      return html;
+    }
+
+    function updateWorkerCount() {
+      if (!workerCount || !tbody) return;
+      var boxes = tbody.querySelectorAll('input[name="bulk_workers"]:checked');
+      workerCount.textContent = boxes.length + ' of ' + workersCache.length + ' selected';
+    }
+
+    function renderWorkerRows(workers) {
+      workersCache = workers || [];
+      if (!tbody) return;
+      tbody.innerHTML = '';
+      if (!workersCache.length) {
+        if (checklistWrap) checklistWrap.hidden = true;
+        return;
+      }
+      workersCache.forEach(function (worker) {
+        var tr = document.createElement('tr');
+        tr.innerHTML =
+          '<td><input type="checkbox" name="bulk_workers" value="' + worker.id + '" checked></td>' +
+          '<td>' + (worker.worker_name || '—') + '</td>' +
+          '<td>' + (worker.worker_code || '—') + '</td>' +
+          '<td>' + (worker.trade_name || worker.designation || '—') + '</td>' +
+          '<td>' + renderStatusSelect(worker.id, defaultStatus ? defaultStatus.value : 'Present') + '</td>';
+        tbody.appendChild(tr);
+      });
+      if (checklistWrap) checklistWrap.hidden = false;
+      if (selectAll) selectAll.checked = true;
+      tbody.querySelectorAll('input[name="bulk_workers"]').forEach(function (box) {
+        box.addEventListener('change', updateWorkerCount);
+      });
+      updateWorkerCount();
+    }
+
+    function loadTrades(subId) {
+      if (!tradeSelect) return Promise.resolve();
+      tradeSelect.innerHTML = '<option value="">Loading trades...</option>';
+      tradeSelect.disabled = true;
+      return fetch('/api/subcontractors/' + subId + '/attendance-trades')
+        .then(function (res) { return res.json(); })
+        .then(function (trades) {
+          tradeSelect.innerHTML = '<option value="">Select trade</option>';
+          trades.forEach(function (trade) {
+            var opt = document.createElement('option');
+            opt.value = trade.trade_id || trade.trade_name;
+            opt.textContent = trade.trade_name;
+            opt.setAttribute('data-trade-name', trade.trade_name);
+            if (trade.trade_id) {
+              opt.setAttribute('data-trade-id', trade.trade_id);
+            }
+            tradeSelect.appendChild(opt);
+          });
+          tradeSelect.disabled = false;
+          syncHasValue(tradeSelect);
+        })
+        .catch(function () {
+          tradeSelect.innerHTML = '<option value="">Select trade</option>';
+          tradeSelect.disabled = false;
+        });
+    }
+
+    function loadWorkers(subId, tradeId, tradeName) {
+      var url = '/api/subcontractors/' + subId + '/attendance-workers?';
+      if (tradeId) {
+        url += 'trade_id=' + encodeURIComponent(tradeId);
+      } else if (tradeName) {
+        url += 'trade_name=' + encodeURIComponent(tradeName);
+      }
+      return fetch(url)
+        .then(function (res) { return res.json(); })
+        .then(function (workers) {
+          renderWorkerRows(workers);
+        })
+        .catch(function () {
+          renderWorkerRows([]);
+        });
+    }
+
+    if (subSelect) {
+      subSelect.addEventListener('change', function () {
+        var subId = subSelect.value;
+        renderWorkerRows([]);
+        if (!subId) {
+          if (tradeSelect) {
+            tradeSelect.innerHTML = '<option value="">Select trade</option>';
+            tradeSelect.disabled = true;
+          }
+          return;
+        }
+        loadTrades(subId);
+      });
+    }
+
+    if (tradeSelect) {
+      tradeSelect.addEventListener('change', function () {
+        var subId = subSelect ? subSelect.value : '';
+        if (!subId || !tradeSelect.value) {
+          renderWorkerRows([]);
+          return;
+        }
+        var opt = tradeSelect.options[tradeSelect.selectedIndex];
+        var tradeId = opt.getAttribute('data-trade-id') || '';
+        var tradeName = opt.getAttribute('data-trade-name') || tradeSelect.value;
+        loadWorkers(subId, tradeId, tradeName);
+      });
+    }
+
+    if (selectAll && tbody) {
+      selectAll.addEventListener('change', function () {
+        tbody.querySelectorAll('input[name="bulk_workers"]').forEach(function (box) {
+          box.checked = selectAll.checked;
+        });
+        updateWorkerCount();
+      });
+    }
+
+    if (applyBtn) {
+      applyBtn.addEventListener('click', function () {
+        var status = defaultStatus ? defaultStatus.value : 'Present';
+        tbody.querySelectorAll('tr').forEach(function (row) {
+          var box = row.querySelector('input[name="bulk_workers"]');
+          var statusEl = row.querySelector('.bulk-row-status');
+          if (box && box.checked && statusEl) {
+            statusEl.value = status;
+          }
+        });
+      });
+    }
+
+    bulkForm.addEventListener('submit', function (event) {
+      var checked = tbody ? tbody.querySelectorAll('input[name="bulk_workers"]:checked') : [];
+      if (!checked.length) {
+        event.preventDefault();
+        window.alert('Select at least one worker to save bulk attendance.');
+      }
+    });
+
+    var dateInput = bulkForm.querySelector('#bulk_attendance_date');
+    if (dateInput && !dateInput.value) {
+      var today = new Date();
+      var mm = String(today.getMonth() + 1).padStart(2, '0');
+      var dd = String(today.getDate()).padStart(2, '0');
+      dateInput.value = today.getFullYear() + '-' + mm + '-' + dd;
+      syncHasValue(dateInput);
     }
   }
 

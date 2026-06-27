@@ -1,8 +1,8 @@
 {% extends 'base_maxek.html' %}
-{% from 'macros/erp_ui.html' import approval_badge, role_status_badge, rejection_notice, workflow_modals, transaction_view_tabs, checker_row_actions, approver_row_actions, maker_row_actions, erp_pagination, erp_standard_toolbar, erp_module_table_panel, erp_btn_back %}
-{% set page_title = page_title or ('Project Creation' if show_project_form|default(false) else 'Project List') %}
+{% from 'macros/erp_ui.html' import approval_badge, role_status_badge, rejection_notice, workflow_modals, transaction_view_tabs, checker_row_actions, approver_row_actions, maker_row_actions, erp_pagination, erp_module_toolbar, erp_module_table_panel %}
+{% set page_title = 'Project Creation' if show_project_form|default(false) else 'Projects' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; Projects' %}
 {% block page_actions %}
-{{ erp_btn_back(url_for('projects_dashboard'), 'Project Dashboard') }}
 <button type="button" class="erp-btn erp-btn-ghost" data-ai-open data-ai-mode="assistant"><i class="fa-solid fa-wand-magic-sparkles"></i> AI Assistant</button>
 <a href="{{ url_for('cost_planning') }}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-coins"></i> Cost Planning</a>
 {% endblock %}
@@ -45,35 +45,24 @@
 
 <div class="erp-module-layout">
 {% if not view_project %}
-  {{ erp_standard_toolbar(
-    module_endpoint='projects',
+  {{ erp_module_toolbar(
     search_placeholder='Search projects...',
-    search_name='q',
-    new_url=url_for('projects') ~ '#add-project',
-    form_anchor='#add-project',
-    export_url=url_for('projects_export'),
-    export_pdf_url=url_for('projects') ~ '?print=1',
-    print_target='#project-list',
-    table_target='#project-list',
-    delete_table='projects',
-    module_id=module_id,
-    status_options=[
-      {'value': 'Active', 'label': 'Active'},
-      {'value': 'Completed', 'label': 'Completed'},
-      {'value': 'On Hold', 'label': 'On Hold'}
-    ],
-    sort_options=[
-      {'value': 0, 'label': 'Project No.'},
-      {'value': 1, 'label': 'Name'},
-      {'value': 5, 'label': 'Status'}
-    ]
+    add_url='#add-project',
+    export_name='projects',
+    print_target='#project-list'
   ) }}
 {% endif %}
 
 <div class="module-layout module-layout--entry-wide{% if not show_project_form|default(false) %} module-layout--list-only{% endif %}">
   {% if not view_project %}
-  <div class="erp-module-form-panel erp-form-card" id="add-project"{% if not show_project_form|default(false) %} hidden{% endif %}>
-    <h3 class="erp-form-title">{% if form_project %}Edit Project{% if edit_role %} ({{ edit_role|title }}){% endif %}{% else %}Project Creation{% endif %}</h3>
+  <div class="erp-module-form-panel erp-form-card erp-data-entry-panel" id="add-project" data-entry-panel data-entry-list="project-list"{% if not show_project_form|default(false) %} hidden{% endif %}>
+    <div class="erp-data-entry-header" role="toolbar" aria-label="Entry navigation">
+      <div class="erp-data-entry-header__title">
+        <button type="button" class="erp-data-entry-nav erp-data-entry-nav--back" data-entry-back aria-label="Back to list"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i></button>
+        <h3 class="erp-form-title">{% if form_project %}Edit Project{% if edit_role %} ({{ edit_role|title }}){% endif %}{% else %}Project Creation{% endif %}</h3>
+      </div>
+      <button type="button" class="erp-data-entry-nav erp-data-entry-nav--close" data-entry-close aria-label="Close entry"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+    </div>
     <form method="post" enctype="multipart/form-data" class="erp-form-grid" data-master-form="project">
       {% if form_project %}<input type="hidden" name="project_id" value="{{ form_project.id }}">{% endif %}
       <div class="erp-field span-2">
@@ -352,19 +341,11 @@
 
   {% call erp_module_table_panel(id='project-list', title='Project List') %}
     <div class="erp-table-scroll">
-      <table class="erp-table erp-table-module" data-erp-crud-table>
+      <table class="erp-table erp-table-module">
         <thead><tr><th>Project No.</th><th>Name</th><th>Type</th><th>Client / Dept</th><th>Approved Total</th><th>Status</th><th>Workflow</th><th>Actions</th></tr></thead>
         <tbody>
           {% for row in rows %}
-          {% set can_edit = row.approval_status in ['Pending Checker', 'Rejected by Checker', 'Rejected by Approver'] %}
-          {% set can_delete = row.approval_status in ['Pending Checker', 'Rejected by Checker', 'Rejected by Approver'] %}
-          <tr data-record-id="{{ row.id }}"
-              data-erp-row-id="{{ row.id }}"
-              data-erp-row-status="{{ row.status or 'Active' }}"
-              data-erp-row-date="{{ row.created_at or '' }}"
-              data-record-workflow="{{ row.approval_status or '' }}"
-              data-record-editable="{{ '1' if can_edit else '0' }}"
-              data-record-deletable="{{ '1' if can_delete else '0' }}">
+          <tr>
             <td>{{ row.project_code or row.id }}</td>
             <td>
               <button type="button" class="erp-link-btn" data-modal-open="project-hub-{{ row.id }}" title="Open Project 360">
@@ -661,6 +642,10 @@
 
   syncProjectView();
   window.addEventListener('hashchange', syncProjectView);
+  if (form) {
+    form.addEventListener('maxek:entry-closed', function () { window.setTimeout(syncProjectView, 0); });
+    form.addEventListener('maxek:entry-opened', function () { window.setTimeout(syncProjectView, 0); });
+  }
 })();
 </script>
 {% endblock %}

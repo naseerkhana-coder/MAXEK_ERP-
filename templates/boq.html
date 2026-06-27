@@ -26,7 +26,7 @@
 
 </div>
 
-<div class="module-layout boq-module-layout">
+<div class="module-layout boq-module-layout module-layout--entry-focus">
 
   {% if view_boq %}
 
@@ -180,9 +180,15 @@
 
   {% if not view_boq %}
 
-  <div class="erp-form-card" id="boq-form">
+  <section class="erp-module-form-panel erp-form-card erp-data-entry-panel erp-data-entry-panel--wide" id="boq-form" data-entry-panel data-entry-list="boq-list" data-entry-back-href="{{ url_for('boq_management') }}">
 
-    <h3 class="erp-form-title">{% if editing_boq %}Edit BOQ — {{ editing_boq.boq_number }}{% if edit_role %} ({{ edit_role|title }}){% endif %}{% else %}BOQ Creation{% endif %}</h3>
+    <div class="erp-data-entry-header" role="toolbar" aria-label="Entry navigation">
+      <div class="erp-data-entry-header__title">
+        <button type="button" class="erp-data-entry-nav erp-data-entry-nav--back" data-entry-back aria-label="Back to list"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i></button>
+        <h3 class="erp-form-title">{% if editing_boq %}Edit BOQ — {{ editing_boq.boq_number }}{% if edit_role %} ({{ edit_role|title }}){% endif %}{% else %}BOQ Creation{% endif %}</h3>
+      </div>
+      <button type="button" class="erp-data-entry-nav erp-data-entry-nav--close" data-entry-close aria-label="Close entry"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+    </div>
 
     <form method="post" class="erp-form-grid" data-boq-form data-max-lines="{{ max_boq_lines }}">
 
@@ -407,13 +413,13 @@
 
     </form>
 
-  </div>
+  </section>
 
   {% endif %}
 
 
 
-  <div class="erp-table-panel" data-erp-table>
+  <div class="erp-table-panel" id="boq-list" data-erp-table>
 
     <div class="erp-table-toolbar">
 
@@ -537,7 +543,7 @@
 
 <div class="erp-modal" id="boq-continue-modal"{% if not show_continue_prompt %} hidden aria-hidden="true"{% else %} aria-hidden="false"{% endif %}
 
-     data-dashboard-url="{{ url_for('dashboard') }}"
+     data-dashboard-url="{{ url_for('department_portal', slug='projects') }}"
 
      data-saved-boq="{{ saved_boq_number }}">
 
@@ -559,7 +565,7 @@
 
     <div class="erp-form-actions">
 
-      <button type="button" class="erp-btn erp-btn-ghost" data-boq-continue-no><i class="fa-solid fa-house"></i> No — Dashboard</button>
+      <button type="button" class="erp-btn erp-btn-ghost" data-boq-continue-no><i class="fa-solid fa-arrow-left"></i> No — Back to Projects</button>
 
       <button type="button" class="erp-btn erp-btn-primary" data-boq-continue-yes><i class="fa-solid fa-plus"></i> Yes — Add Next BOQ</button>
 

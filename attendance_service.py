@@ -251,3 +251,194 @@ def save_monthly_attendance_from_form(
         ),
     )
     return int(db.execute("SELECT last_insert_rowid()").fetchone()[0])
+
+
+SUBCONTRACTOR_ATTENDANCE_STATUSES = (
+    "Present",
+    "Absent",
+    "Half Day",
+    "Leave",
+)
+
+
+def compute_attendance_hours(
+    in_time: str,
+    out_time: str,
+    break_hours: float = 0.0,
+) -> tuple[float, float]:
+    """Return (total_hours, ot_hours) from in/out times."""
+    from datetime import datetime
+
+    start_dt = datetime.strptime(in_time, "%H:%M")
+    end_dt = datetime.strptime(out_time, "%H:%M")
+    break_hours_val = float(break_hours or 0)
+    total_hours = (end_dt - start_dt).seconds / 3600 - break_hours_val
+    if total_hours < 0:
+        total_hours += 24
+    ot_hours = max(total_hours - 8, 0)
+    return _round2(total_hours), _round2(ot_hours)
+
+
+def _worker_trade_row(db, designation_text: str | None) -> dict | None:
+    name = (designation_text or "").strip()
+    if not name:
+        return None
+    row = db.execute(
+        "SELECT id, trade_name FROM trades WHERE trade_name=? AND status='Active'",
+        (name,),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def list_trades_for_subcontractor(db, subcontractor_id: int) -> list[dict]:
+    """Distinct trades (from worker designation) for a subcontractor's active workers."""
+    rows = db.execute(
+        "SELECT DISTINCT TRIM(designation) AS trade_name "
+        "FROM workers "
+        "WHERE subcontractor_id=? "
+        "AND COALESCE(worker_category, 'Company Staff') = 'Sub Contractor Staff' "
+        "AND (status IS NULL OR status = 'Active') "
+        "AND designation IS NOT NULL AND TRIM(designation) != '' "
+        "ORDER BY trade_name",
+        (subcontractor_id,),
+    ).fetchall()
+    result = []
+    for row in rows:
+        trade_name = row["trade_name"]
+        trade = _worker_trade_row(db, trade_name)
+        result.append({
+            "trade_name": trade_name,
+            "trade_id": trade["id"] if trade else None,
+        })
+    return result
+
+
+def list_subcontractor_workers_for_attendance(
+    db,
+    subcontractor_id: int,
+    *,
+    trade_id: int | None = None,
+    trade_name: str | None = None,
+) -> list[dict]:
+    """Workers under subcontractor, optionally filtered by trade (designation)."""
+    sql = (
+        "SELECT w.id, w.worker_code, w.worker_name, w.photo, w.designation, "
+        "w.working_hours, w.subcontractor_id "
+        "FROM workers w "
+        "WHERE w.subcontractor_id=? "
+        "AND COALESCE(w.worker_category, 'Company Staff') = 'Sub Contractor Staff' "
+        "AND (w.status IS NULL OR w.status = 'Active') "
+    )
+    params: list = [subcontractor_id]
+    if trade_name:
+        sql += "AND TRIM(w.designation) = ? "
+        params.append(trade_name.strip())
+    elif trade_id:
+        trade_row = db.execute(
+            "SELECT trade_name FROM trades WHERE id=? AND status='Active'",
+            (trade_id,),
+        ).fetchone()
+        if not trade_row:
+            return []
+        sql += "AND TRIM(w.designation) = ? "
+        params.append(trade_row["trade_name"])
+    sql += "ORDER BY w.worker_name, w.worker_code"
+    rows = db.execute(sql, params).fetchall()
+    items = []
+    for row in rows:
+        item = dict(row)
+        trade = _worker_trade_row(db, item.get("designation"))
+        item["trade_id"] = trade["id"] if trade else None
+        item["trade_name"] = trade["trade_name"] if trade else (item.get("designation") or "")
+        item["worker_ref"] = f"w:{item['id']}"
+        items.append(item)
+    return items
+
+
+def save_bulk_subcontractor_attendance(
+    db,
+    form,
+    *,
+    username: str,
+    create_approval_request,
+    module_id: str,
+    table: str,
+    user_id=None,
+) -> int:
+    """Create one attendance row per selected subcontractor worker."""
+    subcontractor_id = (form.get("bulk_subcontractor_id") or "").strip()
+    attendance_date = (form.get("bulk_attendance_date") or "").strip()
+    in_time = (form.get("bulk_in_time") or "").strip()
+    out_time = (form.get("bulk_out_time") or "").strip()
+    break_hours_raw = (form.get("bulk_break_hours") or "0").strip()
+    project_id = (form.get("bulk_project_id") or "").strip() or None
+    default_status = (form.get("bulk_default_status") or "Present").strip()
+    worker_ids = form.getlist("bulk_workers")
+
+    if not subcontractor_id:
+        raise ValueError("Select a subcontractor.")
+    if not attendance_date:
+        raise ValueError("Attendance date is required.")
+    if not in_time or not out_time:
+        raise ValueError("In time and out time are required.")
+    if not worker_ids:
+        raise ValueError("Select at least one worker.")
+
+    try:
+        break_hours_val = float(break_hours_raw or 0)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Enter a valid break hours value.") from exc
+
+    total_hours, ot_hours = compute_attendance_hours(in_time, out_time, break_hours_val)
+    sub_id = int(subcontractor_id)
+    saved = 0
+
+    for wid_raw in worker_ids:
+        try:
+            worker_id = int(wid_raw)
+        except (TypeError, ValueError):
+            continue
+        worker = db.execute(
+            "SELECT id, designation FROM workers "
+            "WHERE id=? AND subcontractor_id=? "
+            "AND COALESCE(worker_category, 'Company Staff') = 'Sub Contractor Staff'",
+            (worker_id, sub_id),
+        ).fetchone()
+        if not worker:
+            continue
+        status = (form.get(f"bulk_status_{worker_id}") or default_status).strip()
+        if status not in SUBCONTRACTOR_ATTENDANCE_STATUSES:
+            status = default_status if default_status in SUBCONTRACTOR_ATTENDANCE_STATUSES else "Present"
+        trade = _worker_trade_row(db, worker["designation"])
+        trade_id = trade["id"] if trade else None
+        db.execute(
+            "INSERT INTO attendance("
+            "worker_id, worker_source, project_id, attendance_date, "
+            "in_time, out_time, break_hours, total_hours, ot_hours, status, "
+            "approval_status, trade_id, designation_id"
+            ") VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                worker_id,
+                "worker",
+                int(project_id) if project_id else None,
+                attendance_date,
+                in_time,
+                out_time,
+                break_hours_val,
+                total_hours,
+                ot_hours,
+                status,
+                "Pending Checker",
+                trade_id,
+                None,
+            ),
+        )
+        record_id_new = int(db.execute("SELECT last_insert_rowid()").fetchone()[0])
+        create_approval_request(
+            db, module_id, record_id_new, table, username, user_id
+        )
+        saved += 1
+
+    if saved == 0:
+        raise ValueError("No valid workers were saved.")
+    return saved

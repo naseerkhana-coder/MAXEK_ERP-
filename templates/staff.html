@@ -14,8 +14,14 @@
     export_name='employees',
     print_target='#employee-records'
   ) }}
-  <div class="erp-module-form-panel erp-form-card" id="add-staff">
-    <h3 class="erp-form-title">{{ 'Edit Employee' if form_employee else 'Employee Data Entry' }}</h3>
+  <div class="erp-module-form-panel erp-form-card erp-data-entry-panel" id="add-staff" data-entry-panel data-entry-list="employee-records">
+    <div class="erp-data-entry-header" role="toolbar" aria-label="Entry navigation">
+      <div class="erp-data-entry-header__title">
+        <button type="button" class="erp-data-entry-nav erp-data-entry-nav--back" data-entry-back aria-label="Back to list"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i></button>
+        <h3 class="erp-form-title">{{ 'Edit Employee' if form_employee else 'Employee Data Entry' }}</h3>
+      </div>
+      <button type="button" class="erp-data-entry-nav erp-data-entry-nav--close" data-entry-close aria-label="Close entry"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+    </div>
     <form method="post" enctype="multipart/form-data" class="erp-form-grid" data-staff-form
           data-initial-components='{{ editing_components | tojson }}'
           data-initial-travel='{{ editing_travel_tiers | tojson }}'>

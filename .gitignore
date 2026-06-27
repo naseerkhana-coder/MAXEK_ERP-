@@ -28,10 +28,7 @@ static/photos/
 backups/
 
 # IDE / tooling
-.cursor/*
-!.cursor/rules/
-.cursor/rules/*
-!.cursor/rules/maxek-erp.mdc
+.cursor/
 .vscode/
 *.swp
 .DS_Store

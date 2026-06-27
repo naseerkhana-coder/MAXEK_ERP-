@@ -7769,7 +7769,19 @@ def inject_maxek_layout():
         dept_portal = get_department_portal(nav_slug)
         if dept_portal:
             active_toolbar_slug = dept_portal["slug"]
-            current_nav_group = portal_menu_as_nav_group(dept_portal)
+            portal_menu = enrich_portal_menu_open_counts(
+                db, get_department_portal_menu(dept_portal["slug"])
+            )
+            portal_menu = filter_portal_menu_for_user(
+                db,
+                user_id,
+                dept_portal["slug"],
+                portal_menu,
+                full_access=is_admin_user() or super_admin or guest_user,
+            )
+            dept_portal_view = dict(dept_portal)
+            dept_portal_view["menu"] = portal_menu
+            current_nav_group = portal_menu_as_nav_group(dept_portal_view)
     if active_toolbar_slug in VIRTUAL_TOOLBAR_ENTRIES:
         virtual = VIRTUAL_TOOLBAR_ENTRIES[active_toolbar_slug]
         current_nav_group = {
@@ -7912,6 +7924,7 @@ def inject_maxek_layout():
         "ui_theme": ui_theme,
         "use_pro_shell": use_pro_shell,
         "pro_shell_dashboard": pro_shell_dashboard,
+        "pro_shell_department_portal": on_department_portal,
         "welcome_name": username_display,
         "command_centre_branch": session.get("branch", branch_options[0] if branch_options else "Head Office"),
         "command_user_role": role_label,

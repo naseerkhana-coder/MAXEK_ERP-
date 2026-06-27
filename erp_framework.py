@@ -1,4 +1,4 @@
-"""MAXEK ERP shared framework — navigation, CRUD conventions, list filters, exports, reports."""
+﻿"""MAXEK ERP shared framework — navigation, CRUD conventions, list filters, exports, reports."""
 
 from __future__ import annotations
 
