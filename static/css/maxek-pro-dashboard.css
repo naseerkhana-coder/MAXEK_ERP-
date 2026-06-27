@@ -477,6 +477,13 @@
   padding: 4px 6px 0;
 }
 
+/* Sign out belongs in the header only — hide legacy/cached sidebar logout markup */
+.pro-dash-sidebar .pro-dash-logout-btn,
+.pro-dash-sidebar .pro-dash-signout-btn,
+.pro-dash-sidebar-bottom a[href*="logout"] {
+  display: none !important;
+}
+
 .pro-dash-nav-item--back {
   margin-bottom: 4px;
   font-size: 12px;
