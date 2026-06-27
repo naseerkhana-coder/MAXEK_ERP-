@@ -32,6 +32,23 @@
       document.documentElement.setAttribute('data-theme', theme);
     })();
     </script>
+    <script>
+    (function () {
+      var storageKey = 'maxek_pro_theme';
+      var fallback = 'midnight';
+      var allowed = { midnight: 1, business: 1, 'erp-classic': 1 };
+      var theme = fallback;
+      try {
+        var stored = localStorage.getItem(storageKey);
+        if (stored && allowed[stored]) {
+          theme = stored;
+        }
+      } catch (err) {
+        theme = fallback;
+      }
+      document.documentElement.setAttribute('data-pro-theme-init', theme);
+    })();
+    </script>
 
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
@@ -40,14 +57,24 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/maxek-field-standards.css') }}?v=20260627-content-width">
 
     {% if use_pro_shell|default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/maxek-pro-dashboard.css') }}?v=20260627-midnight-blue">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/maxek-pro-dashboard.css') }}?v=20260627-pro-themes">
     {% endif %}
 
     {% block head_extra %}{% endblock %}
 
   </head>
 
-  <body class="maxek-layout maxek-topnav-layout maxek-shell-layout{% if show_command_sidebar and not use_pro_shell|default(false) %} command-centre-layout{% endif %}{% if use_pro_shell|default(false) %} pro-dashboard-mode{% endif %}{% if pro_shell_department_portal|default(false) %} dept-workspace-mode pro-dept-portal{% endif %}{% block body_class %}{% endblock %}"{% if dept_portal_accent %} style="--dept-accent: {{ dept_portal_accent }};"{% endif %}>
+  <body class="maxek-layout maxek-topnav-layout maxek-shell-layout{% if show_command_sidebar and not use_pro_shell|default(false) %} command-centre-layout{% endif %}{% if use_pro_shell|default(false) %} pro-dashboard-mode{% endif %}{% if pro_shell_department_portal|default(false) %} dept-workspace-mode pro-dept-portal{% endif %}{% block body_class %}{% endblock %}"{% if use_pro_shell|default(false) %} data-pro-theme="midnight"{% endif %}{% if dept_portal_accent %} style="--dept-accent: {{ dept_portal_accent }};"{% endif %}>
+    <script>
+    (function () {
+      var layout = document.body;
+      if (!layout.classList.contains('pro-dashboard-mode')) {
+        return;
+      }
+      var theme = document.documentElement.getAttribute('data-pro-theme-init') || 'midnight';
+      layout.setAttribute('data-pro-theme', theme);
+    })();
+    </script>
 
     {% from 'macros/erp_ui.html' import erp_sub_toolbar_secondary, erp_main_toolbar, erp_command_sidebar, erp_breadcrumb, erp_department_subbar_link %}
 
@@ -514,7 +541,7 @@
     {% endif %}
 
     {% if use_pro_shell|default(false) %}
-    <script src="{{ url_for('static', filename='js/maxek-pro-dashboard.js') }}?v=20260627-layout-tabs"></script>
+    <script src="{{ url_for('static', filename='js/maxek-pro-dashboard.js') }}?v=20260627-pro-themes"></script>
     {% endif %}
 
     {% block scripts %}{% endblock %}

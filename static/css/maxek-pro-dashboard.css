@@ -1,6 +1,101 @@
-/* MAXEK Pro Dashboard — Midnight Blue Executive theme */
+/* MAXEK Pro Dashboard — dark theme variants (data-pro-theme on .maxek-layout.pro-dashboard-mode) */
 
-:root,
+/* ── Theme 1: Midnight Blue Executive (default) ── */
+.maxek-layout.pro-dashboard-mode,
+.maxek-layout.pro-dashboard-mode[data-pro-theme="midnight"] {
+  --pro-bg: #0f172a;
+  --pro-bg-elevated: #1e293b;
+  --pro-sidebar: #1e293b;
+  --pro-card: #1e293b;
+  --pro-card-hover: #334155;
+  --pro-border: rgba(148, 163, 184, 0.2);
+  --pro-text: #f1f5f9;
+  --pro-muted: #94a3b8;
+  --pro-accent: #3b82f6;
+  --pro-accent-glow: rgba(59, 130, 246, 0.28);
+  --pro-accent-soft: color-mix(in srgb, var(--pro-accent) 18%, transparent);
+  --pro-accent-border: color-mix(in srgb, var(--pro-accent) 22%, transparent);
+  --pro-emerald: #10b981;
+  --pro-green: #10b981;
+  --pro-blue: #3b82f6;
+  --pro-purple: #8b5cf6;
+  --pro-sidebar-gradient: linear-gradient(180deg, #1e293b 0%, #172554 55%, #0f172a 100%);
+  --pro-avatar-gradient: linear-gradient(135deg, var(--pro-blue), var(--pro-emerald));
+  --pro-sidebar-width: 248px;
+  --pro-sidebar-collapsed: 72px;
+  --pro-content-max-compact: min(calc(100% - 40px), 960px);
+  --pro-content-max-wide: min(calc(100% - 40px), 1200px);
+  --bg-card-dark: #1e293b;
+  --bg-dark-ops: #0f172a;
+  --text-main: #f1f5f9;
+  --text-muted: #94a3b8;
+  --border-subtle: rgba(148, 163, 184, 0.2);
+  --maxek-card-bg: #1e293b;
+  --maxek-header-bg: #0f172a;
+  --maxek-toolbar-bg: #1e293b;
+}
+
+/* ── Theme 2: Business Dark ── */
+.maxek-layout.pro-dashboard-mode[data-pro-theme="business"] {
+  --pro-bg: #0a1628;
+  --pro-bg-elevated: #0f1f38;
+  --pro-sidebar: #0d1b2a;
+  --pro-card: #152238;
+  --pro-card-hover: #1c2d4a;
+  --pro-border: rgba(100, 130, 180, 0.2);
+  --pro-text: #e8eef7;
+  --pro-muted: #8ba3c7;
+  --pro-accent: #4f7cff;
+  --pro-accent-glow: rgba(79, 124, 255, 0.32);
+  --pro-accent-soft: color-mix(in srgb, var(--pro-accent) 20%, transparent);
+  --pro-accent-border: color-mix(in srgb, var(--pro-accent) 28%, transparent);
+  --pro-emerald: #22c55e;
+  --pro-green: #22c55e;
+  --pro-blue: #4f7cff;
+  --pro-purple: #6366f1;
+  --pro-sidebar-gradient: linear-gradient(180deg, #0f1f38 0%, #0d1b2a 50%, #0a1628 100%);
+  --pro-avatar-gradient: linear-gradient(135deg, #4f7cff, #22c55e);
+  --bg-card-dark: #152238;
+  --bg-dark-ops: #0a1628;
+  --text-main: #e8eef7;
+  --text-muted: #8ba3c7;
+  --border-subtle: rgba(100, 130, 180, 0.2);
+  --maxek-card-bg: #152238;
+  --maxek-header-bg: #0a1628;
+  --maxek-toolbar-bg: #0f1f38;
+}
+
+/* ── Theme 3: ERP Classic Dark ── */
+.maxek-layout.pro-dashboard-mode[data-pro-theme="erp-classic"] {
+  --pro-bg: #121212;
+  --pro-bg-elevated: #1a1a1a;
+  --pro-sidebar: #181818;
+  --pro-card: #1e1e1e;
+  --pro-card-hover: #282828;
+  --pro-border: rgba(255, 255, 255, 0.1);
+  --pro-text: #f5f5f5;
+  --pro-muted: #a3a3a3;
+  --pro-accent: #9c27b0;
+  --pro-accent-glow: rgba(156, 39, 176, 0.28);
+  --pro-accent-soft: color-mix(in srgb, var(--pro-accent) 18%, transparent);
+  --pro-accent-border: color-mix(in srgb, var(--pro-accent) 24%, transparent);
+  --pro-emerald: #4caf50;
+  --pro-green: #4caf50;
+  --pro-blue: #7c4dff;
+  --pro-purple: #9c27b0;
+  --pro-sidebar-gradient: linear-gradient(180deg, #1e1e1e 0%, #181818 55%, #121212 100%);
+  --pro-avatar-gradient: linear-gradient(135deg, #9c27b0, #4caf50);
+  --bg-card-dark: #1e1e1e;
+  --bg-dark-ops: #121212;
+  --text-main: #f5f5f5;
+  --text-muted: #a3a3a3;
+  --border-subtle: rgba(255, 255, 255, 0.1);
+  --maxek-card-bg: #1e1e1e;
+  --maxek-header-bg: #121212;
+  --maxek-toolbar-bg: #1a1a1a;
+}
+
+/* Legacy html data-theme hook — midnight tokens for pro shell */
 [data-theme="command-dark"] {
   --pro-bg: #0f172a;
   --pro-bg-elevated: #1e293b;
@@ -21,29 +116,9 @@
   --pro-content-max-wide: min(calc(100% - 40px), 1200px);
 }
 
-/* Pro shell always uses dark slate surfaces — blue accent on nav/KPI highlights */
+/* Pro shell always uses dark surfaces — accent from active data-pro-theme */
 .maxek-layout.pro-dashboard-mode {
-  --pro-bg: #0f172a;
-  --pro-bg-elevated: #1e293b;
-  --pro-sidebar: #1e293b;
-  --pro-card: #1e293b;
-  --pro-card-hover: #334155;
-  --pro-border: rgba(148, 163, 184, 0.2);
-  --pro-text: #f1f5f9;
-  --pro-muted: #94a3b8;
-  --pro-accent: #3b82f6;
-  --pro-accent-glow: rgba(59, 130, 246, 0.28);
-  --pro-emerald: #10b981;
-  --pro-green: #10b981;
-  --pro-blue: #3b82f6;
-  --bg-card-dark: #1e293b;
-  --bg-dark-ops: #0f172a;
-  --text-main: #f1f5f9;
-  --text-muted: #94a3b8;
-  --border-subtle: rgba(148, 163, 184, 0.2);
-  --maxek-card-bg: #1e293b;
-  --maxek-header-bg: #0f172a;
-  --maxek-toolbar-bg: #1e293b;
+  color-scheme: dark;
 }
 
 /* Hide default ERP chrome on pro dashboard landing */
@@ -251,9 +326,9 @@
 }
 
 .pro-dash-nav-item.is-active {
-  background: rgba(59, 130, 246, 0.18);
+  background: var(--pro-accent-soft);
   color: var(--pro-text);
-  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.22);
+  box-shadow: inset 0 0 0 1px var(--pro-accent-border);
   border-radius: 999px;
 }
 
@@ -283,8 +358,8 @@
   width: var(--pro-sidebar-width);
   z-index: 1100;
   flex-shrink: 0;
-  background: linear-gradient(180deg, #1e293b 0%, #172554 55%, #0f172a 100%);
-  border-right: 1px solid rgba(148, 163, 184, 0.16);
+  background: var(--pro-sidebar-gradient);
+  border-right: 1px solid var(--pro-border);
   display: flex;
   flex-direction: column;
   padding: 12px 10px;
@@ -571,7 +646,7 @@
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--pro-blue), var(--pro-emerald));
+  background: var(--pro-avatar-gradient);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -725,6 +800,76 @@
   color: var(--pro-text);
 }
 
+/* Pro theme switcher — 3 dark variants */
+.pro-dash-theme-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+  border: 1px solid var(--pro-border);
+  background: var(--pro-bg-elevated);
+}
+
+.pro-dash-theme-pill {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--pro-muted);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 7px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.pro-dash-theme-pill:hover {
+  color: var(--pro-text);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.pro-dash-theme-pill.is-active {
+  color: var(--pro-text);
+  background: var(--pro-accent-soft);
+  border-color: var(--pro-accent-border);
+  box-shadow: 0 0 12px -4px var(--pro-accent-glow);
+}
+
+.pro-dash-theme-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.pro-dash-theme-swatch--midnight {
+  background: linear-gradient(135deg, #0f172a 50%, #3b82f6 50%);
+}
+
+.pro-dash-theme-swatch--business {
+  background: linear-gradient(135deg, #0a1628 50%, #4f7cff 50%);
+}
+
+.pro-dash-theme-swatch--erp-classic {
+  background: linear-gradient(135deg, #121212 34%, #9c27b0 34% 67%, #4caf50 67%);
+}
+
+@media (max-width: 900px) {
+  .pro-dash-theme-pill-label {
+    display: none;
+  }
+
+  .pro-dash-theme-pill {
+    padding: 5px 6px;
+  }
+}
+
 .pro-dash-profile {
   display: flex;
   align-items: center;
@@ -761,7 +906,7 @@
   flex-direction: column;
   gap: 2px;
   min-height: 72px;
-  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.05), 0 6px 22px -10px var(--pro-accent-glow);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--pro-accent) 5%, transparent), 0 6px 22px -10px var(--pro-accent-glow);
 }
 
 .pro-dash-kpi-label {
@@ -1238,9 +1383,9 @@
   width: 44px;
   height: 44px;
   border-radius: 12px;
-  background: rgba(59, 130, 246, 0.14);
+  background: var(--pro-accent-soft);
   color: var(--pro-blue);
-  border: 1px solid rgba(59, 130, 246, 0.22);
+  border: 1px solid var(--pro-accent-border);
   flex-shrink: 0;
   font-size: 18px;
 }
@@ -1343,7 +1488,7 @@
   border: 1px solid var(--pro-border);
   border-left: 3px solid var(--pro-blue);
   border-radius: 12px;
-  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.06), 0 8px 28px -12px var(--pro-accent-glow);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--pro-accent) 6%, transparent), 0 8px 28px -12px var(--pro-accent-glow);
 }
 
 .maxek-layout.pro-dashboard-mode .pro-dash-stat-card span {
@@ -1549,7 +1694,7 @@
 .maxek-layout.pro-dashboard-mode .department-subbar a.is-active,
 .maxek-layout.pro-dashboard-mode .department-subbar a:hover {
   color: var(--pro-text);
-  background: rgba(59, 130, 246, 0.14);
+  background: var(--pro-accent-soft);
   border-radius: 999px;
 }
 
@@ -1702,4 +1847,64 @@
 [data-theme="ultra-color"] .maxek-layout.pro-dashboard-mode.dept-workspace-mode .erp-module-tile-icon {
   background: color-mix(in srgb, var(--dept-accent, var(--pro-blue)) 14%, var(--pro-card)) !important;
   color: var(--dept-accent, var(--pro-blue)) !important;
+}
+
+/* ── Theme 2: Business Dark — clean card grid, cornflower nav glow ── */
+.maxek-layout.pro-dashboard-mode[data-pro-theme="business"] .pro-dash-kpi-card,
+.maxek-layout.pro-dashboard-mode[data-pro-theme="business"] .pro-dash-widget,
+.maxek-layout.pro-dashboard-mode[data-pro-theme="business"] .pro-dash-dept-section {
+  border-radius: 10px;
+  box-shadow: 0 4px 18px -8px rgba(0, 0, 0, 0.45);
+}
+
+.maxek-layout.pro-dashboard-mode[data-pro-theme="business"] .pro-dash-nav-item.is-active {
+  background: color-mix(in srgb, #4f7cff 22%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #4f7cff 35%, transparent);
+}
+
+.maxek-layout.pro-dashboard-mode[data-pro-theme="business"] .pro-dash-tab.is-active {
+  border-bottom-color: #4f7cff;
+}
+
+/* ── Theme 3: ERP Classic — purple/green action accents ── */
+.maxek-layout.pro-dashboard-mode[data-pro-theme="erp-classic"] .pro-dash-kpi-strip .pro-dash-kpi-card:nth-child(3n+1),
+.maxek-layout.pro-dashboard-mode[data-pro-theme="erp-classic"] .pro-dash-kpi-row .pro-dash-kpi-card:nth-child(3n+1),
+.maxek-layout.pro-dashboard-mode[data-pro-theme="erp-classic"] .pro-dash-home-stats .pro-dash-stat-card:nth-child(3n+1),
+.maxek-layout.pro-dashboard-mode[data-pro-theme="erp-classic"] .pro-dash-dept-stats .pro-dash-stat-card:nth-child(3n+1) {
+  border-left: 3px solid var(--pro-purple);
+}
+
+.maxek-layout.pro-dashboard-mode[data-pro-theme="erp-classic"] .pro-dash-kpi-strip .pro-dash-kpi-card:nth-child(3n+2),
+.maxek-layout.pro-dashboard-mode[data-pro-theme="erp-classic"] .pro-dash-kpi-row .pro-dash-kpi-card:nth-child(3n+2),
+.maxek-layout.pro-dashboard-mode[data-pro-theme="erp-classic"] .pro-dash-home-stats .pro-dash-stat-card:nth-child(3n+2),
+.maxek-layout.pro-dashboard-mode[data-pro-theme="erp-classic"] .pro-dash-dept-stats .pro-dash-stat-card:nth-child(3n+2) {
+  border-left: 3px solid var(--pro-green);
+}
+
+.maxek-layout.pro-dashboard-mode[data-pro-theme="erp-classic"] .pro-dash-kpi-strip .pro-dash-kpi-card:nth-child(3n),
+.maxek-layout.pro-dashboard-mode[data-pro-theme="erp-classic"] .pro-dash-kpi-row .pro-dash-kpi-card:nth-child(3n),
+.maxek-layout.pro-dashboard-mode[data-pro-theme="erp-classic"] .pro-dash-home-stats .pro-dash-stat-card:nth-child(3n),
+.maxek-layout.pro-dashboard-mode[data-pro-theme="erp-classic"] .pro-dash-dept-stats .pro-dash-stat-card:nth-child(3n) {
+  border-left: 3px solid var(--pro-blue);
+}
+
+.maxek-layout.pro-dashboard-mode[data-pro-theme="erp-classic"] .pro-dash-dept-tile:nth-child(4n+1) .erp-module-tile-icon,
+.maxek-layout.pro-dashboard-mode[data-pro-theme="erp-classic"] .pro-dash-dept-card:nth-child(4n+1) .pro-dash-dept-icon {
+  background: color-mix(in srgb, var(--pro-purple) 18%, transparent);
+  color: var(--pro-purple);
+}
+
+.maxek-layout.pro-dashboard-mode[data-pro-theme="erp-classic"] .pro-dash-dept-tile:nth-child(4n+2) .erp-module-tile-icon,
+.maxek-layout.pro-dashboard-mode[data-pro-theme="erp-classic"] .pro-dash-dept-card:nth-child(4n+2) .pro-dash-dept-icon {
+  background: color-mix(in srgb, var(--pro-green) 18%, transparent);
+  color: var(--pro-green);
+}
+
+.maxek-layout.pro-dashboard-mode[data-pro-theme="erp-classic"] .pro-dash-nav-item.is-active {
+  background: color-mix(in srgb, var(--pro-purple) 20%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--pro-purple) 30%, transparent);
+}
+
+.maxek-layout.pro-dashboard-mode[data-pro-theme="erp-classic"] .pro-dash-tab.is-active {
+  border-bottom-color: var(--pro-purple);
 }

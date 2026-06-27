@@ -1,6 +1,79 @@
 (function () {
   'use strict';
 
+  var PRO_THEME_STORAGE_KEY = 'maxek_pro_theme';
+  var PRO_THEMES = ['midnight', 'business', 'erp-classic'];
+  var DEFAULT_PRO_THEME = 'midnight';
+
+  function normalizeProTheme(theme) {
+    return PRO_THEMES.indexOf(theme) >= 0 ? theme : DEFAULT_PRO_THEME;
+  }
+
+  function getProThemeTarget() {
+    return document.body && document.body.classList.contains('pro-dashboard-mode')
+      ? document.body
+      : null;
+  }
+
+  function applyProTheme(theme, options) {
+    var opts = options || {};
+    var normalized = normalizeProTheme(theme);
+    var target = getProThemeTarget();
+    if (target) {
+      target.setAttribute('data-pro-theme', normalized);
+    }
+    if (opts.persist !== false) {
+      try {
+        localStorage.setItem(PRO_THEME_STORAGE_KEY, normalized);
+      } catch (err) {
+        /* ignore */
+      }
+    }
+    document.querySelectorAll('[data-pro-theme-switcher] [data-pro-theme]').forEach(function (btn) {
+      var isActive = btn.getAttribute('data-pro-theme') === normalized;
+      btn.classList.toggle('is-active', isActive);
+      btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    });
+    return normalized;
+  }
+
+  function initProTheme() {
+    var target = getProThemeTarget();
+    if (!target) {
+      return;
+    }
+    var initial = DEFAULT_PRO_THEME;
+    try {
+      var stored = localStorage.getItem(PRO_THEME_STORAGE_KEY);
+      if (stored) {
+        initial = normalizeProTheme(stored);
+      } else {
+        initial = normalizeProTheme(
+          target.getAttribute('data-pro-theme') ||
+            document.documentElement.getAttribute('data-pro-theme-init') ||
+            DEFAULT_PRO_THEME
+        );
+      }
+    } catch (err) {
+      initial = normalizeProTheme(target.getAttribute('data-pro-theme') || DEFAULT_PRO_THEME);
+    }
+    applyProTheme(initial, { persist: false });
+  }
+
+  function initProThemeSwitcher(root) {
+    if (!root) {
+      return;
+    }
+    root.querySelectorAll('[data-pro-theme]').forEach(function (button) {
+      button.addEventListener('click', function () {
+        applyProTheme(button.getAttribute('data-pro-theme') || DEFAULT_PRO_THEME);
+      });
+    });
+  }
+
+  initProTheme();
+  document.querySelectorAll('[data-pro-theme-switcher]').forEach(initProThemeSwitcher);
+
   var shell = document.querySelector('[data-pro-dash-shell]');
   if (!shell) {
     return;
@@ -150,19 +223,14 @@
     });
   }
 
-  var themeBtn = shell.querySelector('.pro-dash-theme-btn');
-  if (themeBtn) {
-    themeBtn.addEventListener('click', function () {
-      var themes = ['command-dark', 'pro-light', 'ultra-color'];
-      var current = document.documentElement.getAttribute('data-theme') || 'command-dark';
-      var idx = themes.indexOf(current);
-      var next = themes[(idx + 1) % themes.length];
-      document.documentElement.setAttribute('data-theme', next);
-      try {
-        localStorage.setItem('maxek-ui-theme', next);
-      } catch (err) {
-        /* ignore */
-      }
-    });
-  }
+  window.maxekProTheme = {
+    apply: applyProTheme,
+    get: function () {
+      var target = getProThemeTarget();
+      return normalizeProTheme(
+        (target && target.getAttribute('data-pro-theme')) || DEFAULT_PRO_THEME
+      );
+    },
+    themes: PRO_THEMES.slice()
+  };
 })();

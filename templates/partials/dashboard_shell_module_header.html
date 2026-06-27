@@ -44,9 +44,7 @@
       Help
     </a>
 
-    <button type="button" class="pro-dash-theme-btn" data-theme-toggle title="Toggle theme" aria-label="Toggle theme">
-      <i class="fa-solid fa-sun" aria-hidden="true"></i>
-    </button>
+    {% include 'partials/dashboard_shell_theme_switcher.html' %}
 
     <a class="pro-dash-profile" href="{{ url_for('settings') }}" title="Settings">
       <span class="pro-dash-profile-avatar">{{ admin_initial }}</span>
