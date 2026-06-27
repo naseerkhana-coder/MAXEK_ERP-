@@ -348,6 +348,7 @@ from ui_shell_config import (
     build_main_toolbar,
     filter_sub_toolbar_items,
     get_department_portal_menu,
+    get_department_portal_accent,
     portal_menu_as_nav_group,
     quick_panel_for_slug,
     resolve_active_toolbar_slug,
@@ -8190,6 +8191,9 @@ DEPARTMENT_ACCENT_EXTRAS = {
 
 def get_department_accent(slug):
     slug = resolve_department_portal_slug(slug)
+    accent = get_department_portal_accent(slug)
+    if accent:
+        return accent
     for meta in COMMAND_CENTRE_CARD_META:
         if meta["slug"] == slug:
             return meta["accent"]

@@ -5,8 +5,8 @@
   --pro-bg: #0B0B0F;
   --pro-bg-elevated: #12121A;
   --pro-sidebar: #0D0D12;
-  --pro-card: #15151D;
-  --pro-card-hover: #1A1A24;
+  --pro-card: #14141c;
+  --pro-card-hover: #1a1a24;
   --pro-border: rgba(255, 255, 255, 0.08);
   --pro-text: #F3F4F6;
   --pro-muted: #9CA3AF;
@@ -24,17 +24,17 @@
   --pro-bg: #0B0B0F;
   --pro-bg-elevated: #12121A;
   --pro-sidebar: #0D0D12;
-  --pro-card: #15151D;
-  --pro-card-hover: #1A1A24;
+  --pro-card: #14141c;
+  --pro-card-hover: #1a1a24;
   --pro-border: rgba(255, 255, 255, 0.08);
   --pro-text: #F3F4F6;
   --pro-muted: #9CA3AF;
-  --bg-card-dark: #15151D;
+  --bg-card-dark: #14141c;
   --bg-dark-ops: #0B0B0F;
   --text-main: #F3F4F6;
   --text-muted: #9CA3AF;
   --border-subtle: rgba(255, 255, 255, 0.08);
-  --maxek-card-bg: #15151D;
+  --maxek-card-bg: #14141c;
   --maxek-header-bg: #0B0B0F;
   --maxek-toolbar-bg: #12121A;
 }
@@ -1341,10 +1341,16 @@
   color: var(--pro-text);
 }
 
-.maxek-layout.pro-dashboard-mode.dept-workspace-mode .dept-stat-card {
+.maxek-layout.pro-dashboard-mode.dept-workspace-mode .dept-stat-card,
+.maxek-layout.pro-dashboard-mode.dept-workspace-mode .pro-dash-stat-card {
   background: var(--pro-card);
-  border-color: var(--pro-border);
-  border-left-color: var(--dept-accent, var(--pro-blue));
+  border: 1px solid var(--pro-border);
+  border-left: 3px solid var(--dept-accent, var(--pro-blue));
+}
+
+.maxek-layout.pro-dashboard-mode.dept-workspace-mode .dept-stat-card strong,
+.maxek-layout.pro-dashboard-mode.dept-workspace-mode .pro-dash-stat-card strong {
+  color: var(--pro-text);
 }
 
 .maxek-layout.pro-dashboard-mode.dept-workspace-mode .dept-module-tile,
@@ -1474,4 +1480,96 @@
   background: var(--pro-card);
   border-color: var(--pro-border);
   color: var(--pro-muted);
+}
+
+/* Department portal — no accent wash on card fills (all depts incl. store) */
+.maxek-layout.pro-dashboard-mode.dept-workspace-mode .pro-dash-dept-stats .erp-stat-card {
+  background: var(--pro-card);
+  border: 1px solid var(--pro-border);
+  border-left: 3px solid var(--dept-accent, var(--pro-blue));
+}
+
+.maxek-layout.pro-dashboard-mode.dept-workspace-mode .pro-dash-dept-stats .erp-stat-card span {
+  color: var(--pro-muted);
+}
+
+.maxek-layout.pro-dashboard-mode.dept-workspace-mode .pro-dash-dept-stats .erp-stat-card strong {
+  color: var(--pro-text);
+}
+
+.maxek-layout.pro-dashboard-mode.dept-workspace-mode .erp-module-section .erp-module-tile,
+.maxek-layout.pro-dashboard-mode.dept-workspace-mode .pro-dash-dept-reports .erp-module-tile {
+  background: var(--pro-card);
+  border: 1px solid var(--pro-border);
+  color: var(--pro-text);
+}
+
+.maxek-layout.pro-dashboard-mode.dept-workspace-mode .erp-module-tile-label {
+  color: var(--pro-text);
+}
+
+.maxek-layout.pro-dashboard-mode.dept-workspace-mode .erp-module-tile-desc,
+.maxek-layout.pro-dashboard-mode.dept-workspace-mode .erp-module-tile-chevron {
+  color: var(--pro-muted);
+}
+
+.maxek-layout.pro-dashboard-mode.dept-workspace-mode .erp-module-tile-icon {
+  background: color-mix(in srgb, var(--dept-accent, var(--pro-blue)) 14%, var(--pro-card));
+  color: var(--dept-accent, var(--pro-blue));
+}
+
+.maxek-layout.pro-dashboard-mode.dept-workspace-mode .erp-module-tile-open {
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.22);
+}
+
+.maxek-layout.pro-dashboard-mode.dept-workspace-mode .erp-module-tile-run {
+  color: #93c5fd;
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.22);
+}
+
+[data-theme="pro-light"] .maxek-layout.pro-dashboard-mode.dept-workspace-mode .erp-stat-card,
+[data-theme="ultra-color"] .maxek-layout.pro-dashboard-mode.dept-workspace-mode .erp-stat-card {
+  background: var(--pro-card) !important;
+  border: 1px solid var(--pro-border) !important;
+  border-left: 3px solid var(--dept-accent, var(--pro-blue)) !important;
+}
+
+[data-theme="pro-light"] .maxek-layout.pro-dashboard-mode.dept-workspace-mode .erp-stat-card span,
+[data-theme="ultra-color"] .maxek-layout.pro-dashboard-mode.dept-workspace-mode .erp-stat-card span {
+  color: var(--pro-muted) !important;
+}
+
+[data-theme="pro-light"] .maxek-layout.pro-dashboard-mode.dept-workspace-mode .erp-stat-card strong,
+[data-theme="ultra-color"] .maxek-layout.pro-dashboard-mode.dept-workspace-mode .erp-stat-card strong {
+  color: var(--pro-text) !important;
+}
+
+[data-theme="pro-light"] .maxek-layout.pro-dashboard-mode.dept-workspace-mode .erp-module-tile,
+[data-theme="ultra-color"] .maxek-layout.pro-dashboard-mode.dept-workspace-mode .erp-module-tile {
+  background: var(--pro-card) !important;
+  border-color: var(--pro-border) !important;
+  color: var(--pro-text) !important;
+}
+
+[data-theme="pro-light"] .maxek-layout.pro-dashboard-mode.dept-workspace-mode .erp-module-tile-open,
+[data-theme="ultra-color"] .maxek-layout.pro-dashboard-mode.dept-workspace-mode .erp-module-tile-open {
+  color: #fbbf24 !important;
+  background: rgba(251, 191, 36, 0.1) !important;
+  border: 1px solid rgba(251, 191, 36, 0.22) !important;
+}
+
+[data-theme="pro-light"] .maxek-layout.pro-dashboard-mode.dept-workspace-mode .erp-module-tile-run,
+[data-theme="ultra-color"] .maxek-layout.pro-dashboard-mode.dept-workspace-mode .erp-module-tile-run {
+  color: #93c5fd !important;
+  background: rgba(59, 130, 246, 0.1) !important;
+  border: 1px solid rgba(59, 130, 246, 0.22) !important;
+}
+
+[data-theme="pro-light"] .maxek-layout.pro-dashboard-mode.dept-workspace-mode .erp-module-tile-icon,
+[data-theme="ultra-color"] .maxek-layout.pro-dashboard-mode.dept-workspace-mode .erp-module-tile-icon {
+  background: color-mix(in srgb, var(--dept-accent, var(--pro-blue)) 14%, var(--pro-card)) !important;
+  color: var(--dept-accent, var(--pro-blue)) !important;
 }

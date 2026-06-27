@@ -1,5 +1,4 @@
 {% extends 'base_maxek.html' %}
-{% from 'macros/erp_ui.html' import erp_module_grid %}
 
 {% block body_class %} dept-workspace-mode dept-workspace--{{ portal.slug }} pro-dept-portal{% endblock %}
 
@@ -56,7 +55,29 @@
     {% endif %}
 
     {% if report_modules %}
-    {{ erp_module_grid(report_modules, 'Reports', action_style='run') }}
+    <section class="erp-module-section pro-dash-dept-reports">
+      <h3 class="erp-module-section-title">Reports</h3>
+      <div class="erp-module-grid dept-module-grid pro-dash-dept-tile-grid">
+        {% for mod in report_modules %}
+        {% set mod_href = mod.href if mod.get('href') else safe_url_for(mod.endpoint, **(mod.get('query') or {})) %}
+        <a href="{{ mod_href }}" class="erp-module-tile dept-module-tile pro-dash-dept-tile">
+          <span class="erp-module-tile-icon"><i class="fa-solid {{ mod.icon }}" aria-hidden="true"></i></span>
+          <span class="erp-module-tile-body">
+            <span class="erp-module-tile-label">{{ mod.label }}</span>
+            {% if mod.get('description') %}
+            <span class="erp-module-tile-desc">{{ mod.description }}</span>
+            {% endif %}
+          </span>
+          {% if mod.get('open_count') %}
+          <span class="erp-module-tile-open">{{ mod.open_count }} Open</span>
+          {% else %}
+          <span class="erp-module-tile-run">{{ mod.action_label|default('Run') }}</span>
+          {% endif %}
+          <i class="fa-solid fa-chevron-right erp-module-tile-chevron" aria-hidden="true"></i>
+        </a>
+        {% endfor %}
+      </div>
+    </section>
     {% endif %}
 
     {% if ticket_types %}

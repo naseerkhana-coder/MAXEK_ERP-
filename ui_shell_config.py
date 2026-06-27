@@ -385,6 +385,32 @@ DEPARTMENT_PORTAL_SLUG_ALIASES: dict[str, str] = {
     "consultancy": "consultancy",
 }
 
+# Department portal accent colors — icons and left borders only, never card backgrounds.
+DEPARTMENT_PORTAL_ACCENTS: dict[str, str] = {
+    "accounts": "#3b82f6",
+    "projects": "#8b5cf6",
+    "store": "#f59e0b",
+    "hr-payroll": "#ec4899",
+    "vehicle": "#0ea5e9",
+    "planning-wbs": "#14b8a6",
+    "plant-machinery": "#10b981",
+    "engineering": "#14b8a6",
+    "administration": "#64748b",
+    "qc": "#06b6d4",
+    "subcontract": "#ef4444",
+    "consultancy": "#0f766e",
+    "procurement": "#f97316",
+    "tender": "#a855f7",
+    "reports": "#6366f1",
+    "mechanical": "#10b981",
+}
+
+
+def get_department_portal_accent(slug: str) -> str | None:
+    """Return accent hex for a department portal (icon/border only)."""
+    canonical = resolve_department_portal_slug(slug)
+    return DEPARTMENT_PORTAL_ACCENTS.get(canonical)
+
 # Aliases resolving toolbar / legacy slugs to main dashboard department portals.
 MAIN_DASHBOARD_PORTAL_ALIASES: dict[str, str] = {
     "accounts-finance": "accounts",
