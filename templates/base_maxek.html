@@ -37,10 +37,10 @@
 
     <link rel="stylesheet" href="{{ url_for('static', filename='css/maxek-dashboard.css') }}?v=20260627-themes">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/maxek-table-standards.css') }}?v=20260626-entrypanels">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/maxek-field-standards.css') }}?v=20260626-entrypanels">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/maxek-field-standards.css') }}?v=20260627-content-width">
 
     {% if use_pro_shell|default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/maxek-pro-dashboard.css') }}?v=20260627-pro-ui">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/maxek-pro-dashboard.css') }}?v=20260627-content-width">
     {% endif %}
 
     {% block head_extra %}{% endblock %}
@@ -514,7 +514,7 @@
     {% endif %}
 
     {% if use_pro_shell|default(false) %}
-    <script src="{{ url_for('static', filename='js/maxek-pro-dashboard.js') }}?v=20260627-pro-ui"></script>
+    <script src="{{ url_for('static', filename='js/maxek-pro-dashboard.js') }}?v=20260627-pro-sidebar"></script>
     {% endif %}
 
     {% block scripts %}{% endblock %}

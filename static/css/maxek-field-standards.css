@@ -294,9 +294,67 @@
   min-width: 0;
 }
 
+.maxek-layout .erp-module-form-panel .erp-field input:not([type="checkbox"]):not([type="radio"]),
+.maxek-layout .erp-module-form-panel .erp-field select,
+.maxek-layout .erp-module-form-panel .erp-field textarea {
+  min-height: 38px;
+  padding: 8px 11px;
+  font-size: 13px;
+}
+
+.maxek-layout .erp-module-form-panel .erp-field {
+  gap: 5px;
+}
+
+.maxek-layout .erp-module-form-panel .erp-field label {
+  font-size: 11px;
+}
+
+/* Wide entry panels — BOQ / DPR / purchase / GRN */
+.maxek-layout .erp-data-entry-panel--wide.erp-module-form-panel.erp-form-card {
+  padding: 18px 22px 24px;
+}
+
+.maxek-layout .erp-data-entry-panel--wide .erp-form-grid {
+  gap: 20px 18px;
+}
+
+.maxek-layout .erp-data-entry-panel--wide .erp-field {
+  gap: 8px;
+}
+
+.maxek-layout .erp-data-entry-panel--wide .erp-field input:not([type="checkbox"]):not([type="radio"]),
+.maxek-layout .erp-data-entry-panel--wide .erp-field select,
+.maxek-layout .erp-data-entry-panel--wide .erp-field textarea {
+  min-height: 42px;
+  padding: 10px 12px;
+}
+
 @media (max-width: 960px) {
   .maxek-layout .module-layout,
   .maxek-layout .module-layout.module-layout--entry-wide {
     grid-template-columns: 1fr;
   }
+}
+
+/* Pro dashboard shell — constrain data entry to readable column width */
+.maxek-layout.pro-dashboard-mode .dashboard-body {
+  max-width: 100%;
+}
+
+.maxek-layout.pro-dashboard-mode .module-layout,
+.maxek-layout.pro-dashboard-mode .module-layout.module-layout--full,
+.maxek-layout.pro-dashboard-mode .module-layout.module-layout--list-only {
+  width: 100%;
+  max-width: 100%;
+}
+
+.maxek-layout.pro-dashboard-mode .erp-table-panel {
+  width: 100%;
+  max-width: 100%;
+}
+
+.maxek-layout.pro-dashboard-mode .erp-module-form-panel.erp-form-card {
+  width: 100%;
+  max-width: 100%;
 }

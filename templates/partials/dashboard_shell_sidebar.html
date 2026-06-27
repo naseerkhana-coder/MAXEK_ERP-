@@ -1,4 +1,5 @@
-<aside class="pro-dash-sidebar" data-pro-dash-sidebar aria-label="Main navigation">
+{% from 'macros/erp_ui.html' import mark_nav_item_active %}
+<aside class="pro-dash-sidebar{% if pro_shell_department_portal|default(false) %} pro-dash-sidebar--department{% endif %}" data-pro-dash-sidebar aria-label="Main navigation">
   <div class="pro-dash-sidebar-top">
     <div class="pro-dash-window-dots" aria-hidden="true">
       <span class="pro-dash-dot pro-dash-dot--red"></span>
@@ -28,7 +29,40 @@
     <kbd class="pro-dash-kbd" title="Global search">Ctrl+K</kbd>
   </div>
 
-  <nav class="pro-dash-nav">
+  <nav class="pro-dash-nav" aria-label="{% if pro_shell_department_portal|default(false) %}Department navigation{% else %}Module navigation{% endif %}">
+    {% if pro_shell_department_portal|default(false) %}
+    <a class="pro-dash-nav-item pro-dash-nav-item--back" href="{{ url_for('dashboard') }}">
+      <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
+      <span class="pro-dash-nav-label">Main Dashboard</span>
+    </a>
+
+    <div class="pro-dash-nav-dept-head">
+      <i class="fa-solid {{ current_nav_group.icon|default('fa-folder') }}" aria-hidden="true"></i>
+      <span class="pro-dash-nav-label">{{ current_nav_group.label|default('Department') }}</span>
+    </div>
+
+    <a class="pro-dash-nav-item{% if request.endpoint == 'department_portal' %} is-active{% endif %}" href="{{ url_for('department_portal', slug=request.view_args.get('slug', active_toolbar_slug)) }}">
+      <i class="fa-solid fa-gauge-high" aria-hidden="true"></i>
+      <span class="pro-dash-nav-label">Overview</span>
+    </a>
+
+    <p class="pro-dash-nav-section-label">Tools</p>
+    {% for item in current_nav_group.get('items', []) %}
+    {% set item_href = safe_url_for(item.endpoint, **(item.get('query') or {})) %}
+    {% if item.get('anchor') %}{% set item_href = item_href ~ '#' ~ item.anchor %}{% endif %}
+    {% set item_active = namespace(value=false) %}
+    {{ mark_nav_item_active(item, item_active) }}
+    <a class="pro-dash-nav-item pro-dash-nav-item--sub{% if item_active.value %} is-active{% endif %}" href="{{ item_href }}"{% if item.get('anchor') %} data-module-anchor="{{ item.anchor }}"{% endif %}>
+      <i class="fa-solid {{ item.icon }}" aria-hidden="true"></i>
+      <span class="pro-dash-nav-label">{{ item.label }}</span>
+      {% if item.get('open_count') %}
+      <span class="pro-dash-nav-badge">{{ item.open_count }}</span>
+      {% elif item.get('badge') %}
+      <span class="pro-dash-nav-badge">{{ item.badge }}</span>
+      {% endif %}
+    </a>
+    {% endfor %}
+    {% else %}
     <a class="pro-dash-nav-item{% if request.endpoint in ['dashboard', 'dashboard_choice_b'] %} is-active{% endif %}" href="{{ url_for('dashboard') }}">
       <i class="fa-solid fa-gauge-high" aria-hidden="true"></i>
       <span class="pro-dash-nav-label">Dashboard</span>
@@ -71,23 +105,24 @@
       </div>
     </details>
     {% endfor %}
+    {% endif %}
   </nav>
 
-  <div class="pro-dash-sidebar-promo">
-    <p class="pro-dash-promo-title">MAXEK Assistant</p>
-    <p class="pro-dash-promo-text">Ask AI about BOQ, DPR, approvals &amp; reports.</p>
-    <button type="button" class="pro-dash-promo-btn" data-ai-open>Try it now</button>
-  </div>
-
-  <div class="pro-dash-sidebar-user">
-    <div class="pro-dash-user-avatar">{{ admin_initial }}</div>
-    <div class="pro-dash-user-meta">
-      <strong>{{ welcome_name or session.get('employee_name') or session.get('username') or 'Administrator' }}</strong>
-      <span>{{ command_centre_branch|default(selected_branch) }} · {{ command_user_role|default(session.get('role') or 'Owner') }}</span>
+  <div class="pro-dash-sidebar-bottom">
+    {% if not pro_shell_department_portal|default(false) %}
+    <div class="pro-dash-sidebar-promo">
+      <p class="pro-dash-promo-title">MAXEK Assistant</p>
+      <p class="pro-dash-promo-text">Ask AI about BOQ, DPR, approvals &amp; reports.</p>
+      <button type="button" class="pro-dash-promo-btn" data-ai-open>Try it now</button>
     </div>
-    <a class="pro-dash-logout-btn" href="{{ url_for('logout') }}" title="Sign out" aria-label="Sign out">
-      <i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i>
-      <span class="pro-dash-nav-label">Sign out</span>
-    </a>
+    {% endif %}
+
+    <div class="pro-dash-sidebar-user">
+      <div class="pro-dash-user-avatar">{{ admin_initial }}</div>
+      <div class="pro-dash-user-meta">
+        <strong>{{ welcome_name or session.get('employee_name') or session.get('username') or 'Administrator' }}</strong>
+        <span>{{ command_centre_branch|default(selected_branch) }} · {{ command_user_role|default(session.get('role') or 'Owner') }}</span>
+      </div>
+    </div>
   </div>
 </aside>

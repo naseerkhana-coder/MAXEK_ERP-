@@ -13,6 +13,10 @@ requirements.txt
 TEMPLATES (overwrite folder contents)
 -------------------------------------
 templates/base_maxek.html
+templates/department_workspace.html
+templates/partials/dashboard_shell_sidebar.html
+templates/partials/dashboard_shell_header.html
+templates/partials/dashboard_shell_module_header.html
 templates/login.html
 templates/forgot_password.html
 templates/dashboard.html
@@ -35,6 +39,8 @@ templates/macros/erp_ui.html
 STATIC (overwrite)
 ------------------
 static/css/maxek-dashboard.css
+static/css/maxek-pro-dashboard.css
+static/css/maxek-field-standards.css
 static/css/maxek-login.css
 static/js/workflow.js
 static/js/maxek-ui.js
