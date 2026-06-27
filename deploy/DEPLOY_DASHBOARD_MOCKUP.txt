@@ -1,0 +1,29 @@
+MAXEK ERP — Dashboard Mockup VPS Deploy File List
+=================================================
+Upload these paths to /var/www/maxek-erp-flask/ (or your app root), then restart the service.
+
+  app.py
+  ui_shell_config.py
+  templates/dashboard.html
+  templates/base_maxek.html
+  templates/partials/dashboard_shell_sidebar.html
+  templates/partials/dashboard_shell_header.html
+  static/css/maxek-pro-dashboard.css
+
+Quick deploy (from dev machine, adjust user/host/path):
+
+  scp app.py ui_shell_config.py user@VPS:/var/www/maxek-erp-flask/
+  scp templates/dashboard.html user@VPS:/var/www/maxek-erp-flask/templates/
+  scp templates/base_maxek.html user@VPS:/var/www/maxek-erp-flask/templates/
+  scp templates/partials/dashboard_shell_sidebar.html user@VPS:/var/www/maxek-erp-flask/templates/partials/
+  scp templates/partials/dashboard_shell_header.html user@VPS:/var/www/maxek-erp-flask/templates/partials/
+  scp static/css/maxek-pro-dashboard.css user@VPS:/var/www/maxek-erp-flask/static/css/
+
+Restart:
+  sudo systemctl restart maxek-erp
+
+Verify:
+  - /dashboard loads Business light theme (white sidebar, teal accents)
+  - Overview tab: greeting, 6 KPIs, department grid (incl. Asphalt/Concrete/Precast/Office Admin)
+  - Bottom row: Project Status donut, Task Overview chart, Recent Activities, Quick Links
+  - Sidebar groups match mockup; Settings pinned at bottom

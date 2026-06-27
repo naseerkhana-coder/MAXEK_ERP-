@@ -6,20 +6,24 @@
 
 {% block content %}
 <div class="pro-dash-content pro-dash-content--home" id="pro-dash-panel-default" data-pro-dash-panel="default">
-  <header class="pro-dash-business-hero" aria-labelledby="pro-dash-business-title">
-    <div class="pro-dash-business-hero-text">
-      <h1 id="pro-dash-business-title">Business Dashboard</h1>
-      <p class="pro-dash-business-tagline">Turning data into decisions.</p>
-      <p class="pro-dash-business-meta">{{ command_centre_branch|default(selected_branch) }} · {{ command_centre_month }}</p>
+  <header class="pro-dash-greeting-row" aria-labelledby="pro-dash-greeting-title">
+    <div class="pro-dash-greeting-text">
+      <h1 id="pro-dash-greeting-title">Good {{ dashboard_greeting.period }}, {{ dashboard_greeting.name }} 👋</h1>
+      <p class="pro-dash-greeting-sub">Here's what's happening with your business today.</p>
+    </div>
+    <div class="pro-dash-date-chip" aria-label="Today's date">
+      <i class="fa-regular fa-calendar" aria-hidden="true"></i>
+      <span>{{ dashboard_greeting.date_label }}</span>
+      <i class="fa-solid fa-chevron-down pro-dash-date-chevron" aria-hidden="true"></i>
     </div>
   </header>
 
   {% if command_centre_kpis %}
-  {% set kpi_accents = ['teal', 'green', 'amber', 'blue'] %}
-  <div class="pro-dash-kpi-row pro-dash-kpi-row--business erp-summary-grid erp-summary-grid--stats pro-dash-home-stats" aria-label="Key performance indicators">
-    {% for kpi in command_centre_kpis[:4] %}
-    <article class="erp-stat-card pro-dash-stat-card pro-dash-kpi-card pro-dash-kpi-card--{{ kpi_accents[loop.index0] }}">
-      <span class="pro-dash-kpi-icon" aria-hidden="true"><i class="fa-solid fa-chart-simple"></i></span>
+  <div class="pro-dash-kpi-row pro-dash-kpi-row--business pro-dash-kpi-row--six erp-summary-grid erp-summary-grid--stats pro-dash-home-stats" aria-label="Key performance indicators">
+    {% for kpi in command_centre_kpis[:6] %}
+    {% set icon_meta = dashboard_kpi_icons.get(kpi.key, ('fa-chart-simple', 'teal')) %}
+    <article class="erp-stat-card pro-dash-stat-card pro-dash-kpi-card pro-dash-kpi-card--{{ icon_meta[1] }}">
+      <span class="pro-dash-kpi-icon" aria-hidden="true"><i class="fa-solid {{ icon_meta[0] }}"></i></span>
       <span class="pro-dash-kpi-label">{{ kpi.label }}</span>
       <strong class="pro-dash-kpi-value">{{ kpi.value }}</strong>
       {% if kpi.hint %}
@@ -30,114 +34,17 @@
   </div>
   {% endif %}
 
-  <section class="pro-dash-overview-grid" aria-label="Analytics overview">
-    <article class="pro-dash-chart-card pro-dash-chart-card--wide">
-      <header class="pro-dash-chart-card-head">
-        <div>
-          <h2>Overview</h2>
-          <p>{{ dashboard_chart_series.title|default('Operations Overview') }}</p>
-        </div>
-        <div class="pro-dash-range-tabs" role="group" aria-label="Chart timeframe">
-          <button type="button" class="pro-dash-range-btn">Year</button>
-          <button type="button" class="pro-dash-range-btn is-active">2 years</button>
-          <button type="button" class="pro-dash-range-btn">5 years</button>
-        </div>
-      </header>
-      <div class="pro-dash-legend">
-        {% for series in dashboard_chart_series.series %}
-        <span class="pro-dash-legend-item">
-          <span class="pro-dash-legend-dot" style="--legend-color: {{ series.color }};"></span>
-          {{ series.label }}
-        </span>
-        {% endfor %}
-      </div>
-      <div class="pro-dash-chart-wrap pro-dash-chart-wrap--hero">
-        <svg class="pro-dash-chart-svg" viewBox="0 0 100 60" preserveAspectRatio="none" aria-hidden="true">
-          {% for y in [15, 30, 45] %}
-          <line x1="8" y1="{{ y }}" x2="92" y2="{{ y }}" class="pro-dash-grid-line"/>
-          {% endfor %}
-          {% for series in dashboard_chart_series.series %}
-          <polyline
-            class="pro-dash-chart-line"
-            fill="none"
-            stroke="{{ series.color }}"
-            stroke-width="0.6"
-            vector-effect="non-scaling-stroke"
-            points="{% for pt in series.points %}{{ pt.x }},{{ pt.y }}{% if not loop.last %} {% endif %}{% endfor %}"
-          />
-          {% endfor %}
-        </svg>
-      </div>
-    </article>
-
-    <div class="pro-dash-chart-stack">
-      {% for widget in command_centre_bottom_widgets[:2] %}
-      <article class="pro-dash-chart-card pro-dash-widget pro-dash-widget--{{ widget.chart_type|default('bars') }}">
-        <header class="pro-dash-widget-head">
-          <div>
-            <h3>{{ widget.title }}</h3>
-            {% if widget.subtitle %}<p>{{ widget.subtitle }}</p>{% endif %}
-          </div>
-          <i class="fa-solid {{ widget.icon }}" aria-hidden="true"></i>
-        </header>
-        <div class="pro-dash-widget-body">
-          {% if widget.chart_type == 'hbar' %}
-          <ul class="pro-dash-expense-list">
-            {% for row in dashboard_chart_series.expense_rows[:4] %}
-            <li>
-              <span class="pro-dash-expense-label">{{ row.label }}</span>
-              <div class="pro-dash-expense-bar-wrap">
-                <div class="pro-dash-expense-bar" style="width: {{ row.pct }}%; background: {{ row.color }};"></div>
-              </div>
-              <span class="pro-dash-expense-pct">{{ row.pct }}%</span>
-            </li>
-            {% endfor %}
-          </ul>
-          {% elif widget.chart_type == 'scatter' %}
-          <svg class="pro-dash-mini-chart" viewBox="0 0 100 50" aria-hidden="true">
-            <polyline fill="none" stroke="#4f7cff" stroke-width="1.2" points="5,40 20,28 35,32 50,18 65,24 80,12 95,20"/>
-            <polyline fill="none" stroke="#22c55e" stroke-width="1.2" points="5,35 20,38 35,22 50,30 65,16 80,26 95,14"/>
-          </svg>
-          {% elif widget.chart_type == 'lines' %}
-          <svg class="pro-dash-mini-chart" viewBox="0 0 100 50" aria-hidden="true">
-            <polyline fill="none" stroke="#4ADE80" stroke-width="1.2" points="5,38 25,30 45,34 65,20 85,28 95,18"/>
-            <polyline fill="none" stroke="#9CA3AF" stroke-width="1.2" stroke-dasharray="3 2" points="5,28 25,32 45,26 65,30 85,22 95,26"/>
-          </svg>
-          {% else %}
-          <div class="pro-dash-bar-chart">
-            {% set bars = [
-              ('Projects', dashboard_stats.active_projects|default(0), '#4f7cff'),
-              ('Approvals', dashboard_stats.pending_approvals_count|default(0), '#6366f1'),
-              ('DPR Today', dashboard_stats.dpr_today_count|default(0), '#22c55e'),
-              ('Store MR', dashboard_stats.pending_mrs|default(0), '#14b8a6')
-            ] %}
-            {% set max_bar = [bars[0][1], bars[1][1], bars[2][1], bars[3][1]]|max %}
-            {% set max_bar = max_bar if max_bar > 0 else 1 %}
-            {% for label, val, color in bars %}
-            <div class="pro-dash-bar-col">
-              <div class="pro-dash-bar-fill" style="height: {{ ((val / max_bar) * 100)|int }}%; background: {{ color }};"></div>
-              <span>{{ label }}</span>
-            </div>
-            {% endfor %}
-          </div>
-          {% endif %}
-        </div>
-      </article>
-      {% endfor %}
-    </div>
-  </section>
-
   <section class="pro-dash-dept-section pro-dash-dept-section--tiles" aria-labelledby="pro-dash-dept-heading">
     <div class="pro-dash-dept-section-head">
       <div>
-        <h3 id="pro-dash-dept-heading" class="erp-module-section-title pro-dash-dept-section-title">Department workspaces</h3>
+        <h3 id="pro-dash-dept-heading" class="erp-module-section-title pro-dash-dept-section-title">Department Workspaces</h3>
         <p class="pro-dash-dept-section-sub">Open a department portal to manage workflows and reports.</p>
       </div>
-      <span class="pro-dash-dept-count">{{ command_centre_cards|length }} portals</span>
+      <a href="{{ url_for('department_portal', slug='projects') }}" class="pro-dash-dept-view-all">View all portals</a>
     </div>
-    <div class="erp-module-grid dept-module-grid pro-dash-dept-tile-grid pro-dash-dept-tile-grid--large">
+    <div class="erp-module-grid dept-module-grid pro-dash-dept-tile-grid pro-dash-dept-tile-grid--mockup">
       {% for card in command_centre_cards %}
-      <a href="{{ url_for('department_portal', slug=card.slug) }}" class="erp-module-tile dept-module-tile pro-dash-dept-tile pro-dash-dept-tile--large" style="--dept-accent: {{ card.accent }};">
+      <a href="{{ url_for('department_portal', slug=card.slug) }}" class="erp-module-tile dept-module-tile pro-dash-dept-tile pro-dash-dept-tile--mockup" style="--dept-accent: {{ card.accent }};">
         <span class="erp-module-tile-icon"><i class="fa-solid {{ card.icon }}" aria-hidden="true"></i></span>
         <span class="erp-module-tile-body">
           <span class="erp-module-tile-label">{{ card.card_label }}</span>
@@ -148,10 +55,107 @@
         {% for pill in card.stat_pills[:1] %}
         <span class="erp-module-tile-open">{{ pill.value }} {{ pill.label }}</span>
         {% endfor %}
-        <i class="fa-solid fa-arrow-right erp-module-tile-chevron" aria-hidden="true"></i>
       </a>
       {% endfor %}
     </div>
+  </section>
+
+  <section class="pro-dash-overview-bottom" aria-label="Analytics and activity">
+    <article class="pro-dash-panel-card pro-dash-panel-card--donut">
+      <header class="pro-dash-panel-head">
+        <h2>Project Status</h2>
+      </header>
+      <div class="pro-dash-donut-layout">
+        <div class="pro-dash-donut-wrap" aria-hidden="true">
+          <div class="pro-dash-donut-ring" style="background: conic-gradient({{ project_status_donut.gradient }});">
+            <div class="pro-dash-donut-hole">
+              <strong>{{ project_status_donut.total }}</strong>
+              <span>{{ project_status_donut.total_label }}</span>
+            </div>
+          </div>
+        </div>
+        <ul class="pro-dash-donut-legend">
+          {% for seg in project_status_donut.segments %}
+          {% if seg.pct > 0 or seg.count > 0 %}
+          <li>
+            <span class="pro-dash-donut-dot" style="background: {{ seg.color }};"></span>
+            <span class="pro-dash-donut-label">{{ seg.label }}</span>
+            <span class="pro-dash-donut-pct">{{ seg.pct }}%</span>
+          </li>
+          {% endif %}
+          {% endfor %}
+        </ul>
+      </div>
+    </article>
+
+    <article class="pro-dash-panel-card pro-dash-panel-card--chart">
+      <header class="pro-dash-panel-head">
+        <h2>{{ task_overview_series.title }}</h2>
+      </header>
+      <div class="pro-dash-legend pro-dash-legend--compact">
+        {% for series in task_overview_series.series %}
+        <span class="pro-dash-legend-item">
+          <span class="pro-dash-legend-dot" style="--legend-color: {{ series.color }};"></span>
+          {{ series.label }}
+        </span>
+        {% endfor %}
+      </div>
+      <div class="pro-dash-chart-wrap pro-dash-chart-wrap--panel">
+        <svg class="pro-dash-chart-svg" viewBox="0 0 100 60" preserveAspectRatio="none" aria-hidden="true">
+          {% for y in [15, 30, 45] %}
+          <line x1="6" y1="{{ y }}" x2="94" y2="{{ y }}" class="pro-dash-grid-line"/>
+          {% endfor %}
+          {% for series in task_overview_series.series %}
+          <polyline
+            class="pro-dash-chart-line"
+            fill="none"
+            stroke="{{ series.color }}"
+            stroke-width="0.8"
+            vector-effect="non-scaling-stroke"
+            points="{% for pt in series.points %}{{ pt.x }},{{ pt.y }}{% if not loop.last %} {% endif %}{% endfor %}"
+          />
+          {% endfor %}
+        </svg>
+        <div class="pro-dash-chart-months">
+          {% for month in task_overview_series.months %}
+          <span>{{ month }}</span>
+          {% endfor %}
+        </div>
+      </div>
+    </article>
+
+    <article class="pro-dash-panel-card pro-dash-panel-card--activity">
+      <header class="pro-dash-panel-head">
+        <h2>Recent Activities</h2>
+        <a href="{{ url_for('approvals') }}" class="pro-dash-panel-link">View all</a>
+      </header>
+      <ul class="pro-dash-activity-list">
+        {% for item in command_centre_activity %}
+        <li class="pro-dash-activity-item">
+          <span class="pro-dash-activity-dot pro-dash-activity-dot--{{ item.tone }}" aria-hidden="true"></span>
+          <div class="pro-dash-activity-body">
+            <strong>{{ item.title }}</strong>
+            <span>{{ item.detail }}</span>
+          </div>
+          <time class="pro-dash-activity-time">{{ item.time }}</time>
+        </li>
+        {% endfor %}
+      </ul>
+    </article>
+
+    <article class="pro-dash-panel-card pro-dash-panel-card--quick">
+      <header class="pro-dash-panel-head">
+        <h2>Quick Links</h2>
+      </header>
+      <div class="pro-dash-quick-links">
+        {% for link in dashboard_quick_links %}
+        <a href="{{ url_for(link.endpoint) }}" class="pro-dash-quick-link" style="--quick-accent: {{ link.accent }};">
+          <span class="pro-dash-quick-link-icon"><i class="fa-solid {{ link.icon }}" aria-hidden="true"></i></span>
+          <span class="pro-dash-quick-link-label">{{ link.label }}</span>
+        </a>
+        {% endfor %}
+      </div>
+    </article>
   </section>
 </div>
 

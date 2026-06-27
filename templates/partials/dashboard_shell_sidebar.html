@@ -11,7 +11,7 @@
         height="36"
         aria-hidden="true"
       >
-      <span class="pro-dash-brand-text">MAX<span class="pro-dash-brand-accent">EK</span></span>
+      <span class="pro-dash-brand-text">MAXEK <span class="pro-dash-brand-accent">ERP</span></span>
     </a>
     <button type="button" class="pro-dash-sidebar-collapse" data-pro-sidebar-collapse title="Collapse sidebar" aria-label="Collapse sidebar">
       <i class="fa-solid fa-angles-left" aria-hidden="true"></i>
@@ -63,24 +63,6 @@
       <span class="pro-dash-nav-label">Dashboard</span>
     </a>
 
-    <details class="pro-dash-nav-group" open>
-      <summary class="pro-dash-nav-group-summary">
-        <span class="pro-dash-nav-group-title">
-          <i class="fa-regular fa-star" aria-hidden="true"></i>
-          <span class="pro-dash-nav-label">Favorites</span>
-        </span>
-        <i class="fa-solid fa-chevron-down pro-dash-chevron" aria-hidden="true"></i>
-      </summary>
-      <div class="pro-dash-nav-group-items">
-        {% for item in dashboard_shell_favorites|default([]) %}
-        <a class="pro-dash-nav-item pro-dash-nav-item--sub{% if request.endpoint == item.endpoint or request.endpoint in item.get('active_endpoints', [item.endpoint]) %} is-active{% endif %}" href="{{ safe_url_for(item.endpoint) }}">
-          <i class="fa-solid {{ item.icon }}" aria-hidden="true"></i>
-          <span class="pro-dash-nav-label">{{ item.label }}</span>
-        </a>
-        {% endfor %}
-      </div>
-    </details>
-
     {% for group in dashboard_shell_nav_groups|default([]) %}
     <details class="pro-dash-nav-group"{% if loop.first %} open{% endif %}>
       <summary class="pro-dash-nav-group-summary">
@@ -102,4 +84,13 @@
     {% endfor %}
     {% endif %}
   </nav>
+
+  {% if not pro_shell_department_portal|default(false) and dashboard_shell_settings is defined %}
+  <div class="pro-dash-sidebar-footer">
+    <a class="pro-dash-nav-item pro-dash-nav-item--settings{% if request.endpoint == dashboard_shell_settings.endpoint %} is-active{% endif %}" href="{{ safe_url_for(dashboard_shell_settings.endpoint) }}">
+      <i class="fa-solid {{ dashboard_shell_settings.icon }}" aria-hidden="true"></i>
+      <span class="pro-dash-nav-label">{{ dashboard_shell_settings.label }}</span>
+    </a>
+  </div>
+  {% endif %}
 </aside>

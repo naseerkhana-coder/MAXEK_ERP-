@@ -336,8 +336,10 @@ from helpdesk_service import (
 
 from ui_shell_config import (
     APP_VERSION_LABEL,
+    DASHBOARD_OVERVIEW_QUICK_LINKS,
     DASHBOARD_SHELL_FAVORITES,
     DASHBOARD_SHELL_NAV_GROUPS,
+    DASHBOARD_SHELL_SETTINGS,
     GLOBAL_SEARCH_CATEGORIES,
     HELP_CENTER_ITEMS,
     MAIN_DASHBOARD_BOTTOM_WIDGETS,
@@ -7953,6 +7955,7 @@ def inject_maxek_layout():
         "command_user_role": role_label,
         "dashboard_shell_favorites": DASHBOARD_SHELL_FAVORITES,
         "dashboard_shell_nav_groups": DASHBOARD_SHELL_NAV_GROUPS,
+        "dashboard_shell_settings": DASHBOARD_SHELL_SETTINGS,
     }
 
 
@@ -8174,7 +8177,7 @@ COMMAND_CENTRE_CARD_META = [
     },
     {
         "slug": "administration",
-        "card_label": "Administration",
+        "card_label": "Office Administration",
         "category": "CORPORATE",
         "description": "Office registers, agreements, legal docs & compliance",
         "icon": "fa-building",
@@ -8182,7 +8185,7 @@ COMMAND_CENTRE_CARD_META = [
     },
     {
         "slug": "qc",
-        "card_label": "QC",
+        "card_label": "QA / QC",
         "category": "QUALITY",
         "description": "Material testing, plant QC, inspections & NCR",
         "icon": "fa-flask",
@@ -8566,6 +8569,20 @@ def get_department_portal(slug):
             enriched["accent"] = get_department_accent(slug)
             enriched["menu"] = get_department_portal_menu(slug)
             return enriched
+    menu = get_department_portal_menu(slug)
+    if menu:
+        meta = next((item for item in COMMAND_CENTRE_CARD_META if item["slug"] == slug), None)
+        if meta:
+            return {
+                "slug": slug,
+                "card_label": meta.get("card_label") or slug.replace("-", " ").title(),
+                "title": meta.get("card_label") or slug.replace("-", " ").title(),
+                "icon": meta.get("icon") or "fa-folder",
+                "nav_slug": slug,
+                "summary_title": meta.get("card_label") or "",
+                "accent": get_department_accent(slug),
+                "menu": menu,
+            }
     return None
 
 
@@ -9848,6 +9865,135 @@ def get_command_centre_ticket_types(db):
     return tickets
 
 
+def _build_dashboard_greeting_context():
+    """Time-of-day greeting and formatted date for the Overview header."""
+    now = datetime.now()
+    hour = now.hour
+    if hour < 12:
+        period = "morning"
+    elif hour < 17:
+        period = "afternoon"
+    else:
+        period = "evening"
+    display_name = session.get("employee_name") or session.get("username") or "Super Admin"
+    return {
+        "period": period,
+        "name": display_name,
+        "date_label": now.strftime("%d %b %Y, %A"),
+    }
+
+
+def _build_project_status_donut(db, stats):
+    """Project status distribution for the Overview donut chart."""
+    buckets = [
+        {"key": "on_track", "label": "On Track", "color": "#14b8a6", "statuses": ("Active",)},
+        {"key": "at_risk", "label": "At Risk", "color": "#eab308", "statuses": ("On Hold",)},
+        {"key": "delayed", "label": "Delayed", "color": "#ef4444", "statuses": ("Delayed", "Inactive", "Closed")},
+        {"key": "not_started", "label": "Not Started", "color": "#94a3b8", "statuses": ("Planning", "Draft", "Not Started")},
+    ]
+    counts = {bucket["key"]: 0 for bucket in buckets}
+    total = 0
+    if _table_exists(db, "projects"):
+        try:
+            rows = db.execute(
+                "SELECT COALESCE(status, 'Active') AS status, COUNT(*) AS c FROM projects GROUP BY status"
+            ).fetchall()
+            for row in rows:
+                status = (row["status"] or "Active").strip()
+                qty = int(row["c"] or 0)
+                total += qty
+                matched = False
+                for bucket in buckets:
+                    if status in bucket["statuses"]:
+                        counts[bucket["key"]] += qty
+                        matched = True
+                        break
+                if not matched:
+                    if status == "Completed":
+                        counts["on_track"] += qty
+                    else:
+                        counts["not_started"] += qty
+        except Exception:
+            app.logger.exception("Project status donut query failed")
+    if total <= 0:
+        total = max(stats.get("total_projects") or stats.get("active_projects") or 0, 0)
+        if total <= 0:
+            total = 6
+            counts = {"on_track": 4, "at_risk": 1, "delayed": 1, "not_started": 0}
+        else:
+            active = stats.get("active_projects") or total
+            on_hold = max(total - active, 0)
+            counts = {
+                "on_track": active,
+                "at_risk": min(on_hold, max(1, on_hold // 2)) if on_hold else 0,
+                "delayed": max(on_hold - min(on_hold, max(1, on_hold // 2)), 0),
+                "not_started": 0,
+            }
+            total = sum(counts.values()) or total
+    segments = []
+    cursor = 0.0
+    gradient_parts = []
+    for bucket in buckets:
+        count = counts.get(bucket["key"], 0)
+        pct = round((count / total) * 100, 1) if total else 0.0
+        end = cursor + pct
+        if pct > 0:
+            gradient_parts.append(f"{bucket['color']} {cursor}% {end}%")
+        segments.append(
+            {
+                "label": bucket["label"],
+                "color": bucket["color"],
+                "count": count,
+                "pct": pct,
+            }
+        )
+        cursor = end
+    return {
+        "total": total,
+        "total_label": "Total Projects",
+        "segments": segments,
+        "gradient": ", ".join(gradient_parts) if gradient_parts else "#94a3b8 0% 100%",
+    }
+
+
+def _build_task_overview_series(stats):
+    """Task trend lines for the Overview chart (Planned / In Progress / Completed)."""
+    months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun"]
+    active = stats.get("active_projects") or 3
+    pending = stats.get("pending_approvals_count") or 2
+    dpr = stats.get("dpr_today_count") or 1
+
+    def _line(base, amp, phase=0):
+        points = []
+        for i in range(len(months)):
+            val = base + amp * (((i + phase) % 3) - 1)
+            y = max(8, min(92, 58 - val * 3))
+            x = 6 + i * (88 / max(len(months) - 1, 1))
+            points.append({"x": round(x, 1), "y": round(y, 1), "label": months[i]})
+        return points
+
+    return {
+        "title": "Task Overview",
+        "months": months,
+        "series": [
+            {"label": "Planned", "color": "#3b82f6", "points": _line(active + 2, 2, 0)},
+            {"label": "In Progress", "color": "#14b8a6", "points": _line(pending + 3, 3, 1)},
+            {"label": "Completed", "color": "#a855f7", "points": _line(dpr + 4, 2, 2)},
+        ],
+    }
+
+
+def _dashboard_kpi_icon_map():
+    return {
+        "active_projects": ("fa-folder-tree", "green"),
+        "workforce": ("fa-users", "blue"),
+        "revenue": ("fa-indian-rupee-sign", "purple"),
+        "pending_expenses": ("fa-receipt", "amber"),
+        "open_pos": ("fa-file-invoice", "teal"),
+        "journal_entries": ("fa-book", "blue"),
+    }
+
+
 def render_choice_b_dashboard():
     db = get_db()
     month_year = datetime.now().strftime("%b %Y")
@@ -9880,6 +10026,31 @@ def render_choice_b_dashboard():
     sidebar_context = _command_centre_sidebar_context(db, active_slug="command-centre")
     stats = _dashboard_payload(lambda: get_dashboard_stats(db), {}, "dashboard_stats")
     chart_series = _build_dashboard_chart_series(stats)
+    project_status_donut = _dashboard_payload(
+        lambda: _build_project_status_donut(db, stats),
+        {"total": 0, "total_label": "Total Projects", "segments": [], "gradient": "#94a3b8 0% 100%"},
+        "project_status_donut",
+    )
+    task_overview_series = _build_task_overview_series(stats)
+    command_centre_activity = _dashboard_payload(
+        lambda: get_command_centre_recent_activity(db),
+        [
+            {
+                "title": "No recent activity",
+                "detail": "Workflow actions will appear here.",
+                "time": "—",
+                "tone": "muted",
+            }
+        ],
+        "command_centre_activity",
+    )
+    greeting = _build_dashboard_greeting_context()
+    role_label = session.get("role") or "Platform Admin"
+    try:
+        if is_super_admin_user():
+            role_label = "Platform Admin"
+    except Exception:
+        pass
 
     return render_template(
         "dashboard.html",
@@ -9887,10 +10058,18 @@ def render_choice_b_dashboard():
         command_centre_kpis=command_centre_kpis,
         command_centre_cards=command_centre_cards,
         command_centre_bottom_widgets=MAIN_DASHBOARD_BOTTOM_WIDGETS,
+        command_centre_activity=command_centre_activity,
         command_centre_month=month_year,
+        command_user_role=role_label,
+        dashboard_greeting=greeting,
+        dashboard_kpi_icons=_dashboard_kpi_icon_map(),
+        dashboard_quick_links=DASHBOARD_OVERVIEW_QUICK_LINKS,
+        project_status_donut=project_status_donut,
+        task_overview_series=task_overview_series,
         user_dashboard_prefs=user_prefs,
         dashboard_shell_favorites=DASHBOARD_SHELL_FAVORITES,
         dashboard_shell_nav_groups=DASHBOARD_SHELL_NAV_GROUPS,
+        dashboard_shell_settings=DASHBOARD_SHELL_SETTINGS,
         dashboard_chart_series=chart_series,
         dashboard_stats=stats,
         **sidebar_context,

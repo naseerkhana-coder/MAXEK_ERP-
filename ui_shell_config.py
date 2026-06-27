@@ -157,6 +157,13 @@ DEPARTMENT_PORTAL_MENUS: dict[str, list[dict]] = {
         {"endpoint": "project_documents", "label": "Drawing Register", "icon": "fa-compass-drafting", "active_endpoints": ["project_documents", "project_document_download"]},
         {"endpoint": "reports", "label": "Engineering Reports", "icon": "fa-file-excel", "active_endpoints": ["reports", "download_report"]},
     ],
+    "planning-wbs": [
+        {"endpoint": "cost_planning", "label": "Cost Planning", "icon": "fa-calculator", "active_endpoints": ["cost_planning", "cost_planning_reports"]},
+        {"endpoint": "wbs_redirect", "label": "WBS Planning", "icon": "fa-sitemap", "active_endpoints": ["wbs_redirect"]},
+        {"endpoint": "boq_management", "label": "BOQ Management", "icon": "fa-table-list", "active_endpoints": ["boq_management", "boq_multiple_entry", "boq_print"]},
+        {"endpoint": "project_expenses", "label": "Project Expenses", "icon": "fa-receipt", "active_endpoints": ["project_expenses"]},
+        {"endpoint": "reports", "label": "Planning Reports", "icon": "fa-chart-pie", "active_endpoints": ["reports", "download_report"]},
+    ],
     "subcontract": [
         {"endpoint": "subcontract_dashboard", "label": "Subcontract Dashboard", "icon": "fa-gauge-high", "active_endpoints": ["subcontract_dashboard"]},
         {"endpoint": "subcontractors", "label": "Subcontractors", "icon": "fa-user-plus", "active_endpoints": ["subcontractors"]},
@@ -331,63 +338,90 @@ MAIN_DASHBOARD_BOTTOM_WIDGETS: list[dict[str, str]] = [
     },
 ]
 
-# Sidebar favorites on the main dashboard shell.
-DASHBOARD_SHELL_FAVORITES: list[dict[str, str]] = [
-    {"endpoint": "projects", "label": "Projects", "icon": "fa-folder-tree"},
-    {"endpoint": "dpr_entry", "label": "DPR Entry", "icon": "fa-clipboard-list"},
-]
+# Sidebar favorites on the main dashboard shell (optional shortcuts above nav groups).
+DASHBOARD_SHELL_FAVORITES: list[dict[str, str]] = []
 
-# Primary sidebar navigation groups for the main dashboard shell.
+# Settings link pinned to sidebar footer on the main dashboard shell.
+DASHBOARD_SHELL_SETTINGS: dict[str, str] = {
+    "endpoint": "settings",
+    "label": "Settings",
+    "icon": "fa-gear",
+}
+
+# Primary sidebar navigation groups for the main dashboard shell (mockup-aligned).
 DASHBOARD_SHELL_NAV_GROUPS: list[dict] = [
     {
-        "label": "Projects & Sites",
-        "icon": "fa-building",
+        "label": "Projects & Operations",
+        "icon": "fa-diagram-project",
         "items": [
             {"endpoint": "projects", "label": "Projects", "icon": "fa-folder-tree"},
-            {"endpoint": "clients", "label": "Clients", "icon": "fa-address-book"},
             {"endpoint": "boq_management", "label": "BOQ", "icon": "fa-table-list"},
             {"endpoint": "dpr_entry", "label": "DPR", "icon": "fa-clipboard-list"},
-        ],
-    },
-    {
-        "label": "Workforce",
-        "icon": "fa-users",
-        "items": [
-            {"endpoint": "staff", "label": "Staff", "icon": "fa-user-tie"},
-            {"endpoint": "attendance", "label": "Attendance", "icon": "fa-calendar-check"},
-            {"endpoint": "payroll", "label": "Payroll", "icon": "fa-money-check-dollar"},
+            {
+                "endpoint": "department_portal",
+                "label": "Planning & Costing",
+                "icon": "fa-drafting-compass",
+                "query": {"slug": "planning-wbs"},
+            },
+            {"endpoint": "wbs_redirect", "label": "WBS", "icon": "fa-sitemap"},
+            {
+                "endpoint": "department_portal",
+                "label": "Subcontract",
+                "icon": "fa-people-group",
+                "query": {"slug": "subcontract"},
+            },
         ],
     },
     {
         "label": "Procurement & Store",
         "icon": "fa-cart-shopping",
         "items": [
-            {"endpoint": "purchase_orders", "label": "Purchase Orders", "icon": "fa-file-invoice"},
-            {"endpoint": "material_request", "label": "Material Request", "icon": "fa-box"},
-            {"endpoint": "store_receipt", "label": "Store GRN", "icon": "fa-dolly"},
+            {"endpoint": "purchase_orders", "label": "Purchase", "icon": "fa-file-invoice"},
+            {
+                "endpoint": "department_portal",
+                "label": "Store & Inventory",
+                "icon": "fa-warehouse",
+                "query": {"slug": "store"},
+            },
         ],
     },
     {
-        "label": "Finance",
+        "label": "Workforce",
+        "icon": "fa-users",
+        "items": [
+            {"endpoint": "attendance", "label": "Attendance", "icon": "fa-calendar-check"},
+            {"endpoint": "payroll", "label": "Payroll", "icon": "fa-money-check-dollar"},
+        ],
+    },
+    {
+        "label": "Fleet & Assets",
+        "icon": "fa-truck",
+        "items": [
+            {"endpoint": "fleet_dashboard", "label": "Fleet", "icon": "fa-truck-fast"},
+            {
+                "endpoint": "department_portal",
+                "label": "Plant & Machinery",
+                "icon": "fa-industry",
+                "query": {"slug": "plant-operations"},
+            },
+        ],
+    },
+    {
+        "label": "Finance & Accounts",
         "icon": "fa-indian-rupee-sign",
         "items": [
-            {"endpoint": "accounts_hub", "label": "Accounts Hub", "icon": "fa-landmark"},
-            {"endpoint": "petty_cash", "label": "Petty Cash", "icon": "fa-wallet"},
-            {"endpoint": "client_billing_register", "label": "Client Billing", "icon": "fa-file-invoice-dollar"},
+            {"endpoint": "accounts_hub", "label": "Accounts", "icon": "fa-landmark"},
+            {"endpoint": "accounts_expenses", "label": "Expenses", "icon": "fa-receipt"},
         ],
     },
-    {
-        "label": "Departments",
-        "icon": "fa-sitemap",
-        "items": [
-            {"endpoint": "department_portal", "label": "All Departments", "icon": "fa-gauge-high", "query": {"slug": "projects"}},
-            {"endpoint": "department_portal", "label": "Plant Operations", "icon": "fa-industry", "query": {"slug": "plant-operations"}},
-            {"endpoint": "department_portal", "label": "Asphalt Plant", "icon": "fa-flask", "query": {"slug": "asphalt-plant"}},
-            {"endpoint": "department_portal", "label": "Concrete Plant", "icon": "fa-cubes", "query": {"slug": "concrete-plant"}},
-            {"endpoint": "department_portal", "label": "Precast Yard", "icon": "fa-border-all", "query": {"slug": "precast-yard"}},
-            {"endpoint": "department_portal", "label": "Office Administration", "icon": "fa-building", "query": {"slug": "administration"}},
-        ],
-    },
+]
+
+# Overview tab quick links (mockup bottom-right panel).
+DASHBOARD_OVERVIEW_QUICK_LINKS: list[dict[str, str]] = [
+    {"endpoint": "dpr_entry", "label": "Create DPR", "icon": "fa-clipboard-list", "accent": "#22c55e"},
+    {"endpoint": "material_request", "label": "Material Request", "icon": "fa-boxes-stacked", "accent": "#a855f7"},
+    {"endpoint": "purchase_orders", "label": "New PO", "icon": "fa-file-invoice", "accent": "#f59e0b"},
+    {"endpoint": "attendance", "label": "Attendance", "icon": "fa-calendar-check", "accent": "#3b82f6"},
 ]
 
 # Resolve /dept/<slug> and legacy URLs to canonical department portal slugs.
@@ -420,7 +454,7 @@ DEPARTMENT_PORTAL_SLUG_ALIASES: dict[str, str] = {
     "engineering-smartqto": "engineering",
     "engineering": "engineering",
     "planning": "engineering",
-    "planning-wbs": "engineering",
+    "planning-wbs": "planning-wbs",
     "cost-planning": "engineering",
     "subcontract-management": "subcontract",
     "subcontract": "subcontract",
@@ -447,7 +481,7 @@ DEPARTMENT_PORTAL_ACCENTS: dict[str, str] = {
     "asphalt-plant": "#f59e0b",
     "concrete-plant": "#3b82f6",
     "precast-yard": "#8b5cf6",
-    "engineering": "#14b8a6",
+    "planning-wbs": "#14b8a6",
     "administration": "#64748b",
     "qc": "#22d3ee",
     "subcontract": "#4f46e5",
@@ -476,8 +510,8 @@ MAIN_DASHBOARD_PORTAL_ALIASES: dict[str, str] = {
     "fleet": "vehicle",
     "quality-control": "qc",
     "subcontract-management": "subcontract",
-    "cost-planning": "engineering",
-    "planning": "engineering",
+    "cost-planning": "planning-wbs",
+    "planning": "planning-wbs",
     "plant-machinery": "plant-operations",
     "plant-operations": "plant-operations",
     "asphalt-plant": "asphalt-plant",

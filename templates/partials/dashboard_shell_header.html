@@ -18,27 +18,29 @@
 
   <div class="pro-dash-header-search" role="search">
     <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
-    <input type="search" id="pro-dash-header-search" placeholder="Search modules, reports…" aria-label="Search" data-global-search-open readonly>
+    <input type="search" id="pro-dash-header-search" placeholder="Search modules, reports, documents..." aria-label="Search" data-global-search-open readonly>
     <kbd class="pro-dash-kbd" title="Global search">Ctrl+K</kbd>
   </div>
 
   <div class="pro-dash-header-actions">
-    <button type="button" class="pro-dash-header-icon-btn" title="Notifications" aria-label="Notifications">
+    <a class="pro-dash-header-icon-btn pro-dash-header-icon-btn--badge" href="{{ url_for('notifications') }}" title="Notifications" aria-label="Notifications">
       <i class="fa-regular fa-bell" aria-hidden="true"></i>
-    </button>
-    <a class="pro-dash-header-link" href="{{ url_for('help_desk') }}">
+      {% set notify_count = system_alert_counts.total|default(dashboard_stats.pending_approvals_count|default(0)) %}
+      {% if notify_count %}
+      <span class="pro-dash-header-badge">{{ notify_count if notify_count < 10 else '9+' }}</span>
+      {% endif %}
+    </a>
+    <a class="pro-dash-header-icon-btn" href="{{ url_for('help_desk') }}" title="Help" aria-label="Help">
       <i class="fa-regular fa-circle-question" aria-hidden="true"></i>
-      Help
     </a>
     {% include 'partials/dashboard_shell_theme_switcher.html' %}
-    <a class="pro-dash-profile" href="{{ url_for('settings') }}" title="Settings">
+    <a class="pro-dash-profile pro-dash-profile--dropdown" href="{{ url_for('settings') }}" title="Account settings">
       <span class="pro-dash-profile-avatar">{{ admin_initial }}</span>
-      <span class="pro-dash-profile-name">{{ session.get('employee_name') or session.get('username') or 'Admin' }}</span>
-    </a>
-
-    <a class="pro-dash-header-link pro-dash-logout-link" href="{{ url_for('logout') }}" title="Sign out" aria-label="Sign out">
-      <i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i>
-      <span>Sign out</span>
+      <span class="pro-dash-profile-meta">
+        <span class="pro-dash-profile-name">{{ session.get('employee_name') or session.get('username') or 'Super Admin' }}</span>
+        <span class="pro-dash-profile-role">{{ command_user_role|default('Platform Admin') }}</span>
+      </span>
+      <i class="fa-solid fa-chevron-down pro-dash-profile-chevron" aria-hidden="true"></i>
     </a>
   </div>
 </header>
