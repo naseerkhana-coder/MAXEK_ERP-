@@ -42,6 +42,7 @@ static/css/maxek-dashboard.css
 static/css/maxek-pro-dashboard.css
 static/css/maxek-field-standards.css
 static/css/maxek-login.css
+static/js/login.js
 static/js/workflow.js
 static/js/maxek-ui.js
 static/js/app.js

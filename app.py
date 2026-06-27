@@ -7925,10 +7925,35 @@ def index():
     return redirect(url_for("login"))
 
 
+_LOGIN_REMEMBER_MAX_AGE = 365 * 24 * 60 * 60
+
+
+def _login_remember_cookies(username, company_code):
+    """Persist last login identity for pre-fill on next visit."""
+    resp = make_response(redirect(url_for("dashboard")))
+    resp.set_cookie(
+        "maxek_last_username",
+        username,
+        max_age=_LOGIN_REMEMBER_MAX_AGE,
+        httponly=False,
+        samesite="Lax",
+    )
+    resp.set_cookie(
+        "maxek_last_company_code",
+        company_code or "",
+        max_age=_LOGIN_REMEMBER_MAX_AGE,
+        httponly=False,
+        samesite="Lax",
+    )
+    return resp
+
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if session.get("user_id"):
         return redirect(url_for("dashboard"))
+    remembered_user = request.cookies.get("maxek_last_username", "").strip()
+    default_company_code = request.cookies.get("maxek_last_company_code", "").strip()
     if request.method == "POST":
         company_code = request.form.get("company_code", "").strip() or None
         username = request.form.get("username", "").strip()
@@ -7946,6 +7971,7 @@ def login():
             session["employee_name"] = get_user_display_name(user)
             customer_id = user["customer_id"] if "customer_id" in user.keys() else None
             session["customer_id"] = customer_id
+            resolved_company_code = company_code
             if customer_id:
                 try:
                     customer = get_customer_by_id(get_db(), customer_id)
@@ -7955,8 +7981,10 @@ def login():
                 if customer:
                     session["company_code"] = customer["customer_code"]
                     session["customer_name"] = customer["company_name"]
+                    resolved_company_code = customer["customer_code"]
             elif company_code:
                 session["company_code"] = company_code.upper()
+                resolved_company_code = company_code.upper()
             try:
                 login_session_id = log_login(
                     get_db(),
@@ -7985,9 +8013,15 @@ def login():
                     save_dashboard_preferences(get_db(), user_id, role_profile=inferred)
             except Exception:
                 app.logger.exception("Failed to restore user work context")
-            return redirect(url_for("dashboard"))
+            return _login_remember_cookies(username, resolved_company_code or "")
         flash("Invalid username or password, or account is inactive.")
-    return render_template("login.html", app_version=APP_VERSION)
+    return render_template(
+        "login.html",
+        app_version=APP_VERSION,
+        remembered_user=remembered_user,
+        default_company_code=default_company_code,
+        remembered_usernames=[remembered_user] if remembered_user else [],
+    )
 
 
 @app.route("/forgot-password", methods=["GET", "POST"])
