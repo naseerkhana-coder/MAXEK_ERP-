@@ -358,3 +358,8 @@
   width: 100%;
   max-width: 100%;
 }
+
+/* Compact forms stay within parent pro-dash-content--module (960px default) */
+.maxek-layout.pro-dashboard-mode .erp-module-layout:not(:has(.erp-module-table-panel)):not(:has(.erp-table-panel)) {
+  max-width: 100%;
+}

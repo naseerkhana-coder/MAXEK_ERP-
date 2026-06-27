@@ -15,6 +15,28 @@
   --pro-blue: #3B82F6;
   --pro-sidebar-width: 248px;
   --pro-sidebar-collapsed: 72px;
+  --pro-content-max-compact: min(calc(100% - 40px), 960px);
+  --pro-content-max-wide: min(calc(100% - 40px), 1200px);
+}
+
+/* Pro shell always uses dark surfaces — accent colors only on icons/borders */
+.maxek-layout.pro-dashboard-mode {
+  --pro-bg: #0B0B0F;
+  --pro-bg-elevated: #12121A;
+  --pro-sidebar: #0D0D12;
+  --pro-card: #15151D;
+  --pro-card-hover: #1A1A24;
+  --pro-border: rgba(255, 255, 255, 0.08);
+  --pro-text: #F3F4F6;
+  --pro-muted: #9CA3AF;
+  --bg-card-dark: #15151D;
+  --bg-dark-ops: #0B0B0F;
+  --text-main: #F3F4F6;
+  --text-muted: #9CA3AF;
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --maxek-card-bg: #15151D;
+  --maxek-header-bg: #0B0B0F;
+  --maxek-toolbar-bg: #12121A;
 }
 
 /* Hide default ERP chrome on pro dashboard landing */
@@ -73,15 +95,28 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 16px 20px 20px;
+  padding: 16px 20px 24px;
   display: grid;
   grid-template-rows: auto minmax(220px, 1fr) auto;
   gap: 14px;
 }
 
+.pro-dash-content--home {
+  display: block;
+  grid-template-rows: unset;
+  max-width: var(--pro-content-max-wide);
+  width: 100%;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
 .pro-dash-content--alt {
-  grid-template-rows: 1fr;
+  grid-template-rows: auto auto auto;
   align-content: start;
+  max-width: var(--pro-content-max-wide);
+  width: 100%;
+  margin: 0 auto;
+  box-sizing: border-box;
 }
 
 /* Dashboard host wraps tab panels on the main dashboard route */
@@ -209,13 +244,22 @@
 }
 
 .pro-dash-nav-item.is-active {
-  background: rgba(59, 130, 246, 0.18);
+  background: rgba(59, 130, 246, 0.16);
   color: var(--pro-text);
-  box-shadow: inset 3px 0 0 var(--pro-blue);
+  box-shadow: none;
+  border-radius: 999px;
 }
 
 .pro-dash-nav-item.is-active i {
   color: var(--pro-blue);
+}
+
+.pro-dash-sidebar--department .pro-dash-nav-item.is-active {
+  background: color-mix(in srgb, var(--pro-pink) 18%, transparent);
+}
+
+.pro-dash-sidebar--department .pro-dash-nav-item.is-active i {
+  color: var(--pro-pink);
 }
 
 /* Sidebar */
@@ -246,23 +290,11 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 4px;
+  gap: 8px;
+  padding: 0 2px 4px;
+  border-bottom: 1px solid var(--pro-border);
+  margin-bottom: 2px;
 }
-
-.pro-dash-window-dots {
-  display: flex;
-  gap: 6px;
-}
-
-.pro-dash-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-}
-
-.pro-dash-dot--red { background: #FF5F57; }
-.pro-dash-dot--yellow { background: #FEBC2E; }
-.pro-dash-dot--green { background: #28C840; }
 
 .pro-dash-sidebar-collapse {
   appearance: none;
@@ -287,9 +319,11 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 4px 6px;
+  padding: 4px 2px;
   text-decoration: none;
   color: var(--pro-text);
+  min-width: 0;
+  flex: 1;
 }
 
 .pro-dash-brand-text {
@@ -305,7 +339,6 @@
 .pro-dash-shell.is-sidebar-collapsed .pro-dash-brand-text,
 .pro-dash-shell.is-sidebar-collapsed .pro-dash-nav-label,
 .pro-dash-shell.is-sidebar-collapsed .pro-dash-kbd,
-.pro-dash-shell.is-sidebar-collapsed .pro-dash-sidebar-promo,
 .pro-dash-shell.is-sidebar-collapsed .pro-dash-user-meta,
 .pro-dash-shell.is-sidebar-collapsed .pro-dash-chevron,
 .pro-dash-shell.is-sidebar-collapsed .pro-dash-nav-group-summary .pro-dash-nav-group-title span {
@@ -370,11 +403,14 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 8px;
-  border-radius: 10px;
+  padding: 8px 12px;
+  border-radius: 999px;
   cursor: pointer;
   color: var(--pro-muted);
-  font-size: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .pro-dash-nav-group-summary::-webkit-details-marker {
@@ -391,18 +427,19 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding-left: 6px;
+  padding: 2px 0 6px 4px;
 }
 
 .pro-dash-nav-item {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 9px 10px;
-  border-radius: 10px;
+  padding: 8px 12px;
+  border-radius: 999px;
   color: var(--pro-muted);
   text-decoration: none;
   font-size: 13px;
+  font-weight: 500;
   transition: background 0.15s, color 0.15s;
 }
 
@@ -419,7 +456,7 @@
 
 .pro-dash-nav-item--sub {
   font-size: 12px;
-  padding-left: 14px;
+  padding-left: 16px;
 }
 
 .pro-dash-chevron {
@@ -429,49 +466,6 @@
 
 .pro-dash-nav-group[open] .pro-dash-chevron {
   transform: rotate(180deg);
-}
-
-.pro-dash-sidebar-bottom {
-  margin-top: auto;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--pro-border);
-}
-
-.pro-dash-sidebar-promo {
-  background: linear-gradient(145deg, #1a1a28 0%, #12121a 100%);
-  border: 1px solid var(--pro-border);
-  border-radius: 14px;
-  padding: 12px;
-}
-
-.pro-dash-promo-title {
-  margin: 0 0 4px;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.pro-dash-promo-text {
-  margin: 0 0 10px;
-  font-size: 11px;
-  color: var(--pro-muted);
-  line-height: 1.4;
-}
-
-.pro-dash-promo-btn {
-  appearance: none;
-  border: none;
-  background: #fff;
-  color: #111;
-  font-size: 11px;
-  font-weight: 700;
-  padding: 7px 12px;
-  border-radius: 999px;
-  cursor: pointer;
-  width: 100%;
 }
 
 .pro-dash-sidebar-user {
@@ -1100,15 +1094,21 @@
 }
 
 /* Pro shell — readable table / form width (not full viewport bleed) */
-.maxek-layout.pro-dashboard-mode {
-  --pro-content-max: min(calc(100% - 40px), 1200px);
-}
-
 .maxek-layout.pro-dashboard-mode .pro-dash-content--module {
-  max-width: var(--pro-content-max);
+  max-width: var(--pro-content-max-compact);
   width: 100%;
   margin: 0 auto;
   box-sizing: border-box;
+}
+
+.maxek-layout.pro-dashboard-mode .pro-dash-content--module:has(.module-layout--list-only),
+.maxek-layout.pro-dashboard-mode .pro-dash-content--module:has(.module-layout--entry-wide),
+.maxek-layout.pro-dashboard-mode .pro-dash-content--module:has(.boq-module-layout),
+.maxek-layout.pro-dashboard-mode .pro-dash-content--module:has(.dpr-module-layout),
+.maxek-layout.pro-dashboard-mode .pro-dash-content--module:has(.erp-module-table-panel),
+.maxek-layout.pro-dashboard-mode .pro-dash-content--module:has(.erp-table-panel),
+.maxek-layout.pro-dashboard-mode .pro-dash-content--module.pro-dash-content--wide {
+  max-width: var(--pro-content-max-wide);
 }
 
 .maxek-layout.pro-dashboard-mode .pro-dash-content--module .erp-module-layout,
@@ -1146,7 +1146,7 @@
 }
 
 .maxek-layout.pro-dashboard-mode .dept-workspace--pro {
-  max-width: var(--pro-content-max);
+  max-width: var(--pro-content-max-wide);
   width: 100%;
   margin: 0 auto;
   box-sizing: border-box;
@@ -1166,4 +1166,253 @@
 .maxek-layout.pro-dashboard-mode.dept-workspace-mode .dept-workspace-main--overview .erp-table-panel,
 .maxek-layout.pro-dashboard-mode.dept-workspace-mode .dept-workspace-main--overview .erp-module-table-panel {
   max-width: 100%;
+}
+
+/* ── Home dashboard (department-portal card aesthetic) ── */
+.pro-dash-home-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding-bottom: 14px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--pro-border);
+}
+
+.pro-dash-home-header--compact {
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+}
+
+.pro-dash-home-header-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.pro-dash-home-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: rgba(59, 130, 246, 0.14);
+  color: var(--pro-blue);
+  border: 1px solid rgba(59, 130, 246, 0.22);
+  flex-shrink: 0;
+  font-size: 18px;
+}
+
+.pro-dash-home-icon--finance {
+  background: rgba(255, 77, 151, 0.12);
+  color: var(--pro-pink);
+  border-color: rgba(255, 77, 151, 0.22);
+}
+
+.pro-dash-home-eyebrow {
+  margin: 0 0 2px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--pro-muted);
+}
+
+.pro-dash-home-header h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--pro-text);
+  letter-spacing: 0.02em;
+}
+
+.pro-dash-home-sub {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--pro-muted);
+}
+
+.pro-dash-home-stats {
+  margin-bottom: 18px;
+}
+
+.maxek-layout.pro-dashboard-mode .pro-dash-stat-card {
+  background: var(--pro-card);
+  border: 1px solid var(--pro-border);
+  border-left: 3px solid var(--pro-blue);
+  border-radius: 12px;
+}
+
+.maxek-layout.pro-dashboard-mode .pro-dash-stat-card span {
+  color: var(--pro-muted);
+}
+
+.maxek-layout.pro-dashboard-mode .pro-dash-stat-card strong {
+  color: var(--pro-text);
+}
+
+.pro-dash-stat-hint {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--pro-muted);
+}
+
+.pro-dash-stat-hint--warn { color: #FBBF24; }
+.pro-dash-stat-hint--ok { color: var(--pro-green); }
+.pro-dash-stat-hint--danger { color: #F87171; }
+
+.pro-dash-home-main {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.pro-dash-dept-tile-grid {
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
+}
+
+.maxek-layout.pro-dashboard-mode .pro-dash-dept-tile {
+  background: var(--pro-card);
+  border: 1px solid var(--pro-border);
+  border-radius: 12px;
+  min-height: 64px;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.12s ease;
+}
+
+.maxek-layout.pro-dashboard-mode .pro-dash-dept-tile:hover {
+  background: var(--pro-card-hover);
+  border-color: color-mix(in srgb, var(--dept-accent, var(--pro-blue)) 45%, var(--pro-border));
+  transform: translateY(-1px);
+}
+
+.maxek-layout.pro-dashboard-mode .pro-dash-dept-tile .erp-module-tile-icon {
+  background: color-mix(in srgb, var(--dept-accent, var(--pro-blue)) 16%, transparent);
+  color: var(--dept-accent, var(--pro-blue));
+  border-radius: 10px;
+}
+
+.maxek-layout.pro-dashboard-mode .erp-module-section-title {
+  color: var(--pro-muted);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+.pro-dash-widgets--analytics {
+  margin-top: 14px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ── Department portal — unified dark pro theme ── */
+.maxek-layout.pro-dashboard-mode.dept-workspace-mode .dashboard-body,
+.maxek-layout.pro-dashboard-mode.dept-workspace-mode .main-window {
+  background: var(--pro-bg);
+}
+
+.maxek-layout.pro-dashboard-mode.pro-dept-portal .dept-workspace--pro,
+.maxek-layout.pro-dashboard-mode.dept-workspace-mode .dept-workspace--pro {
+  min-height: auto;
+}
+
+.maxek-layout.pro-dashboard-mode.dept-workspace-mode .dept-workspace-header--compact {
+  border-bottom-color: var(--pro-border);
+}
+
+.maxek-layout.pro-dashboard-mode.dept-workspace-mode .dept-workspace-header h1,
+.maxek-layout.pro-dashboard-mode.dept-workspace-mode .dept-workspace-eyebrow {
+  color: var(--pro-text);
+}
+
+.maxek-layout.pro-dashboard-mode.dept-workspace-mode .dept-stat-card {
+  background: var(--pro-card);
+  border-color: var(--pro-border);
+  border-left-color: var(--dept-accent, var(--pro-blue));
+}
+
+.maxek-layout.pro-dashboard-mode.dept-workspace-mode .dept-module-tile,
+.maxek-layout.pro-dashboard-mode.dept-workspace-mode .erp-module-tile {
+  background: var(--pro-card);
+  border-color: var(--pro-border);
+  border-radius: 12px;
+}
+
+.maxek-layout.pro-dashboard-mode.dept-workspace-mode .dept-module-tile:hover,
+.maxek-layout.pro-dashboard-mode.dept-workspace-mode .erp-module-tile:hover {
+  background: var(--pro-card-hover);
+  border-color: color-mix(in srgb, var(--dept-accent, var(--pro-blue)) 40%, var(--pro-border));
+}
+
+.maxek-layout.pro-dashboard-mode.dept-workspace-mode .erp-form-card,
+.maxek-layout.pro-dashboard-mode.dept-workspace-mode .erp-module-form-panel,
+.maxek-layout.pro-dashboard-mode.dept-workspace-mode .erp-table-panel,
+.maxek-layout.pro-dashboard-mode.dept-workspace-mode .erp-module-table-panel,
+.maxek-layout.pro-dashboard-mode.dept-workspace-mode .department-subbar {
+  background: var(--pro-card);
+  border-color: var(--pro-border);
+  color: var(--pro-text);
+}
+
+/* Neutralize light/yellow theme bleed inside pro shell */
+[data-theme="pro-light"] .maxek-layout.pro-dashboard-mode .erp-stat-card,
+[data-theme="pro-light"] .maxek-layout.pro-dashboard-mode .erp-module-tile,
+[data-theme="pro-light"] .maxek-layout.pro-dashboard-mode .erp-form-card,
+[data-theme="pro-light"] .maxek-layout.pro-dashboard-mode .erp-table-panel,
+[data-theme="ultra-color"] .maxek-layout.pro-dashboard-mode .erp-stat-card,
+[data-theme="ultra-color"] .maxek-layout.pro-dashboard-mode .erp-module-tile {
+  background: var(--pro-card);
+  border-color: var(--pro-border);
+  color: var(--pro-text);
+}
+
+[data-theme="pro-light"] .maxek-layout.pro-dashboard-mode .dashboard-body,
+[data-theme="ultra-color"] .maxek-layout.pro-dashboard-mode .dashboard-body {
+  background: var(--pro-bg);
+}
+
+[data-theme="ultra-color"] .maxek-layout.pro-dashboard-mode .pro-dash-stat-card,
+[data-theme="ultra-color"] .maxek-layout.pro-dashboard-mode .dept-stat-card {
+  background: var(--pro-card) !important;
+  border-left-color: var(--dept-accent, var(--pro-blue)) !important;
+}
+
+[data-theme="ultra-color"] .maxek-layout.pro-dashboard-mode .pro-dash-stat-card span,
+[data-theme="ultra-color"] .maxek-layout.pro-dashboard-mode .pro-dash-stat-card strong,
+[data-theme="ultra-color"] .maxek-layout.pro-dashboard-mode .dept-stat-card span,
+[data-theme="ultra-color"] .maxek-layout.pro-dashboard-mode .dept-stat-card strong {
+  color: var(--pro-text) !important;
+}
+
+.maxek-layout.pro-dashboard-mode .department-subbar {
+  background: var(--pro-card);
+  border: 1px solid var(--pro-border);
+  color: var(--pro-text);
+}
+
+.maxek-layout.pro-dashboard-mode .department-subbar-title {
+  color: var(--pro-text);
+}
+
+.maxek-layout.pro-dashboard-mode .department-subbar a {
+  color: var(--pro-muted);
+}
+
+.maxek-layout.pro-dashboard-mode .department-subbar a.is-active,
+.maxek-layout.pro-dashboard-mode .department-subbar a:hover {
+  color: var(--pro-text);
+  background: rgba(59, 130, 246, 0.14);
+  border-radius: 999px;
 }

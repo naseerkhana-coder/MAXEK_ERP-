@@ -5,29 +5,77 @@
 {% block title %}Dashboard — MAXEK ERP{% endblock %}
 
 {% block content %}
-<div class="pro-dash-content" id="pro-dash-panel-default" data-pro-dash-panel="default">
-  <section class="pro-dash-kpi-strip" aria-label="Key performance indicators">
+<div class="pro-dash-content pro-dash-content--home" id="pro-dash-panel-default" data-pro-dash-panel="default">
+  <header class="pro-dash-home-header">
+    <div class="pro-dash-home-header-main">
+      <span class="pro-dash-home-icon" aria-hidden="true"><i class="fa-solid fa-gauge-high"></i></span>
+      <div class="pro-dash-home-header-text">
+        <p class="pro-dash-home-eyebrow">Command centre</p>
+        <h1>Dashboard</h1>
+        <p class="pro-dash-home-sub">{{ command_centre_branch|default(selected_branch) }} · {{ command_centre_month }}</p>
+      </div>
+    </div>
+  </header>
+
+  {% if command_centre_kpis %}
+  <div class="erp-summary-grid erp-summary-grid--stats pro-dash-home-stats" aria-label="Key performance indicators">
     {% for kpi in command_centre_kpis %}
-    <article class="pro-dash-kpi-card">
-      <span class="pro-dash-kpi-label">{{ kpi.label }}</span>
-      <strong class="pro-dash-kpi-value">{{ kpi.value }}</strong>
+    <div class="erp-stat-card pro-dash-stat-card">
+      <span>{{ kpi.label }}</span>
+      <strong{% if kpi.hint %} class="pro-dash-stat-value"{% endif %}>{{ kpi.value }}</strong>
       {% if kpi.hint %}
-      <span class="pro-dash-kpi-hint pro-dash-kpi-hint--{{ kpi.hint_tone|default('muted') }}">{{ kpi.hint }}</span>
+      <small class="pro-dash-stat-hint pro-dash-stat-hint--{{ kpi.hint_tone|default('muted') }}">{{ kpi.hint }}</small>
       {% endif %}
-    </article>
+    </div>
     {% endfor %}
+  </div>
+  {% endif %}
+
+  <section class="pro-dash-home-main">
+    <section class="erp-module-section">
+      <h3 class="erp-module-section-title">Department workspaces</h3>
+      <div class="erp-module-grid dept-module-grid pro-dash-dept-tile-grid">
+        {% for card in command_centre_cards %}
+        <a href="{{ url_for('department_portal', slug=card.slug) }}" class="erp-module-tile dept-module-tile pro-dash-dept-tile" style="--dept-accent: {{ card.accent }};">
+          <span class="erp-module-tile-icon"><i class="fa-solid {{ card.icon }}" aria-hidden="true"></i></span>
+          <span class="erp-module-tile-body">
+            <span class="erp-module-tile-label">{{ card.card_label }}</span>
+            {% if card.description %}
+            <span class="erp-module-tile-desc">{{ card.description }}</span>
+            {% endif %}
+          </span>
+          {% for pill in card.stat_pills[:1] %}
+          <span class="erp-module-tile-open">{{ pill.value }} {{ pill.label }}</span>
+          {% endfor %}
+          <i class="fa-solid fa-chevron-right erp-module-tile-chevron" aria-hidden="true"></i>
+        </a>
+        {% endfor %}
+      </div>
+    </section>
   </section>
+</div>
+
+<div class="pro-dash-content pro-dash-content--alt" id="pro-dash-panel-operations" data-pro-dash-panel="operations" hidden>
+  <header class="pro-dash-home-header pro-dash-home-header--compact">
+    <div class="pro-dash-home-header-main">
+      <span class="pro-dash-home-icon" aria-hidden="true"><i class="fa-solid fa-chart-line"></i></span>
+      <div class="pro-dash-home-header-text">
+        <p class="pro-dash-home-eyebrow">Analytics</p>
+        <h1>Operations Overview</h1>
+        <p class="pro-dash-home-sub">{{ dashboard_chart_series.title|default('Operations Overview') }}</p>
+      </div>
+    </div>
+  </header>
 
   <section class="pro-dash-hero-chart" aria-labelledby="pro-dash-chart-title">
     <div class="pro-dash-hero-head">
       <div>
-        <h2 id="pro-dash-chart-title">{{ dashboard_chart_series.title|default('Operations Overview') }}</h2>
-        <p class="pro-dash-hero-sub">{{ command_centre_branch|default(selected_branch) }} · {{ command_centre_month }}</p>
-      </div>
-      <div class="pro-dash-range-tabs" role="group" aria-label="Chart timeframe">
-        <button type="button" class="pro-dash-range-btn">Year</button>
-        <button type="button" class="pro-dash-range-btn is-active">2 years</button>
-        <button type="button" class="pro-dash-range-btn">5 years</button>
+        <h2 id="pro-dash-chart-title" class="visually-hidden">{{ dashboard_chart_series.title|default('Operations Overview') }}</h2>
+        <div class="pro-dash-range-tabs" role="group" aria-label="Chart timeframe">
+          <button type="button" class="pro-dash-range-btn">Year</button>
+          <button type="button" class="pro-dash-range-btn is-active">2 years</button>
+          <button type="button" class="pro-dash-range-btn">5 years</button>
+        </div>
       </div>
     </div>
 
@@ -59,7 +107,7 @@
     </div>
   </section>
 
-  <section class="pro-dash-widgets" aria-label="Dashboard widgets">
+  <section class="pro-dash-widgets pro-dash-widgets--analytics" aria-label="Dashboard widgets">
     {% for widget in command_centre_bottom_widgets %}
     <article class="pro-dash-widget pro-dash-widget--{{ widget.chart_type|default('bars') }}">
       <header class="pro-dash-widget-head">
@@ -116,22 +164,17 @@
   </section>
 </div>
 
-<div class="pro-dash-content pro-dash-content--alt" id="pro-dash-panel-operations" data-pro-dash-panel="operations" hidden>
-  <section class="pro-dash-dept-grid" aria-label="Department workspaces">
-    {% for card in command_centre_cards %}
-    <a href="{{ url_for('department_portal', slug=card.slug) }}" class="pro-dash-dept-card" style="--dept-accent: {{ card.accent }};">
-      <span class="pro-dash-dept-icon"><i class="fa-solid {{ card.icon }}" aria-hidden="true"></i></span>
-      <span class="pro-dash-dept-title">{{ card.card_label }}</span>
-      <span class="pro-dash-dept-desc">{{ card.description }}</span>
-      {% for pill in card.stat_pills[:2] %}
-      <span class="pro-dash-dept-pill">{{ pill.value }} {{ pill.label }}</span>
-      {% endfor %}
-    </a>
-    {% endfor %}
-  </section>
-</div>
-
 <div class="pro-dash-content pro-dash-content--alt" id="pro-dash-panel-finance" data-pro-dash-panel="finance" hidden>
+  <header class="pro-dash-home-header pro-dash-home-header--compact">
+    <div class="pro-dash-home-header-main">
+      <span class="pro-dash-home-icon pro-dash-home-icon--finance" aria-hidden="true"><i class="fa-solid fa-indian-rupee-sign"></i></span>
+      <div class="pro-dash-home-header-text">
+        <p class="pro-dash-home-eyebrow">Finance</p>
+        <h1>Financial snapshot</h1>
+      </div>
+    </div>
+  </header>
+
   <section class="pro-dash-kpi-strip pro-dash-kpi-strip--finance" aria-label="Finance KPIs">
     <article class="pro-dash-kpi-card">
       <span class="pro-dash-kpi-label">Cash Balance</span>

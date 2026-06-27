@@ -1,27 +1,21 @@
 {% from 'macros/erp_ui.html' import mark_nav_item_active %}
 <aside class="pro-dash-sidebar{% if pro_shell_department_portal|default(false) %} pro-dash-sidebar--department{% endif %}" data-pro-dash-sidebar aria-label="Main navigation">
   <div class="pro-dash-sidebar-top">
-    <div class="pro-dash-window-dots" aria-hidden="true">
-      <span class="pro-dash-dot pro-dash-dot--red"></span>
-      <span class="pro-dash-dot pro-dash-dot--yellow"></span>
-      <span class="pro-dash-dot pro-dash-dot--green"></span>
-    </div>
+    <a class="pro-dash-brand" href="{{ url_for('dashboard') }}">
+      <img
+        src="{{ url_for('static', filename='images/maxek-logo.png') }}"
+        alt=""
+        class="pro-dash-brand-logo"
+        width="32"
+        height="32"
+        aria-hidden="true"
+      >
+      <span class="pro-dash-brand-text">MAX<span>EK</span></span>
+    </a>
     <button type="button" class="pro-dash-sidebar-collapse" data-pro-sidebar-collapse title="Collapse sidebar" aria-label="Collapse sidebar">
       <i class="fa-solid fa-angles-left" aria-hidden="true"></i>
     </button>
   </div>
-
-  <a class="pro-dash-brand" href="{{ url_for('dashboard') }}">
-    <img
-      src="{{ url_for('static', filename='images/maxek-logo.png') }}"
-      alt=""
-      class="pro-dash-brand-logo"
-      width="32"
-      height="32"
-      aria-hidden="true"
-    >
-    <span class="pro-dash-brand-text">MAX<span>EK</span></span>
-  </a>
 
   <div class="pro-dash-sidebar-search">
     <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
@@ -107,14 +101,4 @@
     {% endfor %}
     {% endif %}
   </nav>
-
-  {% if not pro_shell_department_portal|default(false) %}
-  <div class="pro-dash-sidebar-bottom">
-    <div class="pro-dash-sidebar-promo">
-      <p class="pro-dash-promo-title">MAXEK Assistant</p>
-      <p class="pro-dash-promo-text">Ask AI about BOQ, DPR, approvals &amp; reports.</p>
-      <button type="button" class="pro-dash-promo-btn" data-ai-open>Try it now</button>
-    </div>
-  </div>
-  {% endif %}
 </aside>
