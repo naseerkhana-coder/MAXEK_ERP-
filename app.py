@@ -351,6 +351,7 @@ from ui_shell_config import (
     portal_menu_as_nav_group,
     quick_panel_for_slug,
     resolve_active_toolbar_slug,
+    resolve_department_portal_for_request,
     resolve_department_portal_slug,
 )
 
@@ -7739,8 +7740,6 @@ def inject_maxek_layout():
             system_alert_counts = {"info": 0, "warning": 0, "critical": 0, "total": 0}
     approval_total = widgets["maker"] + widgets["checker"] + widgets["approver"]
     nav_slug = (request.view_args or {}).get("slug") if request.endpoint in ("department_hub", "department_portal") else None
-    current_nav_group = active_nav_group(request.endpoint, nav_slug)
-    on_department_portal = request.endpoint == "department_portal"
     guest_user = is_guest_user()
     hr_base_user = is_hr_base_user()
     super_admin = is_super_admin_user()
@@ -7765,8 +7764,26 @@ def inject_maxek_layout():
     active_toolbar_slug = resolve_active_toolbar_slug(
         request.endpoint, nav_slug, visible_nav_groups
     )
-    if on_department_portal and nav_slug:
-        dept_portal = get_department_portal(nav_slug)
+    use_pro_shell = endpoint_uses_pro_shell(request.endpoint)
+    dept_hint = (request.args.get("dept") or "").strip() or None
+    session_dept_slug = session.get("active_dept_portal_slug")
+    resolved_dept_portal_slug = (
+        resolve_department_portal_for_request(
+            request.endpoint,
+            view_slug=nav_slug,
+            dept_hint=dept_hint,
+            session_slug=session_dept_slug,
+            nav_toolbar_slug=active_toolbar_slug,
+        )
+        if use_pro_shell
+        else None
+    )
+    on_department_portal = request.endpoint == "department_portal"
+    in_dept_portal_shell = bool(resolved_dept_portal_slug and use_pro_shell)
+    current_nav_group = active_nav_group(request.endpoint, nav_slug)
+    dept_portal_accent = None
+    if in_dept_portal_shell:
+        dept_portal = get_department_portal(resolved_dept_portal_slug)
         if dept_portal:
             active_toolbar_slug = dept_portal["slug"]
             portal_menu = enrich_portal_menu_open_counts(
@@ -7782,7 +7799,10 @@ def inject_maxek_layout():
             dept_portal_view = dict(dept_portal)
             dept_portal_view["menu"] = portal_menu
             current_nav_group = portal_menu_as_nav_group(dept_portal_view)
-    if active_toolbar_slug in VIRTUAL_TOOLBAR_ENTRIES:
+            dept_portal_accent = dept_portal.get("accent") or get_department_accent(
+                dept_portal["slug"]
+            )
+    if not in_dept_portal_shell and active_toolbar_slug in VIRTUAL_TOOLBAR_ENTRIES:
         virtual = VIRTUAL_TOOLBAR_ENTRIES[active_toolbar_slug]
         current_nav_group = {
             "slug": active_toolbar_slug,
@@ -7797,9 +7817,9 @@ def inject_maxek_layout():
             "icon": "fa-gauge-high",
             "items": [],
         }
-    sub_toolbar_items = [] if on_department_portal else filter_sub_toolbar_items(current_nav_group)
+    sub_toolbar_items = [] if in_dept_portal_shell else filter_sub_toolbar_items(current_nav_group)
     sub_toolbar_sections = None
-    if not on_department_portal and active_toolbar_slug == "accounts-finance":
+    if not in_dept_portal_shell and active_toolbar_slug == "accounts-finance":
         sub_toolbar_sections = accounts_sub_toolbar_sections()
         sub_toolbar_items = [
             item
@@ -7906,7 +7926,7 @@ def inject_maxek_layout():
         "maker_status_message": maker_status_message,
         "format_decimal_hours": format_decimal_hours,
         "safe_url_for": safe_url_for,
-        "hide_module_nav": use_pro_shell or on_department_portal or request.endpoint in ("dashboard", "dashboard_choice_b"),
+        "hide_module_nav": use_pro_shell or in_dept_portal_shell or request.endpoint in ("dashboard", "dashboard_choice_b"),
         "department_portals": get_department_portals(),
         "main_toolbar": main_toolbar,
         "active_toolbar_slug": active_toolbar_slug,
@@ -7919,12 +7939,14 @@ def inject_maxek_layout():
         "header_projects": header_projects,
         "selected_project_id": session.get("selected_project_id"),
         "status_strip": status_strip,
-        "hide_quick_panel": use_pro_shell or request.endpoint in ("login", "dashboard", "dashboard_choice_b", "department_portal"),
-        "hide_action_panel": use_pro_shell or request.endpoint in ("login", "dashboard", "dashboard_choice_b", "department_portal"),
+        "hide_quick_panel": use_pro_shell or in_dept_portal_shell or request.endpoint in ("login", "dashboard", "dashboard_choice_b"),
+        "hide_action_panel": use_pro_shell or in_dept_portal_shell or request.endpoint in ("login", "dashboard", "dashboard_choice_b"),
         "ui_theme": ui_theme,
         "use_pro_shell": use_pro_shell,
         "pro_shell_dashboard": pro_shell_dashboard,
-        "pro_shell_department_portal": on_department_portal,
+        "pro_shell_department_portal": in_dept_portal_shell,
+        "department_portal_slug": resolved_dept_portal_slug,
+        "dept_portal_accent": dept_portal_accent,
         "welcome_name": username_display,
         "command_centre_branch": session.get("branch", branch_options[0] if branch_options else "Head Office"),
         "command_user_role": role_label,
@@ -8460,6 +8482,7 @@ def department_portal(slug):
     )
     portal_view = dict(portal)
     portal_view["menu"] = menu
+    session["active_dept_portal_slug"] = portal["slug"]
     return render_template(
         "department_workspace.html",
         portal=portal_view,

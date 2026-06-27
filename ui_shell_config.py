@@ -182,6 +182,78 @@ def get_department_portal_menu(slug: str) -> list[dict]:
     return [dict(item) for item in DEPARTMENT_PORTAL_MENUS.get(canonical, [])]
 
 
+_ENDPOINT_DEPARTMENT_SLUGS: dict[str, frozenset[str]] | None = None
+
+_DEPT_PORTAL_SHELL_SKIP_ENDPOINTS = frozenset(
+    {"dashboard", "dashboard_choice_b", "login", "logout", "index"}
+)
+
+
+def _endpoint_department_slug_index() -> dict[str, frozenset[str]]:
+    """Map Flask endpoints to department portal slugs (from portal menus)."""
+    global _ENDPOINT_DEPARTMENT_SLUGS
+    if _ENDPOINT_DEPARTMENT_SLUGS is None:
+        index: dict[str, set[str]] = {}
+        for dept_slug, menu in DEPARTMENT_PORTAL_MENUS.items():
+            canonical = resolve_department_portal_slug(dept_slug)
+            for item in menu:
+                endpoints = list(item.get("active_endpoints") or [])
+                endpoint = item.get("endpoint")
+                if endpoint and endpoint not in endpoints:
+                    endpoints.append(endpoint)
+                for ep in endpoints:
+                    if ep:
+                        index.setdefault(ep, set()).add(canonical)
+        _ENDPOINT_DEPARTMENT_SLUGS = {key: frozenset(value) for key, value in index.items()}
+    return _ENDPOINT_DEPARTMENT_SLUGS
+
+
+def endpoint_belongs_to_department_portal(endpoint: str, dept_slug: str) -> bool:
+    canonical = resolve_department_portal_slug(dept_slug)
+    return canonical in _endpoint_department_slug_index().get(endpoint, frozenset())
+
+
+def resolve_department_portal_for_request(
+    endpoint: str,
+    *,
+    view_slug: str | None = None,
+    dept_hint: str | None = None,
+    session_slug: str | None = None,
+    nav_toolbar_slug: str | None = None,
+) -> str | None:
+    """Resolve canonical department portal slug for the current request."""
+    if endpoint in _DEPT_PORTAL_SHELL_SKIP_ENDPOINTS:
+        return None
+    if endpoint == "department_portal" and view_slug:
+        return resolve_department_portal_slug(view_slug)
+    if dept_hint:
+        hinted = resolve_department_portal_slug(dept_hint)
+        if endpoint == "department_portal" or endpoint_belongs_to_department_portal(
+            endpoint, hinted
+        ):
+            return hinted
+    if session_slug:
+        session_canonical = resolve_department_portal_slug(session_slug)
+        if endpoint == "department_portal" or endpoint_belongs_to_department_portal(
+            endpoint, session_canonical
+        ):
+            return session_canonical
+    candidates = set(_endpoint_department_slug_index().get(endpoint, frozenset()))
+    if not candidates:
+        return None
+    if len(candidates) == 1:
+        return next(iter(candidates))
+    if nav_toolbar_slug:
+        mapped = resolve_department_portal_slug(nav_toolbar_slug)
+        if mapped in candidates:
+            return mapped
+    if session_slug:
+        session_canonical = resolve_department_portal_slug(session_slug)
+        if session_canonical in candidates:
+            return session_canonical
+    return sorted(candidates)[0]
+
+
 def portal_menu_as_nav_group(portal: dict) -> dict:
     """Synthetic nav group containing only this department's portal menu."""
     return {

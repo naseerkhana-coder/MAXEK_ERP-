@@ -1,5 +1,6 @@
 {% from 'macros/erp_ui.html' import mark_nav_item_active %}
-<aside class="pro-dash-sidebar{% if pro_shell_department_portal|default(false) %} pro-dash-sidebar--department{% endif %}" data-pro-dash-sidebar aria-label="Main navigation">
+{% set dept_shell_slug = department_portal_slug|default(request.view_args.get('slug', active_toolbar_slug)) %}
+<aside class="pro-dash-sidebar{% if pro_shell_department_portal|default(false) %} pro-dash-sidebar--department{% endif %}" data-pro-dash-sidebar aria-label="Main navigation"{% if dept_portal_accent %} style="--dept-accent: {{ dept_portal_accent }};"{% endif %}>
   <div class="pro-dash-sidebar-top">
     <a class="pro-dash-brand" href="{{ url_for('dashboard') }}">
       <img
@@ -35,7 +36,7 @@
       <span class="pro-dash-nav-label">{{ current_nav_group.label|default('Department') }}</span>
     </div>
 
-    <a class="pro-dash-nav-item{% if request.endpoint == 'department_portal' %} is-active{% endif %}" href="{{ url_for('department_portal', slug=request.view_args.get('slug', active_toolbar_slug)) }}">
+    <a class="pro-dash-nav-item{% if request.endpoint == 'department_portal' %} is-active{% endif %}" href="{{ url_for('department_portal', slug=dept_shell_slug) }}">
       <i class="fa-solid fa-gauge-high" aria-hidden="true"></i>
       <span class="pro-dash-nav-label">Overview</span>
     </a>

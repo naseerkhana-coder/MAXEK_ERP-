@@ -12,9 +12,8 @@ static/js/maxek-pro-dashboard.js                   ← layout tab switching
 static/css/maxek-pro-dashboard.css                 ← panel [hidden] + no sidebar user
 templates/base_maxek.html                          ← cache-bust pro dashboard assets
 
-CORE (overwrite)
-----------------
-app.py
+ui_shell_config.py
+templates/base_maxek.html
 workflow_service.py
 wsgi.py
 requirements.txt

@@ -255,11 +255,15 @@
 }
 
 .pro-dash-sidebar--department .pro-dash-nav-item.is-active {
-  background: color-mix(in srgb, var(--pro-pink) 18%, transparent);
+  background: color-mix(in srgb, var(--dept-accent, var(--pro-pink)) 18%, transparent);
 }
 
 .pro-dash-sidebar--department .pro-dash-nav-item.is-active i {
-  color: var(--pro-pink);
+  color: var(--dept-accent, var(--pro-pink));
+}
+
+.pro-dash-sidebar--department .pro-dash-nav-dept-head i {
+  color: var(--dept-accent, var(--pro-pink));
 }
 
 /* Sidebar */
@@ -1415,4 +1419,59 @@
   color: var(--pro-text);
   background: rgba(59, 130, 246, 0.14);
   border-radius: 999px;
+}
+
+/* ── Department portal workspace (matches main dashboard tiles) ── */
+.pro-dash-content--dept {
+  max-width: var(--pro-content-max-wide);
+  width: 100%;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+.pro-dash-dept-icon {
+  background: color-mix(in srgb, var(--dept-accent, var(--pro-blue)) 14%, transparent);
+  color: var(--dept-accent, var(--pro-blue));
+  border-color: color-mix(in srgb, var(--dept-accent, var(--pro-blue)) 22%, transparent);
+}
+
+.maxek-layout.pro-dashboard-mode.dept-workspace-mode .pro-dash-dept-stats .pro-dash-stat-card,
+.maxek-layout.pro-dashboard-mode.dept-workspace-mode .pro-dash-dept-stats .dept-stat-card {
+  border-left-color: var(--dept-accent, var(--pro-blue));
+}
+
+.maxek-layout.pro-dashboard-mode.dept-workspace-mode .pro-dash-dept-tile .erp-module-tile-icon {
+  background: color-mix(in srgb, var(--dept-accent, var(--pro-blue)) 16%, transparent);
+  color: var(--dept-accent, var(--pro-blue));
+  border-radius: 10px;
+}
+
+.maxek-layout.pro-dashboard-mode.dept-workspace-mode .pro-dash-dept-tile:hover {
+  border-color: color-mix(in srgb, var(--dept-accent, var(--pro-blue)) 45%, var(--pro-border));
+}
+
+.pro-dash-dept-empty {
+  padding: 2rem 1.25rem;
+  text-align: center;
+  color: var(--pro-muted);
+  background: var(--pro-card);
+  border: 1px dashed var(--pro-border);
+  border-radius: 12px;
+}
+
+.maxek-layout.pro-dashboard-mode.dept-workspace-mode .dept-stat-warn {
+  color: #fbbf24;
+}
+
+/* Force dark pro surfaces on department shell module pages */
+.maxek-layout.pro-dashboard-mode.dept-workspace-mode.pro-dept-portal .pro-dash-content--module,
+.maxek-layout.pro-dashboard-mode.dept-workspace-mode.pro-dept-portal .dashboard-body,
+.maxek-layout.pro-dashboard-mode.dept-workspace-mode.pro-dept-portal .main-window {
+  background: var(--pro-bg);
+}
+
+.maxek-layout.pro-dashboard-mode.dept-workspace-mode .dept-workspace-empty {
+  background: var(--pro-card);
+  border-color: var(--pro-border);
+  color: var(--pro-muted);
 }

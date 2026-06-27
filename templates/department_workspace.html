@@ -6,25 +6,25 @@
 {% block title %}{{ portal.title }} — MAXEK ERP{% endblock %}
 
 {% block content %}
-<div class="dept-workspace dept-workspace--pro" style="--dept-accent: {{ portal.accent|default('#e30613') }};">
+<div class="pro-dash-content pro-dash-content--dept" style="--dept-accent: {{ portal.accent|default('#3b82f6') }};">
 
-  <header class="dept-workspace-header dept-workspace-header--compact">
-    <div class="dept-workspace-header-main">
-      <span class="dept-workspace-icon"><i class="fa-solid {{ portal.icon }}" aria-hidden="true"></i></span>
-      <div class="dept-workspace-header-text">
-        <p class="dept-workspace-eyebrow">Department workspace</p>
+  <header class="pro-dash-home-header pro-dash-home-header--compact pro-dash-dept-header">
+    <div class="pro-dash-home-header-main">
+      <span class="pro-dash-home-icon pro-dash-dept-icon" aria-hidden="true"><i class="fa-solid {{ portal.icon }}"></i></span>
+      <div class="pro-dash-home-header-text">
+        <p class="pro-dash-home-eyebrow">Department workspace</p>
         <h1>{{ portal.title }}</h1>
         {% if portal.summary_title %}
-        <p class="dept-workspace-summary-inline">{{ portal.summary_title }}</p>
+        <p class="pro-dash-home-sub">{{ portal.summary_title }}</p>
         {% endif %}
       </div>
     </div>
   </header>
 
   {% if stat_cards %}
-  <div class="erp-summary-grid erp-summary-grid--stats dept-workspace-stats">
+  <div class="erp-summary-grid erp-summary-grid--stats pro-dash-home-stats pro-dash-dept-stats" aria-label="Department KPIs">
     {% for card in stat_cards %}
-    <div class="erp-stat-card dept-stat-card">
+    <div class="erp-stat-card pro-dash-stat-card dept-stat-card">
       <span>{{ card.label }}</span>
       <strong{% if card.get('warn') %} class="dept-stat-warn"{% endif %}>{{ card.value }}</strong>
     </div>
@@ -32,7 +32,29 @@
   </div>
   {% endif %}
 
-  <section class="dept-workspace-main dept-workspace-main--overview">
+  <section class="pro-dash-home-main pro-dash-dept-main">
+    {% if portal.menu %}
+    <section class="erp-module-section">
+      <h3 class="erp-module-section-title">Department tools</h3>
+      <div class="erp-module-grid dept-module-grid pro-dash-dept-tile-grid">
+        {% for item in portal.menu %}
+        {% set item_href = safe_url_for(item.endpoint, **(item.get('query') or {})) %}
+        {% if item.get('anchor') %}{% set item_href = item_href ~ '#' ~ item.anchor %}{% endif %}
+        <a href="{{ item_href }}" class="erp-module-tile dept-module-tile pro-dash-dept-tile">
+          <span class="erp-module-tile-icon"><i class="fa-solid {{ item.icon }}" aria-hidden="true"></i></span>
+          <span class="erp-module-tile-body">
+            <span class="erp-module-tile-label">{{ item.label }}</span>
+          </span>
+          {% if item.get('open_count') %}
+          <span class="erp-module-tile-open">{{ item.open_count }} Open</span>
+          {% endif %}
+          <i class="fa-solid fa-chevron-right erp-module-tile-chevron" aria-hidden="true"></i>
+        </a>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
     {% if report_modules %}
     {{ erp_module_grid(report_modules, 'Reports', action_style='run') }}
     {% endif %}
@@ -40,10 +62,10 @@
     {% if ticket_types %}
     <section class="erp-module-section">
       <h3 class="erp-module-section-title">Ticket types</h3>
-      <div class="erp-module-grid dept-module-grid">
+      <div class="erp-module-grid dept-module-grid pro-dash-dept-tile-grid">
         {% for ticket in ticket_types %}
         {% set ticket_href = ticket.href if ticket.get('href') else safe_url_for(ticket.endpoint, **(ticket.get('query') or {})) %}
-        <a href="{{ ticket_href }}" class="erp-module-tile dept-module-tile">
+        <a href="{{ ticket_href }}" class="erp-module-tile dept-module-tile pro-dash-dept-tile">
           <span class="erp-module-tile-icon"><i class="fa-solid {{ ticket.icon }}" aria-hidden="true"></i></span>
           <span class="erp-module-tile-body">
             <span class="erp-module-tile-label">{{ ticket.label }}</span>
@@ -61,30 +83,8 @@
     </section>
     {% endif %}
 
-    {% if portal.menu %}
-    <section class="erp-module-section">
-      <h3 class="erp-module-section-title">Department tools</h3>
-      <div class="erp-module-grid dept-module-grid">
-        {% for item in portal.menu %}
-        {% set item_href = safe_url_for(item.endpoint, **(item.get('query') or {})) %}
-        {% if item.get('anchor') %}{% set item_href = item_href ~ '#' ~ item.anchor %}{% endif %}
-        <a href="{{ item_href }}" class="erp-module-tile dept-module-tile">
-          <span class="erp-module-tile-icon"><i class="fa-solid {{ item.icon }}" aria-hidden="true"></i></span>
-          <span class="erp-module-tile-body">
-            <span class="erp-module-tile-label">{{ item.label }}</span>
-          </span>
-          {% if item.get('open_count') %}
-          <span class="erp-module-tile-open">{{ item.open_count }} Open</span>
-          {% endif %}
-          <i class="fa-solid fa-chevron-right erp-module-tile-chevron" aria-hidden="true"></i>
-        </a>
-        {% endfor %}
-      </div>
-    </section>
-    {% endif %}
-
     {% if not report_modules and not ticket_types and not portal.menu %}
-    <div class="dept-workspace-empty">
+    <div class="dept-workspace-empty pro-dash-dept-empty">
       <p>Select a tool from the sidebar to open a module.</p>
     </div>
     {% endif %}

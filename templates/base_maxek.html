@@ -40,14 +40,14 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/maxek-field-standards.css') }}?v=20260627-content-width">
 
     {% if use_pro_shell|default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/maxek-pro-dashboard.css') }}?v=20260627-pro-ui">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/maxek-pro-dashboard.css') }}?v=20260627-dept-portal">
     {% endif %}
 
     {% block head_extra %}{% endblock %}
 
   </head>
 
-  <body class="maxek-layout maxek-topnav-layout maxek-shell-layout{% if show_command_sidebar and not use_pro_shell|default(false) %} command-centre-layout{% endif %}{% if use_pro_shell|default(false) %} pro-dashboard-mode{% endif %}{% block body_class %}{% endblock %}">
+  <body class="maxek-layout maxek-topnav-layout maxek-shell-layout{% if show_command_sidebar and not use_pro_shell|default(false) %} command-centre-layout{% endif %}{% if use_pro_shell|default(false) %} pro-dashboard-mode{% endif %}{% if pro_shell_department_portal|default(false) %} dept-workspace-mode pro-dept-portal{% endif %}{% block body_class %}{% endblock %}"{% if dept_portal_accent %} style="--dept-accent: {{ dept_portal_accent }};"{% endif %}>
 
     {% from 'macros/erp_ui.html' import erp_sub_toolbar_secondary, erp_main_toolbar, erp_command_sidebar, erp_breadcrumb, erp_department_subbar_link %}
 
@@ -100,7 +100,7 @@
           {% endif %}
 
           {% set nav_group = current_nav_group|default({'slug': 'dashboard', 'label': 'Dashboard', 'icon': 'fa-gauge-high'}) %}
-          {% set show_department_subbar = sub_toolbar_items and (nav_group.get('slug') != 'dashboard' or request.endpoint in ['dashboard', 'dashboard_choice_b']) and request.endpoint != 'department_portal' %}
+          {% set show_department_subbar = sub_toolbar_items and not pro_shell_department_portal|default(false) and (nav_group.get('slug') != 'dashboard' or request.endpoint in ['dashboard', 'dashboard_choice_b']) and request.endpoint != 'department_portal' %}
 
           <div class="{% if pro_shell_dashboard|default(false) %}pro-dash-dashboard-host{% else %}pro-dash-content pro-dash-content--module{% endif %}">
             {% if show_department_subbar and not pro_shell_dashboard|default(false) %}
@@ -370,7 +370,7 @@
 
       {% set nav_group = current_nav_group|default({'slug': 'dashboard', 'label': 'Dashboard', 'icon': 'fa-gauge-high'}) %}
 
-      {% set show_department_subbar = not hide_module_nav and sub_toolbar_items and (nav_group.get('slug') != 'dashboard' or request.endpoint in ['dashboard', 'dashboard_choice_b']) and request.endpoint != 'department_portal' %}
+      {% set show_department_subbar = not hide_module_nav and sub_toolbar_items and not pro_shell_department_portal|default(false) and (nav_group.get('slug') != 'dashboard' or request.endpoint in ['dashboard', 'dashboard_choice_b']) and request.endpoint != 'department_portal' %}
 
       {% if show_department_subbar %}
 
