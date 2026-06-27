@@ -195,18 +195,86 @@ def portal_menu_as_nav_group(portal: dict) -> dict:
 # Bottom-row widgets on the main dashboard (placeholders until feeds are wired).
 MAIN_DASHBOARD_BOTTOM_WIDGETS: list[dict[str, str]] = [
     {
-        "key": "social_news",
-        "title": "Live News From Social Media",
-        "subtitle": "Construction industry updates",
-        "icon": "fa-rss",
-        "placeholder": "Coming soon — construction-related social feeds will appear here.",
+        "key": "project_progress",
+        "title": "Project Progress",
+        "subtitle": "Active sites vs plan",
+        "icon": "fa-chart-area",
+        "chart_type": "scatter",
     },
     {
-        "key": "material_prices",
-        "title": "Construction Material Live Price",
-        "subtitle": "Market rates & indices",
-        "icon": "fa-chart-line",
-        "placeholder": "Coming soon — live material price indices will appear here.",
+        "key": "pending_approvals",
+        "title": "Pending Approvals",
+        "subtitle": "Workflow queue by module",
+        "icon": "fa-clipboard-check",
+        "chart_type": "bars",
+    },
+    {
+        "key": "cash_vs_budget",
+        "title": "Cash vs Budget",
+        "subtitle": "Monthly variance trend",
+        "icon": "fa-scale-balanced",
+        "chart_type": "lines",
+    },
+    {
+        "key": "expense_breakdown",
+        "title": "Expense Breakdown",
+        "subtitle": "OpEx by category",
+        "icon": "fa-chart-pie",
+        "chart_type": "hbar",
+    },
+]
+
+# Sidebar favorites on the main dashboard shell.
+DASHBOARD_SHELL_FAVORITES: list[dict[str, str]] = [
+    {"endpoint": "projects", "label": "Projects", "icon": "fa-folder-tree"},
+    {"endpoint": "dpr_entry", "label": "DPR Entry", "icon": "fa-clipboard-list"},
+]
+
+# Primary sidebar navigation groups for the main dashboard shell.
+DASHBOARD_SHELL_NAV_GROUPS: list[dict] = [
+    {
+        "label": "Projects & Sites",
+        "icon": "fa-building",
+        "items": [
+            {"endpoint": "projects", "label": "Projects", "icon": "fa-folder-tree"},
+            {"endpoint": "clients", "label": "Clients", "icon": "fa-address-book"},
+            {"endpoint": "boq_management", "label": "BOQ", "icon": "fa-table-list"},
+            {"endpoint": "dpr_entry", "label": "DPR", "icon": "fa-clipboard-list"},
+        ],
+    },
+    {
+        "label": "Workforce",
+        "icon": "fa-users",
+        "items": [
+            {"endpoint": "staff", "label": "Staff", "icon": "fa-user-tie"},
+            {"endpoint": "attendance", "label": "Attendance", "icon": "fa-calendar-check"},
+            {"endpoint": "payroll", "label": "Payroll", "icon": "fa-money-check-dollar"},
+        ],
+    },
+    {
+        "label": "Procurement & Store",
+        "icon": "fa-cart-shopping",
+        "items": [
+            {"endpoint": "purchase_orders", "label": "Purchase Orders", "icon": "fa-file-invoice"},
+            {"endpoint": "material_request", "label": "Material Request", "icon": "fa-box"},
+            {"endpoint": "store_receipt", "label": "Store GRN", "icon": "fa-dolly"},
+        ],
+    },
+    {
+        "label": "Finance",
+        "icon": "fa-indian-rupee-sign",
+        "items": [
+            {"endpoint": "accounts_hub", "label": "Accounts Hub", "icon": "fa-landmark"},
+            {"endpoint": "petty_cash", "label": "Petty Cash", "icon": "fa-wallet"},
+            {"endpoint": "client_billing_register", "label": "Client Billing", "icon": "fa-file-invoice-dollar"},
+        ],
+    },
+    {
+        "label": "Departments",
+        "icon": "fa-sitemap",
+        "items": [
+            {"endpoint": "department_portal", "label": "All Departments", "icon": "fa-gauge-high", "query": {"slug": "projects"}},
+        ],
     },
 ]
 

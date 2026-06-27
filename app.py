@@ -336,6 +336,8 @@ from helpdesk_service import (
 
 from ui_shell_config import (
     APP_VERSION_LABEL,
+    DASHBOARD_SHELL_FAVORITES,
+    DASHBOARD_SHELL_NAV_GROUPS,
     GLOBAL_SEARCH_CATEGORIES,
     HELP_CENTER_ITEMS,
     MAIN_DASHBOARD_BOTTOM_WIDGETS,
@@ -4995,6 +4997,20 @@ def safe_url_for(endpoint, **values):
         return "#"
 
 
+def _dept_portal_return_url(default_slug="projects"):
+    """Return URL for post-save navigation — dept workspace (new UI), not legacy module shell."""
+    raw = (request.args.get("dept") or request.form.get("dept") or "").strip()
+    if raw:
+        slug = resolve_department_portal_slug(raw)
+        return url_for("department_portal", slug=slug)
+    referrer = request.referrer or ""
+    match = re.search(r"/dept/([^/?#]+)", referrer)
+    if match:
+        slug = resolve_department_portal_slug(match.group(1))
+        return url_for("department_portal", slug=slug)
+    return url_for("department_portal", slug=resolve_department_portal_slug(default_slug))
+
+
 app.jinja_env.globals["format_decimal_hours"] = format_decimal_hours
 app.jinja_env.globals["safe_url_for"] = safe_url_for
 
@@ -8767,6 +8783,62 @@ def get_dashboard_stats(db):
     }
 
 
+def _build_dashboard_chart_series(stats):
+    """Demo chart coordinates for the main dashboard hero chart (SVG-ready)."""
+    months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    active = stats.get("active_projects") or 1
+    workforce = stats.get("total_employees") or 10
+    cash = stats.get("cash_balance") or 0
+    pending = stats.get("pending_approvals_count") or 0
+
+    def _wave(base, amp, phase=0):
+        points = []
+        for i in range(12):
+            val = base + amp * ((i + phase) % 4 - 1.5)
+            y = max(8, min(92, 55 - val * 2))
+            x = 8 + i * (84 / 11)
+            points.append({"x": round(x, 1), "y": round(y, 1), "label": months[i]})
+        return points
+
+    return {
+        "title": "Operations Overview",
+        "months": months,
+        "series": [
+            {
+                "key": "revenue",
+                "label": "Revenue",
+                "color": "#FF4D97",
+                "points": _wave(active * 3, 6, 0),
+            },
+            {
+                "key": "workforce",
+                "label": "Workforce",
+                "color": "#4ADE80",
+                "points": _wave(workforce / 8, 8, 1),
+            },
+            {
+                "key": "pending",
+                "label": "Pending",
+                "color": "#3B82F6",
+                "points": _wave(pending + 2, 10, 2),
+            },
+            {
+                "key": "cash",
+                "label": "Cash Flow",
+                "color": "#E5E7EB",
+                "points": _wave(min(cash / 100000, 20) + 5, 5, 3),
+            },
+        ],
+        "expense_rows": [
+            {"label": "Labour & Wages", "pct": 38, "color": "#FF4D97"},
+            {"label": "Materials", "pct": 27, "color": "#3B82F6"},
+            {"label": "Plant & Equipment", "pct": 18, "color": "#4ADE80"},
+            {"label": "Overheads", "pct": 11, "color": "#F59E0B"},
+            {"label": "Subcontract", "pct": 6, "color": "#A78BFA"},
+        ],
+    }
+
+
 DEPARTMENT_WORKFLOW_MODULES = {
     "consultancy": ("boq", "cost_planning", "project_creation", "dpr", "client_billing"),
     "projects": ("boq", "project_creation", "dpr", "cost_planning"),
@@ -9510,6 +9582,8 @@ def render_choice_b_dashboard():
         "command_centre_cards",
     )
     sidebar_context = _command_centre_sidebar_context(db, active_slug="command-centre")
+    stats = _dashboard_payload(lambda: get_dashboard_stats(db), {}, "dashboard_stats")
+    chart_series = _build_dashboard_chart_series(stats)
 
     return render_template(
         "dashboard.html",
@@ -9519,6 +9593,10 @@ def render_choice_b_dashboard():
         command_centre_bottom_widgets=MAIN_DASHBOARD_BOTTOM_WIDGETS,
         command_centre_month=month_year,
         user_dashboard_prefs=user_prefs,
+        dashboard_shell_favorites=DASHBOARD_SHELL_FAVORITES,
+        dashboard_shell_nav_groups=DASHBOARD_SHELL_NAV_GROUPS,
+        dashboard_chart_series=chart_series,
+        dashboard_stats=stats,
         **sidebar_context,
     )
 
@@ -10488,26 +10566,8 @@ def _build_project_hub_index(db, project_ids):
 @app.route("/projects/dashboard")
 @login_required
 def projects_dashboard():
-    db = get_db()
-    stat_cards = [
-        {"label": "Total Projects", "value": _safe_scalar_count(db, "SELECT COUNT(*) AS c FROM projects")},
-        {"label": "Active Projects", "value": _safe_scalar_count(db, "SELECT COUNT(*) AS c FROM projects WHERE status='Active'")},
-        {"label": "Clients", "value": _safe_scalar_count(db, "SELECT COUNT(*) AS c FROM clients")},
-        {"label": "Open BOQs", "value": _safe_scalar_count(db, "SELECT COUNT(*) AS c FROM boq_master WHERE COALESCE(is_deleted, 0)=0 AND approval_status NOT IN ('Approved', 'approved')")},
-    ]
-    modules = [
-        {"endpoint": "projects", "label": "Project List", "icon": "fa-list", "description": "View and manage all projects"},
-        {"endpoint": "projects", "label": "Create Project", "icon": "fa-circle-plus", "description": "Register a new project"},
-        {"endpoint": "cost_planning", "label": "Planning", "icon": "fa-diagram-project", "description": "Cost planning & budgets"},
-        {"endpoint": "wbs_redirect", "label": "WBS", "icon": "fa-sitemap", "description": "Work breakdown structure"},
-        {"endpoint": "dpr_entry", "label": "Progress Monitoring", "icon": "fa-chart-simple", "description": "Daily progress reports (DPR)"},
-        {"endpoint": "project_expenses", "label": "Project Costing", "icon": "fa-coins", "description": "Site expenses & cost tracking"},
-        {"endpoint": "client_billing_register", "label": "Client Billing", "icon": "fa-file-invoice", "description": "Client RA bills & GST"},
-        {"endpoint": "project_photos_register", "label": "Project Photos", "icon": "fa-camera", "description": "Site photo gallery & timeline"},
-        {"endpoint": "project_documents", "label": "Project Documents", "icon": "fa-folder-open", "description": "Drawings, agreements & files"},
-        {"endpoint": "reports", "label": "Project Reports", "icon": "fa-chart-pie", "description": "Analytics & audit reports"},
-    ]
-    return _render_department_hub("Project Dashboard", "Projects", stat_cards, modules, "Project modules")
+    """Legacy project dashboard — redirect to Command Centre dept workspace."""
+    return redirect(url_for("department_portal", slug="projects"))
 
 
 @app.route("/projects", methods=["GET", "POST"])
@@ -14327,15 +14387,7 @@ def boq_management():
         flash(
             f"BOQ {boq_number} saved — {len(lines)} item(s), total amount {total_amount:,.2f}."
         )
-        return redirect(
-            url_for(
-                "boq_management",
-                continue_prompt=1,
-                saved=boq_number,
-                project_id=project_id,
-            )
-            + "#boq-form"
-        )
+        return redirect(_dept_portal_return_url("projects"))
 
     edit_id = request.args.get("edit", type=int)
     editing_boq = None
@@ -14513,16 +14565,7 @@ def boq_multiple_entry():
         flash(
             f"BOQ {boq_number} saved — {len(lines)} item(s), total amount {total_amount:,.2f}."
         )
-        return redirect(
-            url_for(
-                endpoint,
-                saved=boq_number,
-                saved_id=new_boq_id,
-                saved_lines=len(lines),
-                saved_total=total_amount,
-                project_id=project_id,
-            )
-        )
+        return redirect(_dept_portal_return_url("projects"))
 
     edit_id = request.args.get("edit", type=int)
     editing_boq = None

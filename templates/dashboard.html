@@ -1,89 +1,169 @@
 {% extends 'base_maxek.html' %}
 
-{% block body_class %} dashboard-mode command-centre-mode{% endblock %}
+{% block body_class %} dashboard-mode pro-dashboard-mode{% endblock %}
 
-{% block title %}Command Centre — MAXEK ERP{% endblock %}
+{% block title %}Dashboard — MAXEK ERP{% endblock %}
+
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/maxek-pro-dashboard.css') }}?v=20260627-pro">
+{% endblock %}
 
 {% block content %}
-<div class="dash-page command-centre-page">
+<div class="pro-dash-shell" data-pro-dash-shell>
+  {% include 'partials/dashboard_shell_sidebar.html' %}
 
-  <header class="cc-page-header">
-    <div class="cc-page-header-main">
-      <h1 class="cc-page-title">Command Centre</h1>
-      <p class="cc-page-subtitle">
-        Select a department to open its workspace · {{ command_centre_branch }} · {{ command_centre_month }}
-      </p>
-    </div>
-    <div class="cc-page-actions">
-      <a href="{{ url_for('settings') }}#dashboard-preferences" class="erp-btn erp-btn-ghost erp-btn-sm" title="Customize your dashboard">
-        <i class="fa-solid fa-sliders" aria-hidden="true"></i> Customize
-      </a>
-      <a href="{{ url_for('dashboard') }}" class="erp-btn erp-btn-ghost erp-btn-sm">
-        <i class="fa-solid fa-rotate-right" aria-hidden="true"></i> Refresh
-      </a>
-      <a href="{{ url_for('petty_cash') }}" class="erp-btn erp-btn-primary erp-btn-sm">
-        <i class="fa-solid fa-plus" aria-hidden="true"></i> New Entry
-      </a>
-    </div>
-  </header>
+  <div class="pro-dash-main">
+    {% include 'partials/dashboard_shell_header.html' %}
 
-  <section class="erp-summary-grid erp-summary-grid--stats cc-kpi-row cc-kpi-row--main" aria-label="Key performance indicators">
-    {% for kpi in command_centre_kpis %}
-    <div class="erp-stat-card cc-kpi-card">
-      <span>{{ kpi.label }}</span>
-      <strong{% if kpi.get('hint_tone') == 'warn' %} class="cc-kpi-warn"{% elif kpi.get('hint_tone') == 'danger' %} class="cc-kpi-danger"{% endif %}>
-        {{ kpi.value }}
-        {% if kpi.hint %}<small class="cc-kpi-hint cc-kpi-hint--{{ kpi.hint_tone|default('muted') }}">{{ kpi.hint }}</small>{% endif %}
-      </strong>
-    </div>
-    {% endfor %}
-  </section>
-
-  <section class="cc-dept-section" aria-labelledby="cc-dept-section-title">
-    <h2 class="cc-dept-section-title" id="cc-dept-section-title">Departments</h2>
-    <div class="cc-dept-grid cc-dept-grid--main">
-    {% for card in command_centre_cards %}
-    <a
-      href="{{ url_for('department_portal', slug=card.slug) }}"
-      class="cc-dept-card"
-      style="--cc-accent: {{ card.accent }};"
-    >
-      <span class="cc-dept-card-tag">{{ card.category }}</span>
-      <span class="cc-dept-card-icon"><i class="fa-solid {{ card.icon }}" aria-hidden="true"></i></span>
-      <span class="cc-dept-card-title">{{ card.card_label }}</span>
-      <span class="cc-dept-card-desc">{{ card.description }}</span>
-      <span class="cc-dept-card-stats">
-        {% for pill in card.stat_pills %}
-        <span class="cc-dept-stat-pill{% if pill.get('tone') %} cc-dept-stat-pill--{{ pill.tone }}{% endif %}">
-          <strong>{{ pill.value }}</strong> {{ pill.label }}
-        </span>
+    <div class="pro-dash-content" data-pro-dash-panel="default">
+      <section class="pro-dash-kpi-strip" aria-label="Key performance indicators">
+        {% for kpi in command_centre_kpis %}
+        <article class="pro-dash-kpi-card">
+          <span class="pro-dash-kpi-label">{{ kpi.label }}</span>
+          <strong class="pro-dash-kpi-value">{{ kpi.value }}</strong>
+          {% if kpi.hint %}
+          <span class="pro-dash-kpi-hint pro-dash-kpi-hint--{{ kpi.hint_tone|default('muted') }}">{{ kpi.hint }}</span>
+          {% endif %}
+        </article>
         {% endfor %}
-      </span>
-    </a>
-    {% endfor %}
-    </div>
-  </section>
+      </section>
 
-  <section class="cc-bottom-row cc-bottom-row--widgets" aria-label="Live feeds">
-    {% for widget in command_centre_bottom_widgets %}
-    <div class="cc-panel cc-widget-panel">
-      <div class="cc-panel-head">
-        <div class="cc-widget-head">
-          <span class="cc-widget-icon"><i class="fa-solid {{ widget.icon }}" aria-hidden="true"></i></span>
+      <section class="pro-dash-hero-chart" aria-labelledby="pro-dash-chart-title">
+        <div class="pro-dash-hero-head">
           <div>
-            <h2>{{ widget.title }}</h2>
-            {% if widget.get('subtitle') %}
-            <p class="cc-widget-subtitle">{{ widget.subtitle }}</p>
-            {% endif %}
+            <h2 id="pro-dash-chart-title">{{ dashboard_chart_series.title|default('Operations Overview') }}</h2>
+            <p class="pro-dash-hero-sub">{{ command_centre_branch|default(selected_branch) }} · {{ command_centre_month }}</p>
+          </div>
+          <div class="pro-dash-range-tabs" role="group" aria-label="Chart timeframe">
+            <button type="button" class="pro-dash-range-btn">Year</button>
+            <button type="button" class="pro-dash-range-btn is-active">2 years</button>
+            <button type="button" class="pro-dash-range-btn">5 years</button>
           </div>
         </div>
-      </div>
-      <div class="cc-widget-placeholder">
-        <p>{{ widget.placeholder }}</p>
-      </div>
-    </div>
-    {% endfor %}
-  </section>
 
+        <div class="pro-dash-legend">
+          {% for series in dashboard_chart_series.series %}
+          <span class="pro-dash-legend-item">
+            <span class="pro-dash-legend-dot" style="--legend-color: {{ series.color }};"></span>
+            {{ series.label }}
+          </span>
+          {% endfor %}
+        </div>
+
+        <div class="pro-dash-chart-wrap">
+          <svg class="pro-dash-chart-svg" viewBox="0 0 100 60" preserveAspectRatio="none" aria-hidden="true">
+            {% for y in [15, 30, 45] %}
+            <line x1="8" y1="{{ y }}" x2="92" y2="{{ y }}" class="pro-dash-grid-line"/>
+            {% endfor %}
+            {% for series in dashboard_chart_series.series %}
+            <polyline
+              class="pro-dash-chart-line"
+              fill="none"
+              stroke="{{ series.color }}"
+              stroke-width="0.6"
+              vector-effect="non-scaling-stroke"
+              points="{% for pt in series.points %}{{ pt.x }},{{ pt.y }}{% if not loop.last %} {% endif %}{% endfor %}"
+            />
+            {% endfor %}
+          </svg>
+        </div>
+      </section>
+
+      <section class="pro-dash-widgets" aria-label="Dashboard widgets">
+        {% for widget in command_centre_bottom_widgets %}
+        <article class="pro-dash-widget pro-dash-widget--{{ widget.chart_type|default('bars') }}">
+          <header class="pro-dash-widget-head">
+            <div>
+              <h3>{{ widget.title }}</h3>
+              {% if widget.subtitle %}<p>{{ widget.subtitle }}</p>{% endif %}
+            </div>
+            <i class="fa-solid {{ widget.icon }}" aria-hidden="true"></i>
+          </header>
+          <div class="pro-dash-widget-body">
+            {% if widget.chart_type == 'hbar' %}
+            <ul class="pro-dash-expense-list">
+              {% for row in dashboard_chart_series.expense_rows %}
+              <li>
+                <span class="pro-dash-expense-label">{{ row.label }}</span>
+                <div class="pro-dash-expense-bar-wrap">
+                  <div class="pro-dash-expense-bar" style="width: {{ row.pct }}%; background: {{ row.color }};"></div>
+                </div>
+                <span class="pro-dash-expense-pct">{{ row.pct }}%</span>
+              </li>
+              {% endfor %}
+            </ul>
+            {% elif widget.chart_type == 'scatter' %}
+            <svg class="pro-dash-mini-chart" viewBox="0 0 100 50" aria-hidden="true">
+              <polyline fill="none" stroke="#FF4D97" stroke-width="1.2" points="5,40 20,28 35,32 50,18 65,24 80,12 95,20"/>
+              <polyline fill="none" stroke="#3B82F6" stroke-width="1.2" points="5,35 20,38 35,22 50,30 65,16 80,26 95,14"/>
+            </svg>
+            {% elif widget.chart_type == 'lines' %}
+            <svg class="pro-dash-mini-chart" viewBox="0 0 100 50" aria-hidden="true">
+              <polyline fill="none" stroke="#4ADE80" stroke-width="1.2" points="5,38 25,30 45,34 65,20 85,28 95,18"/>
+              <polyline fill="none" stroke="#9CA3AF" stroke-width="1.2" stroke-dasharray="3 2" points="5,28 25,32 45,26 65,30 85,22 95,26"/>
+            </svg>
+            {% else %}
+            <div class="pro-dash-bar-chart">
+              {% set bars = [
+                ('Projects', dashboard_stats.active_projects|default(0), '#FF4D97'),
+                ('Approvals', dashboard_stats.pending_approvals_count|default(0), '#3B82F6'),
+                ('DPR Today', dashboard_stats.dpr_today_count|default(0), '#4ADE80'),
+                ('Store MR', dashboard_stats.pending_mrs|default(0), '#F59E0B')
+              ] %}
+              {% set max_bar = [bars[0][1], bars[1][1], bars[2][1], bars[3][1]]|max %}
+              {% set max_bar = max_bar if max_bar > 0 else 1 %}
+              {% for label, val, color in bars %}
+              <div class="pro-dash-bar-col">
+                <div class="pro-dash-bar-fill" style="height: {{ ((val / max_bar) * 100)|int }}%; background: {{ color }};"></div>
+                <span>{{ label }}</span>
+              </div>
+              {% endfor %}
+            </div>
+            {% endif %}
+          </div>
+        </article>
+        {% endfor %}
+      </section>
+    </div>
+
+    <div class="pro-dash-content pro-dash-content--alt" data-pro-dash-panel="operations" hidden>
+      <section class="pro-dash-dept-grid" aria-label="Department workspaces">
+        {% for card in command_centre_cards %}
+        <a href="{{ url_for('department_portal', slug=card.slug) }}" class="pro-dash-dept-card" style="--dept-accent: {{ card.accent }};">
+          <span class="pro-dash-dept-icon"><i class="fa-solid {{ card.icon }}" aria-hidden="true"></i></span>
+          <span class="pro-dash-dept-title">{{ card.card_label }}</span>
+          <span class="pro-dash-dept-desc">{{ card.description }}</span>
+          {% for pill in card.stat_pills[:2] %}
+          <span class="pro-dash-dept-pill">{{ pill.value }} {{ pill.label }}</span>
+          {% endfor %}
+        </a>
+        {% endfor %}
+      </section>
+    </div>
+
+    <div class="pro-dash-content pro-dash-content--alt" data-pro-dash-panel="finance" hidden>
+      <section class="pro-dash-kpi-strip pro-dash-kpi-strip--finance" aria-label="Finance KPIs">
+        <article class="pro-dash-kpi-card">
+          <span class="pro-dash-kpi-label">Cash Balance</span>
+          <strong class="pro-dash-kpi-value">{{ dashboard_stats.cash_display|default('—') }}</strong>
+        </article>
+        <article class="pro-dash-kpi-card">
+          <span class="pro-dash-kpi-label">Pending Approvals</span>
+          <strong class="pro-dash-kpi-value">{{ dashboard_stats.pending_approvals_count|default(0) }}</strong>
+        </article>
+        <article class="pro-dash-kpi-card">
+          <span class="pro-dash-kpi-label">Open POs</span>
+          <strong class="pro-dash-kpi-value">{{ command_centre_kpis[4].value if command_centre_kpis|length > 4 else '—' }}</strong>
+        </article>
+      </section>
+      <p class="pro-dash-finance-note">
+        Open <a href="{{ url_for('accounts_hub') }}">Accounts Hub</a> for journals, GST, ledgers &amp; reports.
+      </p>
+    </div>
+  </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/maxek-pro-dashboard.js') }}?v=20260627-pro"></script>
 {% endblock %}

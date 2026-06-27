@@ -1,0 +1,89 @@
+<aside class="pro-dash-sidebar" data-pro-dash-sidebar aria-label="Main navigation">
+  <div class="pro-dash-sidebar-top">
+    <div class="pro-dash-window-dots" aria-hidden="true">
+      <span class="pro-dash-dot pro-dash-dot--red"></span>
+      <span class="pro-dash-dot pro-dash-dot--yellow"></span>
+      <span class="pro-dash-dot pro-dash-dot--green"></span>
+    </div>
+    <button type="button" class="pro-dash-sidebar-collapse" data-pro-sidebar-collapse title="Collapse sidebar" aria-label="Collapse sidebar">
+      <i class="fa-solid fa-angles-left" aria-hidden="true"></i>
+    </button>
+  </div>
+
+  <a class="pro-dash-brand" href="{{ url_for('dashboard') }}">
+    <img
+      src="{{ url_for('static', filename='images/maxek-logo.png') }}"
+      alt=""
+      class="pro-dash-brand-logo"
+      width="32"
+      height="32"
+      aria-hidden="true"
+    >
+    <span class="pro-dash-brand-text">MAX<span>EK</span></span>
+  </a>
+
+  <div class="pro-dash-sidebar-search">
+    <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+    <input type="search" id="pro-dash-search" placeholder="Search modules..." aria-label="Search modules" data-global-search-open readonly>
+    <kbd class="pro-dash-kbd" title="Global search">Ctrl+K</kbd>
+  </div>
+
+  <nav class="pro-dash-nav">
+    <a class="pro-dash-nav-item is-active" href="{{ url_for('dashboard') }}">
+      <i class="fa-solid fa-gauge-high" aria-hidden="true"></i>
+      <span class="pro-dash-nav-label">Dashboard</span>
+    </a>
+
+    <details class="pro-dash-nav-group" open>
+      <summary class="pro-dash-nav-group-summary">
+        <span class="pro-dash-nav-group-title">
+          <i class="fa-regular fa-star" aria-hidden="true"></i>
+          <span class="pro-dash-nav-label">Favorites</span>
+        </span>
+        <i class="fa-solid fa-chevron-down pro-dash-chevron" aria-hidden="true"></i>
+      </summary>
+      <div class="pro-dash-nav-group-items">
+        {% for item in dashboard_shell_favorites|default([]) %}
+        <a class="pro-dash-nav-item pro-dash-nav-item--sub" href="{{ safe_url_for(item.endpoint) }}">
+          <i class="fa-solid {{ item.icon }}" aria-hidden="true"></i>
+          <span class="pro-dash-nav-label">{{ item.label }}</span>
+        </a>
+        {% endfor %}
+      </div>
+    </details>
+
+    {% for group in dashboard_shell_nav_groups|default([]) %}
+    <details class="pro-dash-nav-group"{% if loop.first %} open{% endif %}>
+      <summary class="pro-dash-nav-group-summary">
+        <span class="pro-dash-nav-group-title">
+          <i class="fa-solid {{ group.icon }}" aria-hidden="true"></i>
+          <span class="pro-dash-nav-label">{{ group.label }}</span>
+        </span>
+        <i class="fa-solid fa-chevron-down pro-dash-chevron" aria-hidden="true"></i>
+      </summary>
+      <div class="pro-dash-nav-group-items">
+        {% for item in group.get('items', []) %}
+        <a class="pro-dash-nav-item pro-dash-nav-item--sub" href="{{ safe_url_for(item.endpoint, **(item.get('query') or {})) }}">
+          <i class="fa-solid {{ item.icon }}" aria-hidden="true"></i>
+          <span class="pro-dash-nav-label">{{ item.label }}</span>
+        </a>
+        {% endfor %}
+      </div>
+    </details>
+    {% endfor %}
+  </nav>
+
+  <div class="pro-dash-sidebar-promo">
+    <p class="pro-dash-promo-title">MAXEK Assistant</p>
+    <p class="pro-dash-promo-text">Ask AI about BOQ, DPR, approvals &amp; reports.</p>
+    <button type="button" class="pro-dash-promo-btn" data-ai-open>Try it now</button>
+  </div>
+
+  <div class="pro-dash-sidebar-user">
+    <div class="pro-dash-user-avatar">{{ admin_initial }}</div>
+    <div class="pro-dash-user-meta">
+      <strong>{{ welcome_name or session.get('employee_name') or session.get('username') or 'Administrator' }}</strong>
+      <span>{{ command_centre_branch|default(selected_branch) }} · {{ command_user_role|default(session.get('role') or 'Owner') }}</span>
+    </div>
+  </div>
+</aside>

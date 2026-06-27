@@ -1,0 +1,30 @@
+<header class="pro-dash-header">
+  <div class="pro-dash-tabs" role="tablist" aria-label="Dashboard layouts">
+    <button type="button" class="pro-dash-tab is-active" role="tab" aria-selected="true" data-pro-dash-tab="default">
+      Default layout
+    </button>
+    <button type="button" class="pro-dash-tab" role="tab" aria-selected="false" data-pro-dash-tab="operations">
+      Operations
+    </button>
+    <button type="button" class="pro-dash-tab" role="tab" aria-selected="false" data-pro-dash-tab="finance">
+      Finance
+    </button>
+    <button type="button" class="pro-dash-tab pro-dash-tab--add" title="Add layout" aria-label="Add layout">
+      <i class="fa-solid fa-plus" aria-hidden="true"></i>
+    </button>
+  </div>
+
+  <div class="pro-dash-header-actions">
+    <a class="pro-dash-header-link" href="{{ url_for('help_desk') }}">
+      <i class="fa-regular fa-circle-question" aria-hidden="true"></i>
+      Help
+    </a>
+    <button type="button" class="pro-dash-theme-btn" data-theme-toggle title="Toggle theme" aria-label="Toggle theme">
+      <i class="fa-solid fa-sun" aria-hidden="true"></i>
+    </button>
+    <a class="pro-dash-profile" href="{{ url_for('settings') }}" title="Settings">
+      <span class="pro-dash-profile-avatar">{{ admin_initial }}</span>
+      <span class="pro-dash-profile-name">{{ session.get('employee_name') or session.get('username') or 'Admin' }}</span>
+    </a>
+  </div>
+</header>
