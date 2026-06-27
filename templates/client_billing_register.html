@@ -36,7 +36,13 @@
     <tbody>
       {% for row in rows %}
       <tr>
-        <td><a href="{{ url_for('client_billing_form', view=row.id) }}">{{ row.bill_number }}</a></td>
+        <td>
+          {% if row.approval_status == 'Approved' %}
+          <a href="{{ url_for('client_billing_print', bill_id=row.id, print=1) }}" target="_blank" rel="noopener">{{ row.bill_number }}</a>
+          {% else %}
+          <a href="{{ url_for('client_billing_form', view=row.id) }}">{{ row.bill_number }}</a>
+          {% endif %}
+        </td>
         <td>{{ row.ra_number or '—' }}</td>
         <td>{{ row.bill_date or '—' }}</td>
         <td>{{ row.project_code or '' }} {{ row.project_name }}</td>
@@ -47,7 +53,7 @@
         <td>{{ approval_badge(row.approval_status) }}</td>
         <td>
           {{ maker_row_actions('client_billing_form', 'client_bills', row.id, row.approval_status, 'client_billing', 'client_billing_register') }}
-          <a href="{{ url_for('client_billing_print', bill_id=row.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm" target="_blank">Print</a>
+          <a href="{{ url_for('client_billing_print', bill_id=row.id, print=1) }}" class="erp-btn erp-btn-ghost erp-btn-sm" target="_blank" rel="noopener"><i class="fa-solid fa-file-pdf"></i> PDF</a>
         </td>
       </tr>
       {% else %}

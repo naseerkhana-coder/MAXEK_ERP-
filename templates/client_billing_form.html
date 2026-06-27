@@ -4,7 +4,7 @@
 {% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('client_billing_register') ~ '">Client Billing</a> &gt; ' ~ (view_record.bill_number if view_record else 'New Bill') %}
 {% block page_actions %}
 {% if view_record %}
-<a href="{{ url_for('client_billing_print', bill_id=view_record.id) }}" class="erp-btn erp-btn-ghost" target="_blank"><i class="fa-solid fa-print"></i> Print</a>
+<a href="{{ url_for('client_billing_print', bill_id=view_record.id, print=1) }}" class="erp-btn erp-btn-ghost" target="_blank" rel="noopener"><i class="fa-solid fa-file-pdf"></i> PDF</a>
 {% endif %}
 <a href="{{ url_for('client_billing_register') }}" class="erp-btn erp-btn-ghost">Back to Register</a>
 {% endblock %}

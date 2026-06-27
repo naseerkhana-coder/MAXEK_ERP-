@@ -1,6 +1,10 @@
 {% from 'macros/erp_ui.html' import erp_breadcrumb %}
 <header class="pro-dash-header pro-dash-header--module">
   <div class="pro-dash-module-head">
+    <button type="button" class="pro-dash-back-btn" data-pro-back data-fallback-url="{{ url_for('dashboard') }}" title="Back" aria-label="Go back">
+      <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
+      <span>Back</span>
+    </button>
     <h1 class="pro-dash-module-title">{{ page_title|default(current_nav_group.label|default('Module')) }}</h1>
     {% if breadcrumb_items is defined and breadcrumb_items %}
     {{ erp_breadcrumb(breadcrumb_items) }}

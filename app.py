@@ -20312,10 +20312,13 @@ def client_billing_attachment(attachment_id):
     path = os.path.join(BILLING_DOCS_DIR, row["stored_filename"])
     if not os.path.isfile(path):
         abort(404)
+    ext = os.path.splitext(row["stored_filename"] or "")[1].lower()
+    mimetype = "application/pdf" if ext == ".pdf" else None
     return send_file(
         path,
         as_attachment=request.args.get("download") == "1",
         download_name=row["original_filename"] or row["stored_filename"],
+        mimetype=mimetype,
     )
 
 

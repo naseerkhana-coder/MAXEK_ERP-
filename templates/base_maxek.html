@@ -40,7 +40,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/maxek-field-standards.css') }}?v=20260626-entrypanels">
 
     {% if use_pro_shell|default(false) %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/maxek-pro-dashboard.css') }}?v=20260627-pro-shell">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/maxek-pro-dashboard.css') }}?v=20260627-pro-ui">
     {% endif %}
 
     {% block head_extra %}{% endblock %}
@@ -514,7 +514,7 @@
     {% endif %}
 
     {% if use_pro_shell|default(false) %}
-    <script src="{{ url_for('static', filename='js/maxek-pro-dashboard.js') }}?v=20260627-pro-shell"></script>
+    <script src="{{ url_for('static', filename='js/maxek-pro-dashboard.js') }}?v=20260627-pro-ui"></script>
     {% endif %}
 
     {% block scripts %}{% endblock %}
