@@ -34,6 +34,9 @@ from payroll_service import (
     generate_payroll_run,
     export_register_rows,
     fetch_payroll_lines,
+    fetch_payroll_details,
+    build_payroll_snapshot,
+    update_payroll_snapshot_totals,
     attach_run_employee_summaries,
     get_employee_profile,
     list_eligible_employees,
@@ -3161,7 +3164,7 @@ def _generate_payroll_run_selected(
         ),
     )
     run_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
-    total_gross = total_net = 0.0
+    total_gross = total_deductions = total_net = 0.0
     line_count = 0
     for et, eid in employees:
         if et == "staff":
@@ -3186,6 +3189,7 @@ def _generate_payroll_run_selected(
         else:
             calc = calculate_worker_period_pay(db, emp, period_start, period_end, holidays)
         total_gross += calc["gross_salary"]
+        total_deductions += calc.get("deductions", 0) + calc.get("advance_deduction", 0)
         total_net += calc["net_salary"]
         emp_code, emp_name = _row_employee_identity(emp)
         db.execute(
@@ -3210,7 +3214,18 @@ def _generate_payroll_run_selected(
                 calc.get("holiday_pay", 0), calc["gross_salary"],
                 calc.get("deductions", 0), calc.get("advance_deduction", 0),
                 calc["net_salary"], "Pending", "Draft", "Pending", 0,
-                json.dumps(calc),
+                json.dumps(
+                    build_payroll_snapshot(
+                        db,
+                        calc,
+                        emp,
+                        period_start=period_start,
+                        period_end=period_end,
+                        month=month,
+                        year=year,
+                        created_by=created_by,
+                    )
+                ),
             ),
         )
         line_count += 1
@@ -3218,8 +3233,15 @@ def _generate_payroll_run_selected(
         db.execute("DELETE FROM payroll_runs WHERE id=?", (run_id,))
         raise ValueError("No valid employees found for selected list.")
     db.execute(
-        "UPDATE payroll_runs SET total_gross=?, total_net=?, employee_count=? WHERE id=?",
-        (round(total_gross, 2), round(total_net, 2), line_count, run_id),
+        "UPDATE payroll_runs SET total_gross=?, total_deductions=?, total_net=?, "
+        "employee_count=? WHERE id=?",
+        (
+            round(total_gross, 2),
+            round(total_deductions, 2),
+            round(total_net, 2),
+            line_count,
+            run_id,
+        ),
     )
     return run_id
 
@@ -13767,21 +13789,38 @@ def payroll():
                         return redirect(url_for("payroll", view=run_id))
                     db.execute(
                         "UPDATE payroll_lines SET gross_salary=?, deductions=?, advance_deduction=?, "
-                        "net_salary=?, remarks=? WHERE id=?",
+                        "net_salary=?, calc_snapshot=?, remarks=? WHERE id=?",
                         (
-                            gross, deductions, advance, net,
+                            gross,
+                            deductions,
+                            advance,
+                            net,
+                            update_payroll_snapshot_totals(
+                                db.execute(
+                                    "SELECT calc_snapshot FROM payroll_lines WHERE id=?",
+                                    (line_id,),
+                                ).fetchone()["calc_snapshot"],
+                                gross_salary=gross,
+                                deductions=deductions,
+                                advance_deduction=advance,
+                                net_salary=net,
+                            ),
                             request.form.get("remarks", "").strip(),
                             line_id,
                         ),
                     )
                     totals = db.execute(
-                        "SELECT SUM(gross_salary) AS g, SUM(net_salary) AS n FROM payroll_lines WHERE payroll_run_id=?",
+                        "SELECT SUM(gross_salary) AS g, "
+                        "SUM(COALESCE(deductions, 0) + COALESCE(advance_deduction, 0)) AS d, "
+                        "SUM(net_salary) AS n FROM payroll_lines WHERE payroll_run_id=?",
                         (run_id,),
                     ).fetchone()
                     db.execute(
-                        "UPDATE payroll_runs SET total_gross=?, total_net=?, modified_at=? WHERE id=?",
+                        "UPDATE payroll_runs SET total_gross=?, total_deductions=?, "
+                        "total_net=?, modified_at=? WHERE id=?",
                         (
                             totals["g"] or 0,
+                            totals["d"] or 0,
                             totals["n"] or 0,
                             get_app_now(db).strftime("%Y-%m-%d %H:%M:%S"),
                             run_id,
@@ -13907,7 +13946,7 @@ def payroll():
         view_run = db.execute("SELECT * FROM payroll_runs WHERE id=?", (view_id,)).fetchone()
         if view_run:
             view_run = dict(view_run)
-            view_lines = fetch_payroll_lines(db, run_id=view_id)
+            view_lines = fetch_payroll_details(db, run_id=view_id)
             wf_ctx = _workflow_view_context(
                 module_id, view_id, record_table, view_run.get("approval_status")
             )
@@ -14159,7 +14198,7 @@ def payroll_print_run(run_id):
         return redirect(url_for("payroll"))
     run = dict(run)
     try:
-        lines = fetch_payroll_lines(db, run_id=run_id)
+        lines = fetch_payroll_details(db, run_id=run_id)
     except sqlite3.OperationalError:
         app.logger.exception("Payroll register print failed for run_id=%s", run_id)
         flash("Could not load payroll register. Please contact support if this persists.")
@@ -14168,7 +14207,29 @@ def payroll_print_run(run_id):
         "payroll_run_print.html",
         run=run,
         lines=lines,
+        report_mode=request.args.get("view", "details"),
+        print_date=get_app_now(db).strftime("%d %b %Y %H:%M"),
         print_mode=request.args.get("print") == "1",
+    )
+
+
+@app.route("/payroll/details/<int:line_id>")
+@login_required
+def payroll_employee_details(line_id):
+    db = get_db()
+    prepare_payroll_page_db(db)
+    rows = fetch_payroll_details(db, line_id=line_id)
+    if not rows:
+        flash("Payroll details not found.")
+        return redirect(url_for("payroll"))
+    detail = rows[0]
+    run = db.execute(
+        "SELECT * FROM payroll_runs WHERE id=?", (detail["payroll_run_id"],)
+    ).fetchone()
+    return render_template(
+        "payroll_employee_details.html",
+        detail=detail,
+        run=dict(run) if run else {},
     )
 
 
@@ -14177,7 +14238,7 @@ def payroll_print_run(run_id):
 def payroll_print_slip(line_id):
     db = get_db()
     prepare_payroll_page_db(db)
-    line_rows = fetch_payroll_lines(db, line_id=line_id)
+    line_rows = fetch_payroll_details(db, line_id=line_id)
     if not line_rows:
         flash("Pay slip not found.")
         return redirect(url_for("payroll"))
@@ -14204,6 +14265,7 @@ def payroll_print_slip(line_id):
         line=line,
         bank=bank,
         payment=dict(payment) if payment else None,
+        print_date=get_app_now(db).strftime("%d %b %Y %H:%M"),
         print_mode=request.args.get("print") == "1",
     )
 
