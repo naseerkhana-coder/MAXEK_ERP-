@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="520" height="220" viewBox="0 0 520 220">
+  <rect width="520" height="220" rx="24" fill="#ffffff"/>
+  <polygon points="128,38 166,38 257,129 219,129" fill="#2c2d31"/>
+  <polygon points="246,38 284,38 374,129 336,129" fill="#ef002e"/>
+  <polygon points="142,56 112,94 167,94" fill="#1d1f23"/>
+  <polygon points="220,56 190,94 245,94" fill="#ef002e"/>
+  <text x="70" y="185" font-family="Segoe UI, Arial, sans-serif" font-size="70" font-weight="700" letter-spacing="4" fill="#2c2d31">MAX</text>
+  <text x="248" y="185" font-family="Segoe UI, Arial, sans-serif" font-size="70" font-weight="700" letter-spacing="4" fill="#ef002e">E</text>
+  <text x="302" y="185" font-family="Segoe UI, Arial, sans-serif" font-size="70" font-weight="700" letter-spacing="4" fill="#2c2d31">K</text>
+  <text x="262" y="210" font-family="Segoe UI, Arial, sans-serif" font-size="18" letter-spacing="10" text-anchor="middle" fill="#2c2d31">PRIVATE LIMITED</text>
+</svg>

@@ -1,10 +1,15 @@
 {% extends 'base_maxek.html' %}
 
 {% from 'macros/erp_ui.html' import role_status_badge, maker_row_actions, rejection_notice, workflow_modals, transaction_view_tabs, erp_pagination %}
+{% from '_payroll_detail_sections.html' import payroll_detail %}
 
 {% set page_title = 'Payroll Generation' %}
 
 {% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; HR &gt; Payroll' %}
+
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/payroll-details.css') }}">
+{% endblock %}
 
 {% block page_actions %}
 
@@ -80,7 +85,9 @@
 
     {% if draft_saved %}
 
-    <a href="{{ url_for('payroll_print_run', run_id=view_run.id, print=1) }}" target="_blank" class="erp-btn erp-btn-ghost erp-btn-sm"><i class="fa-solid fa-print"></i> Print Register</a>
+    <a href="{{ url_for('payroll_print_run', run_id=view_run.id, view='summary', print=1) }}" target="_blank" class="erp-btn erp-btn-ghost erp-btn-sm"><i class="fa-solid fa-print"></i> Print Summary</a>
+
+    <a href="{{ url_for('payroll_print_run', run_id=view_run.id, view='details', print=1) }}" target="_blank" class="erp-btn erp-btn-ghost erp-btn-sm"><i class="fa-solid fa-print"></i> Print Full Details</a>
 
     <form method="post" style="display:inline" onsubmit="return confirm('Mark this payroll ready for payment? You can record payments under Payments.');">
 
@@ -93,6 +100,8 @@
     </form>
 
     {% endif %}
+
+    <a href="#full-month-payroll" class="erp-btn erp-btn-ghost erp-btn-sm"><i class="fa-solid fa-table-list"></i> View Full Month Details</a>
 
     <form method="post" style="display:inline"><input type="hidden" name="form_action" value="submit_verification"><input type="hidden" name="run_id" value="{{ view_run.id }}"><button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Submit for Verification</button></form>
 
@@ -134,7 +143,7 @@
 
 
 
-<div class="erp-table-panel" data-erp-table>
+<div class="erp-table-panel" id="full-month-payroll" data-erp-table>
 
   <div class="erp-table-toolbar"><h3 class="erp-table-title">Payroll Lines</h3></div>
 
@@ -181,6 +190,8 @@
           <td>
 
             {% if draft_saved or view_run.status != 'Draft' %}
+
+            <a href="{{ url_for('payroll_employee_details', line_id=line.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm" title="View full month details"><i class="fa-solid fa-eye"></i></a>
 
             <a href="{{ url_for('payroll_print_slip', line_id=line.id, print=1) }}" target="_blank" class="erp-btn erp-btn-ghost erp-btn-sm" title="Print payslip"><i class="fa-solid fa-print"></i></a>
 
@@ -259,6 +270,15 @@
         </tr>
 
         {% endif %}
+
+        <tr>
+          <td colspan="10">
+            <details class="payroll-line-details">
+              <summary>Expand full monthly calculation for {{ line.employee_name or line.employee_code }}</summary>
+              {{ payroll_detail(line, false) }}
+            </details>
+          </td>
+        </tr>
 
         {% else %}
 
@@ -711,4 +731,3 @@
 <script src="{{ url_for('static', filename='js/payroll-forms.js') }}"></script>
 
 {% endblock %}
-

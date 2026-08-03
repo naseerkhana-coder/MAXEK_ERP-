@@ -1,0 +1,106 @@
+{% macro value_or_dash(value, money=false, suffix='') -%}
+  {%- if value is none or value == '' -%}
+    —
+  {%- elif money -%}
+    ₹ {{ '%.2f'|format(value|float) }}
+  {%- else -%}
+    {{ value }}{{ suffix }}
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro payroll_detail(detail, show_header=true) %}
+<div class="payroll-detail-shell">
+  {% if show_header %}
+  <div class="payroll-detail-header">
+    <div>
+      <h3>{{ detail.employee_name or 'Employee payroll detail' }}</h3>
+      <p>{{ detail.employee_code or 'Code unavailable' }} · {{ detail.payroll_month or 'Payroll period unavailable' }}</p>
+    </div>
+    <strong>{{ detail.payment_status or 'Pending' }}</strong>
+  </div>
+  {% endif %}
+
+  <div class="payroll-detail-grid">
+    <section class="payroll-detail-section" aria-label="Employee details">
+      <h4>Employee details</h4>
+      <dl class="payroll-detail-list">
+        <div><dt>Employee code</dt><dd>{{ value_or_dash(detail.employee_code) }}</dd></div>
+        <div><dt>Employee name</dt><dd>{{ value_or_dash(detail.employee_name) }}</dd></div>
+        <div><dt>Company</dt><dd>{{ value_or_dash(detail.company) }}</dd></div>
+        <div><dt>Department</dt><dd>{{ value_or_dash(detail.department) }}</dd></div>
+        <div><dt>Designation</dt><dd>{{ value_or_dash(detail.designation) }}</dd></div>
+        <div><dt>Project / site</dt><dd>{{ value_or_dash(detail.project_name) }}</dd></div>
+        {% if detail.subcontractor_name %}
+        <div><dt>Subcontractor</dt><dd>{{ detail.subcontractor_name }}</dd></div>
+        {% endif %}
+        <div><dt>Payroll month</dt><dd>{{ value_or_dash(detail.payroll_month) }}</dd></div>
+        <div><dt>Salary type</dt><dd>{{ value_or_dash(detail.salary_type) }}</dd></div>
+        <div><dt>Bank / payment</dt><dd>{{ value_or_dash(detail.payment_method or detail.bank_name) }}</dd></div>
+      </dl>
+    </section>
+
+    <section class="payroll-detail-section" aria-label="Attendance and time details">
+      <h4>Attendance and time</h4>
+      <dl class="payroll-detail-list">
+        <div><dt>Calendar days</dt><dd>{{ value_or_dash(detail.attendance.calendar_days) }}</dd></div>
+        <div><dt>Working days</dt><dd>{{ value_or_dash(detail.attendance.working_days) }}</dd></div>
+        <div><dt>Present days</dt><dd>{{ value_or_dash(detail.attendance.present_days) }}</dd></div>
+        <div><dt>Paid days</dt><dd>{{ value_or_dash(detail.attendance.paid_days) }}</dd></div>
+        <div><dt>Absent days</dt><dd>{{ value_or_dash(detail.attendance.absent_days) }}</dd></div>
+        <div><dt>Weekly offs</dt><dd>{{ value_or_dash(detail.attendance.weekly_offs) }}</dd></div>
+        <div><dt>Holidays</dt><dd>{{ value_or_dash(detail.attendance.holidays) }}</dd></div>
+        <div><dt>Paid leave</dt><dd>{{ value_or_dash(detail.attendance.paid_leave) }}</dd></div>
+        <div><dt>Unpaid leave</dt><dd>{{ value_or_dash(detail.attendance.unpaid_leave) }}</dd></div>
+        <div><dt>Half days</dt><dd>{{ value_or_dash(detail.attendance.half_days) }}</dd></div>
+        <div><dt>Normal working hours</dt><dd>{{ value_or_dash(detail.attendance.normal_hours, suffix=' hrs') }}</dd></div>
+        <div><dt>Approved overtime</dt><dd>{{ value_or_dash(detail.attendance.overtime_hours, suffix=' hrs') }}</dd></div>
+        <div><dt>Late hours</dt><dd>{{ value_or_dash(detail.attendance.late_hours, suffix=' hrs') }}</dd></div>
+        <div><dt>Late deduction</dt><dd>{{ value_or_dash(detail.attendance.late_deduction, true) }}</dd></div>
+        <div><dt>Approved timesheet</dt><dd>{{ value_or_dash(detail.attendance.timesheet_references|join(', ') if detail.attendance.timesheet_references else none) }}</dd></div>
+      </dl>
+    </section>
+
+    <section class="payroll-detail-section" aria-label="Earnings">
+      <h4>Earnings</h4>
+      <dl class="payroll-detail-list">
+        <div><dt>Basic salary</dt><dd>{{ value_or_dash(detail.earnings.basic_salary, true) }}</dd></div>
+        <div><dt>Basic earned</dt><dd>{{ value_or_dash(detail.earnings.basic_earned, true) }}</dd></div>
+        <div><dt>HRA</dt><dd>{{ value_or_dash(detail.earnings.hra, true) }}</dd></div>
+        <div><dt>Allowances</dt><dd>{{ value_or_dash(detail.earnings.allowances, true) }}</dd></div>
+        <div><dt>Overtime amount</dt><dd>{{ value_or_dash(detail.earnings.overtime_amount, true) }}</dd></div>
+        <div><dt>Holiday pay</dt><dd>{{ value_or_dash(detail.earnings.holiday_pay, true) }}</dd></div>
+        <div><dt>Incentives</dt><dd>{{ value_or_dash(detail.earnings.incentives, true) }}</dd></div>
+        <div><dt>Arrears</dt><dd>{{ value_or_dash(detail.earnings.arrears, true) }}</dd></div>
+        <div><dt>Reimbursements</dt><dd>{{ value_or_dash(detail.earnings.reimbursements, true) }}</dd></div>
+        <div><dt>Other earnings</dt><dd>{{ value_or_dash(detail.earnings.other_earnings, true) }}</dd></div>
+        <div class="payroll-detail-total"><dt>Gross earnings</dt><dd>{{ value_or_dash(detail.gross_earnings, true) }}</dd></div>
+      </dl>
+    </section>
+
+    <section class="payroll-detail-section" aria-label="Deductions">
+      <h4>Deductions</h4>
+      <dl class="payroll-detail-list">
+        <div><dt>Absence deduction</dt><dd>{{ value_or_dash(detail.deductions_detail.absence_deduction, true) }}</dd></div>
+        <div><dt>Unpaid leave deduction</dt><dd>{{ value_or_dash(detail.deductions_detail.unpaid_leave_deduction, true) }}</dd></div>
+        <div><dt>Late deduction</dt><dd>{{ value_or_dash(detail.deductions_detail.late_deduction, true) }}</dd></div>
+        <div><dt>Advance recovery</dt><dd>{{ value_or_dash(detail.deductions_detail.advance_recovery, true) }}</dd></div>
+        <div><dt>Loan recovery</dt><dd>{{ value_or_dash(detail.deductions_detail.loan_recovery, true) }}</dd></div>
+        <div><dt>PF</dt><dd>{{ value_or_dash(detail.deductions_detail.pf, true) }}</dd></div>
+        <div><dt>ESI</dt><dd>{{ value_or_dash(detail.deductions_detail.esi, true) }}</dd></div>
+        <div><dt>Professional tax</dt><dd>{{ value_or_dash(detail.deductions_detail.professional_tax, true) }}</dd></div>
+        <div><dt>TDS</dt><dd>{{ value_or_dash(detail.deductions_detail.tds, true) }}</dd></div>
+        <div><dt>Other deductions</dt><dd>{{ value_or_dash(detail.deductions_detail.other_deductions, true) }}</dd></div>
+        <div class="payroll-detail-total"><dt>Total deductions</dt><dd>{{ value_or_dash(detail.total_deductions, true) }}</dd></div>
+      </dl>
+    </section>
+  </div>
+
+  <div class="payroll-detail-balance" aria-label="Final payroll values">
+    <div><span>Gross earnings</span><strong>{{ value_or_dash(detail.gross_earnings, true) }}</strong></div>
+    <div><span>Total deductions</span><strong>{{ value_or_dash(detail.total_deductions, true) }}</strong></div>
+    <div><span>Net payable</span><strong>{{ value_or_dash(detail.net_payable, true) }}</strong></div>
+    <div><span>Already paid</span><strong>{{ value_or_dash(detail.amount_already_paid, true) }}</strong></div>
+    <div><span>Balance payable</span><strong>{{ value_or_dash(detail.balance_payable, true) }}</strong></div>
+  </div>
+</div>
+{% endmacro %}
