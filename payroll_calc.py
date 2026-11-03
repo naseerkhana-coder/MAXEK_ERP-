@@ -104,33 +104,46 @@ def month_day_counts(month: int, year: int) -> dict[str, int]:
 
 
 def employment_window(joining_date: Any, exit_date: Any, start: Any, end: Any) -> dict[str, Any] | None:
-    """Days an employee with an exit date can be paid for inside a payroll period.
+    """Days an employee can be paid for inside a payroll period.
 
-    Returns ``None`` when no (valid) exit date is set, so records without one are
-    calculated exactly as before. With an exit date, pay runs from the later of the
-    period start and the joining date to the earlier of the period end and the exit
-    date, **inclusive** of the exit date. An exit on a Sunday simply ends the window
-    on that Sunday (Sundays are never working days, so nothing extra is paid).
+    The window runs from the later of the period start and the **joining date** to
+    the earlier of the period end and the **exit date**, both ends inclusive. Either
+    date may be missing: a missing exit date does not disable joining-date proration
+    (and vice versa). An exit on a Sunday simply ends the window on that Sunday
+    (Sundays are never working days, so nothing extra is paid).
 
-    The daily-rate divisor is still the *full period's* working days; this window
-    only limits how many of those days can be payable.
+    ``restricted`` is False when the window covers the whole period - the ordinary
+    case for staff who joined earlier and have not left - so such records behave
+    exactly as they did before windows existed. The daily-rate divisor is always the
+    *full period's* working days; the window only limits how many of those days can
+    be payable. Returns ``None`` only for an unusable period.
     """
-    exit_on = parse_iso_date(exit_date)
-    if exit_on is None:
-        return None
     s, e = parse_iso_date(start), parse_iso_date(end)
     if not s or not e or e < s:
         return None
     joined = parse_iso_date(joining_date)
+    exit_on = parse_iso_date(exit_date)
     win_start = max(s, joined) if joined else s
-    win_end = min(e, exit_on)
+    win_end = min(e, exit_on) if exit_on else e
+    base = {
+        "joining_date": joined.isoformat() if joined else None,
+        "exit_date": exit_on.isoformat() if exit_on else None,
+    }
     if win_end < win_start:
-        counts = {"calendar_days": 0, "sundays": 0, "working_days": 0}
-        return {"exit_date": exit_on.isoformat(), "window_start": None, "window_end": None, **counts}
+        return {
+            **base,
+            "window_start": None,
+            "window_end": None,
+            "restricted": True,
+            "calendar_days": 0,
+            "sundays": 0,
+            "working_days": 0,
+        }
     return {
-        "exit_date": exit_on.isoformat(),
+        **base,
         "window_start": win_start.isoformat(),
         "window_end": win_end.isoformat(),
+        "restricted": (win_start, win_end) != (s, e),
         **period_day_counts(win_start, win_end),
     }
 

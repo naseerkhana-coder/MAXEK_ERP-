@@ -48,6 +48,7 @@ from payroll_service import (
     serialize_eligible_employee,
     ensure_no_payroll_overlap,
     ensure_staff_not_departed,
+    ensure_attendance_covers_employment,
     explain_payroll_eligibility,
     line_day_basis,
     payroll_overlap_index,
@@ -3973,6 +3974,19 @@ def _generate_payroll_run_selected(
     employees = list(dict.fromkeys((et, int(eid)) for et, eid in employees))
     ensure_no_payroll_overlap(db, employees, period_start, period_end)
     ensure_staff_not_departed(db, employees, period_start)
+    _staff_ids = [int(eid) for et, eid in employees if et == "staff"]
+    if _staff_ids:
+        ensure_attendance_covers_employment(
+            db,
+            [
+                dict(r)
+                for r in db.execute(
+                    f"SELECT * FROM staff WHERE id IN ({','.join('?' * len(_staff_ids))})", _staff_ids
+                ).fetchall()
+            ],
+            period_start,
+            period_end,
+        )
     if employment_category == "company_staff":
         project_id = None
     run_ref = f"PR-{datetime.now().strftime('%Y%m%d%H%M%S')}"
@@ -19002,7 +19016,7 @@ def payroll_export_register(run_id):
         "period_start", "period_end", "base_salary", "working_days", "present_days",
         "payable_days", "daily_rate", "ot_hours",
         "ot_amount", "holiday_pay", "gross_salary", "deductions", "advance_deduction",
-        "net_salary", "calc_basis", "payment_status", "verification_status", "approval_status",
+        "net_salary", "calc_basis", "exit_date", "payment_status", "verification_status", "approval_status",
     ]
     export_cols = [c for c in cols if c in df.columns]
     df = df[export_cols]

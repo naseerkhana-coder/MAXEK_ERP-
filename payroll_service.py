@@ -233,6 +233,13 @@ def line_day_basis(line: dict) -> dict:
         "unpaid_absence_days": calc.get("unpaid_absence_days") if current else None,
         "daily_rate": calc.get("daily_rate") if current else None,
         "sunday_worked_days": calc.get("sunday_worked_days") if current else None,
+        # Employment window (current lines only); lets reports show joiners/leavers.
+        "joining_date": calc.get("joining_date") if current else None,
+        "exit_date": calc.get("exit_date") if current else None,
+        "window_start": calc.get("window_start") if current else None,
+        "window_end": calc.get("window_end") if current else None,
+        "restricted": bool(calc.get("employment_restricted")) if current else False,
+        "entitled_working_days": calc.get("entitled_working_days") if current else None,
     }
 
 
@@ -520,6 +527,86 @@ def _fetch_monthly_attendance_summary(db, staff_id: int, start: str, end: str) -
         return None
 
 
+class PayrollAttendanceError(ValueError):
+    """Attendance cannot establish payable days for the employment window."""
+
+
+def _summary_window_issue(summary: dict, window: dict, staff_row: dict) -> str | None:
+    """Why a monthly-summary entry cannot be trusted for a restricted window, or None.
+
+    A monthly entry is only totals, so it cannot say *which* days were worked. It is
+    accepted for a partial-period employee only when it explicitly accounts for the
+    employment window: worked + half + absent days must equal the window's working
+    days (or its calendar days, the Sunday-inclusive convention already allowed for
+    monthly entries). Otherwise the entry plainly covers days outside the window and
+    we refuse to guess how its absences should be split.
+    """
+    entered = round(
+        float(summary.get("worked_days") or 0)
+        + float(summary.get("half_days") or 0)
+        + float(summary.get("absent_days") or 0),
+        2,
+    )
+    if entered in (float(window["working_days"]), float(window["calendar_days"])):
+        return None
+    who = staff_row.get("staff_name") or staff_row.get("employee_code") or f"staff #{staff_row.get('id')}"
+    return (
+        f"{who}: the monthly attendance entry totals {entered:g} days (worked + half + absent) but "
+        f"employment in this period runs {window['window_start']} to {window['window_end']} "
+        f"({window['working_days']} working days, {window['calendar_days']} calendar days). "
+        "Enter dated attendance for those dates, or correct the monthly entry so it covers only "
+        f"that range ({window['working_days']} days, or {window['calendar_days']} counting Sundays)."
+    )
+
+
+def _monthly_attendance_basis(db, staff_row: dict, start: str, end: str, window: dict | None) -> dict:
+    """Pick the attendance source for a monthly-salaried employee.
+
+    * Unrestricted window: existing precedence (monthly summary, else dated rows).
+    * Restricted window (joined or left inside the period): a monthly summary is used
+      only if it validates against the window; otherwise dated attendance inside the
+      window is used; otherwise ``PayrollAttendanceError`` explains what is needed.
+    Nothing is ever guessed.
+    """
+    summary = _fetch_monthly_attendance_summary(db, staff_row["id"], start, end)
+    restricted = bool(window and window["restricted"])
+    if not restricted:
+        if summary:
+            return {"summary": summary, "rows": []}
+        return {"summary": None, "rows": fetch_attendance_for_employee(db, "staff", staff_row["id"], start, end)}
+    if window["working_days"] == 0 and not window.get("window_start"):
+        return {"summary": None, "rows": []}  # not employed at all in this period: nothing payable
+    issue = None
+    if summary:
+        issue = _summary_window_issue(summary, window, staff_row)
+        if issue is None:
+            return {"summary": summary, "rows": []}
+    rows = [
+        r
+        for r in fetch_attendance_for_employee(db, "staff", staff_row["id"], start, end)
+        if in_window(r.get("attendance_date"), window)
+    ]
+    if rows:
+        return {"summary": None, "rows": rows}
+    if issue:
+        raise PayrollAttendanceError(issue)
+    return {"summary": None, "rows": []}
+
+
+def validate_monthly_attendance_basis(db, staff_rows: list[dict], start: str, end: str) -> list[str]:
+    """Problems that would stop monthly staff being calculated; empty list when fine."""
+    problems: list[str] = []
+    for row in staff_rows:
+        if (row.get("salary_type") or "Monthly").strip() != "Monthly":
+            continue
+        window = employment_window(row.get("joining_date"), row.get("exit_date"), start, end)
+        try:
+            _monthly_attendance_basis(db, row, start, end, window)
+        except PayrollAttendanceError as exc:
+            problems.append(str(exc))
+    return problems
+
+
 def calculate_monthly_staff_pay(
     db,
     staff_row: dict,
@@ -543,44 +630,40 @@ def calculate_monthly_staff_pay(
     holiday_pay = (staff_row.get("holiday_pay_applicable") or "No") == "Yes"
     counts = period_day_counts(start, end)
     working_days = counts["working_days"]
-    # Optional exit date: pay only through it (inclusive), but keep the FULL month's
-    # working days as the divisor. No exit date -> window is None -> unchanged maths.
+    # Employment window: joining date .. exit date (either may be missing), inclusive.
+    # The divisor stays the FULL period's working days; the window only limits how
+    # many days can be payable. Staff employed for the whole period are unrestricted
+    # and are calculated exactly as before.
     window = employment_window(staff_row.get("joining_date"), staff_row.get("exit_date"), start, end)
+    restricted = bool(window and window["restricted"])
     entitled_working_days = window["working_days"] if window else working_days
     # A holiday on a Sunday is already a non-working day: never pay it twice.
     holiday_dates = {
         str(h["holiday_date"])[:10]
         for h in (holidays or [])
-        if not is_sunday(h["holiday_date"]) and in_window(h["holiday_date"], window)
+        if not is_sunday(h["holiday_date"]) and (not restricted or in_window(h["holiday_date"], window))
     }
-    monthly_summary = _fetch_monthly_attendance_summary(db, staff_id, start, end)
+    basis = _monthly_attendance_basis(db, staff_row, start, end, window)
+    monthly_summary = basis["summary"]
     sunday_worked_days = 0.0
     recorded_absent_days = None
     if monthly_summary:
         # Monthly summary entries already account for holidays (existing rule).
+        # For a restricted window the entry has been validated as an explicit
+        # in-window entry, so its figures are used as entered - never re-assigned.
         recorded_absent_days = float(monthly_summary.get("absent_days") or 0)
-        # Absences recorded against days after the exit date (or before joining)
-        # are not chargeable: assume they fall on the days outside the window first.
-        outside_days = working_days - entitled_working_days
-        chargeable_absent = max(recorded_absent_days - outside_days, 0.0) if window else recorded_absent_days
         resolved = resolve_payable_days(
             entitled_working_days,
             present_days=monthly_summary["present_days"],
-            recorded_absent_days=chargeable_absent,
+            recorded_absent_days=recorded_absent_days,
             half_days=monthly_summary.get("half_days") or 0,
         )
         ot_hours = float(monthly_summary["ot_hours"] or 0)
     else:
-        attendance = fetch_attendance_for_employee(db, "staff", staff_id, start, end)
-        full_summary = summarize_attendance(attendance)
-        # Payable days only count attendance inside the employment window; OT hours
-        # keep coming from every attendance row, so no overtime under the existing
-        # rules is dropped.
-        att_summary = (
-            summarize_attendance([r for r in attendance if in_window(r.get("attendance_date"), window)])
-            if window
-            else full_summary
-        )
+        # Dated attendance. Rows before joining / after exit earn neither days nor
+        # overtime; Sunday overtime inside the window is kept (Sundays add no
+        # payable day, but their OT hours are still summed).
+        att_summary = summarize_attendance(basis["rows"])
         sunday_worked_days = float(att_summary["sunday_present_days"])
         paid_holidays = 0
         if holiday_pay and holiday_dates:
@@ -592,7 +675,7 @@ def calculate_monthly_staff_pay(
             present_days=att_summary["working_present_days"],
             paid_holiday_days=paid_holidays,
         )
-        ot_hours = float(full_summary["ot_hours"])
+        ot_hours = float(att_summary["ot_hours"])
 
     breakdown = monthly_pay_breakdown(
         monthly_salary,
@@ -620,7 +703,11 @@ def calculate_monthly_staff_pay(
         "calendar_days": counts["calendar_days"],
         "sundays": counts["sundays"],
         "working_days": working_days,
+        "joining_date": window["joining_date"] if window else None,
         "exit_date": window["exit_date"] if window else None,
+        "window_start": window["window_start"] if window else None,
+        "window_end": window["window_end"] if window else None,
+        "employment_restricted": restricted,
         "entitled_working_days": entitled_working_days,
         "not_employed_days": working_days - entitled_working_days,
         "present_days": resolved["worked_working_days"],
@@ -1479,6 +1566,16 @@ def ensure_no_payroll_overlap(
 # ---------------------------------------------------------------------------
 
 
+def ensure_attendance_covers_employment(db, staff_rows: list[dict], period_start: str, period_end: str) -> None:
+    """Raise ``ValueError`` (before any run is created) if monthly attendance can't
+    establish payable days inside someone's joining/exit window."""
+    problems = validate_monthly_attendance_basis(db, staff_rows, period_start, period_end)
+    if problems:
+        shown = " | ".join(problems[:5])
+        more = f" (+{len(problems) - 5} more)" if len(problems) > 5 else ""
+        raise ValueError(f"Attendance does not match employment dates - {shown}{more}")
+
+
 def ensure_staff_not_departed(db, employees: list[tuple[str, int]], period_start: str) -> None:
     """Refuse payroll for staff whose exit date is before the period starts.
 
@@ -1698,6 +1795,9 @@ def generate_payroll_run(
         period_start,
         period_end,
     )
+    ensure_attendance_covers_employment(
+        db, [e for e in employees if e["employee_type"] == "staff"], period_start, period_end
+    )
 
     run_ref = f"PR-{datetime.now().strftime('%Y%m%d%H%M%S')}"
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -1794,6 +1894,9 @@ def export_register_rows(db, run_id: int) -> list[dict]:
         row["payable_days"] = basis["payable_days"]
         row["daily_rate"] = basis["daily_rate"]
         row["calc_basis"] = "Working days excl. Sundays" if not basis["legacy"] else "Legacy (calendar days)"
+        row["exit_date"] = basis["exit_date"] or ""
+        row["employed_from"] = basis["window_start"] or ""
+        row["employed_to"] = basis["window_end"] or ""
     return rows
 
 
@@ -1935,6 +2038,7 @@ def _dashboard_row(emp: dict | None, line: dict | None, day_counts: dict) -> dic
             "monthly_salary": float(line.get("base_salary") or 0),
             "working_days": basis["working_days"],
             "payable_days": basis["payable_days"],
+            "exit_date": basis["exit_date"],
             "legacy": basis["legacy"],
             "gross": gross,
             "deductions": deductions,

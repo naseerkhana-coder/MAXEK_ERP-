@@ -45,11 +45,21 @@ def oct_days(first, last):
 # ───────────────────────────── pure window maths ─────────────────────────────
 
 
-def test_no_exit_date_means_no_window():
-    assert employment_window("2025-01-01", None, "2026-10-01", "2026-10-31") is None
-    assert employment_window("2025-01-01", "", "2026-10-01", "2026-10-31") is None
-    assert employment_window("2025-01-01", "not-a-date", "2026-10-01", "2026-10-31") is None
+def test_no_exit_date_does_not_restrict_an_established_employee():
+    for exit_date in (None, "", "not-a-date"):
+        w = employment_window("2025-01-01", exit_date, "2026-10-01", "2026-10-31")
+        assert w["restricted"] is False and w["working_days"] == 27 and w["exit_date"] is None
+    assert employment_window("2025-01-01", None, "bad", "2026-10-31") is None
     assert in_window("2026-10-20", None) is True
+
+
+def test_missing_exit_date_does_not_disable_joining_date_proration():
+    w = employment_window("2026-10-15", None, "2026-10-01", "2026-10-31")
+    assert (w["window_start"], w["window_end"]) == ("2026-10-15", "2026-10-31")
+    assert w["restricted"] is True and w["working_days"] == 15   # 17 days minus Sundays 18th, 25th
+    assert employment_window(None, None, "2026-10-01", "2026-10-31")["restricted"] is False
+    later = employment_window("2026-11-05", None, "2026-10-01", "2026-10-31")
+    assert later["working_days"] == 0 and later["window_start"] is None   # joins after the period
 
 
 def test_window_is_inclusive_and_excludes_sundays_from_working_days():
@@ -66,6 +76,7 @@ def test_window_is_inclusive_and_excludes_sundays_from_working_days():
 def test_window_edges():
     # Exit on/after the period end -> whole month; before it starts -> nothing.
     assert employment_window(None, "2026-10-31", "2026-10-01", "2026-10-31")["working_days"] == 27
+    assert employment_window(None, "2026-10-31", "2026-10-01", "2026-10-31")["restricted"] is False
     assert employment_window(None, "2027-03-01", "2026-10-01", "2026-10-31")["working_days"] == 27
     gone = employment_window(None, "2026-09-30", "2026-10-01", "2026-10-31")
     assert gone["working_days"] == 0 and gone["window_start"] is None
@@ -190,25 +201,6 @@ def test_paid_holiday_after_exit_is_not_paid(ctx):
     calc = pay(db, sid, 2026, 10)
     assert calc["holiday_pay"] == 1000.00        # the 14th only
     assert calc["gross_salary"] == 13000.00
-
-
-def test_monthly_summary_path_respects_exit_date(ctx):
-    db, _ = ctx
-    sid = add_staff(db, "Summary Leaver", "EXT170")
-    db.execute(
-        "INSERT INTO staff_monthly_attendance(staff_id, year_month, worked_days, half_days, "
-        "absent_days, ot_hours, approval_status) VALUES(?,?,?,?,?,?,?)",
-        (sid, "2026-10", 13, 0, 14, 0, "Approved"),   # 14 absent = the days after the exit
-    )
-    db.commit()
-    set_exit(db, sid, "2026-10-15")
-    calc = pay(db, sid, 2026, 10)
-    assert calc["gross_salary"] == 13000.00 and calc["unpaid_absence_days"] == 0
-
-    # Genuine absence before the exit date is still charged.
-    db.execute("UPDATE staff_monthly_attendance SET worked_days=12, absent_days=15 WHERE staff_id=?", (sid,))
-    db.commit()
-    assert pay(db, sid, 2026, 10)["gross_salary"] == 12000.00
 
 
 # ───────────────────────────── overtime is untouched ─────────────────────────────
@@ -368,3 +360,245 @@ def test_staff_form_rejects_bad_exit_dates(ctx, client):
     ok = client.post("/staff", data=_staff_form(staff_name="Good Exit", exit_date="2026-01-10"), follow_redirects=True)
     assert ok.status_code == 200   # exit on the joining day itself is allowed
     assert db.execute("SELECT exit_date FROM staff WHERE staff_name='Good Exit'").fetchone()[0] == "2026-01-10"
+
+
+# ═════════════════════════ corrections: window, OT, summaries, display ═════════════════════════
+
+from payroll_service import PayrollAttendanceError, validate_monthly_attendance_basis  # noqa: E402
+
+
+def set_join(db, sid, joining):
+    db.execute("UPDATE staff SET joining_date=? WHERE id=?", (joining, sid))
+    db.commit()
+
+
+def add_summary(db, sid, worked, half, absent, ot=0, ym="2026-10"):
+    db.execute(
+        "INSERT INTO staff_monthly_attendance(staff_id, year_month, worked_days, half_days, "
+        "absent_days, ot_hours, approval_status) VALUES(?,?,?,?,?,?,?)",
+        (sid, ym, worked, half, absent, ot, "Approved"),
+    )
+    db.commit()
+
+
+# 1 ─ the window starts at the joining date even without an exit date
+
+def test_joiner_without_exit_date_is_prorated_from_joining_date(ctx):
+    db, _ = ctx
+    sid = add_staff(db, "Joiner Only", "COR100", joining="2026-10-15")
+    attend(db, sid, _working_dates(2026, 10))      # rows before joining must not be paid
+    calc = pay(db, sid, 2026, 10)
+    assert calc["exit_date"] is None and calc["employment_restricted"] is True
+    assert calc["entitled_working_days"] == 15 and calc["working_days"] == 27
+    assert calc["payable_days"] == 15 and calc["gross_salary"] == 15000.00
+    assert calc["window_start"] == "2026-10-15" and calc["window_end"] == "2026-10-31"
+
+
+def test_established_employee_without_exit_date_is_unchanged(ctx):
+    db, _ = ctx
+    sid = add_staff(db, "Established", "COR101", joining="2024-03-01")
+    attend(db, sid, _working_dates(2026, 10))
+    calc = pay(db, sid, 2026, 10)
+    assert calc["employment_restricted"] is False and calc["gross_salary"] == 27000.00
+
+
+def test_joining_and_exit_both_bound_the_window_inclusively(ctx):
+    db, _ = ctx
+    sid = add_staff(db, "Both Ends", "COR102", joining="2026-10-05")   # Monday
+    set_exit(db, sid, "2026-10-09")                                    # Friday
+    attend(db, sid, _working_dates(2026, 10))
+    calc = pay(db, sid, 2026, 10)
+    assert calc["entitled_working_days"] == 5 and calc["gross_salary"] == 5000.00
+
+
+# 2 ─ attendance earnings and overtime outside the window are excluded
+
+def test_overtime_before_joining_and_after_exit_is_excluded_but_in_window_sunday_ot_is_kept(ctx):
+    db, _ = ctx
+    sid = add_staff(db, "OT Window", "COR110", joining="2026-10-06", ot="Yes", ot_rate=100)
+    set_exit(db, sid, "2026-10-15")
+    add_attendance(db, sid, date(2026, 10, 5), ot_hours=9.0)    # Monday, before joining
+    add_attendance(db, sid, date(2026, 10, 4), ot_hours=9.0)    # Sunday, before joining
+    add_attendance(db, sid, date(2026, 10, 7), ot_hours=2.0)    # in window
+    add_attendance(db, sid, date(2026, 10, 11), ot_hours=3.0)   # SUNDAY in window: kept
+    add_attendance(db, sid, date(2026, 10, 16), ot_hours=9.0)   # after exit
+    add_attendance(db, sid, date(2026, 10, 18), ot_hours=9.0)   # Sunday after exit
+    db.commit()
+    calc = pay(db, sid, 2026, 10)
+    assert calc["ot_hours"] == 5.0 and calc["ot_amount"] == 500.00
+    assert calc["payable_days"] == 1                 # only the 7th counts; the Sunday adds no day
+    assert calc["sunday_worked_days"] == 1.0
+    assert calc["gross_salary"] == 1000.00 + 500.00
+
+
+def test_attendance_earnings_outside_the_window_are_excluded(ctx):
+    db, _ = ctx
+    sid = add_staff(db, "Outside Rows", "COR111", joining="2026-10-12")
+    set_exit(db, sid, "2026-10-20")
+    attend(db, sid, _working_dates(2026, 10))
+    calc = pay(db, sid, 2026, 10)
+    assert calc["entitled_working_days"] == 8        # 12th-20th = 9 days minus Sunday 18th
+    assert calc["gross_salary"] == 8000.00
+
+
+def test_overtime_for_unrestricted_staff_is_unchanged(ctx):
+    db, _ = ctx
+    sid = add_staff(db, "OT Normal", "COR112", ot="Yes", ot_rate=100)
+    attend(db, sid, _working_dates(2026, 10), ot_hours=1.0)
+    add_attendance(db, sid, date(2026, 10, 4), ot_hours=2.0)    # a Sunday
+    db.commit()
+    assert pay(db, sid, 2026, 10)["ot_amount"] == (27 + 2) * 100.0
+
+
+# 3 ─ monthly summaries are validated, never guessed
+
+def test_full_month_summary_for_a_leaver_is_refused_with_a_clear_message(ctx):
+    db, _ = ctx
+    sid = add_staff(db, "Summary Leaver", "COR120")
+    add_summary(db, sid, 13, 0, 14)                  # whole-month totals: absences "probably" after exit
+    set_exit(db, sid, "2026-10-15")
+    with pytest.raises(PayrollAttendanceError) as exc:
+        pay(db, sid, 2026, 10)
+    msg = str(exc.value)
+    assert "Summary Leaver" in msg and "27 days" in msg
+    assert "2026-10-01 to 2026-10-15" in msg and "13 working days" in msg
+    assert "dated attendance" in msg
+
+
+def test_full_month_summary_for_a_joiner_without_exit_date_is_refused_too(ctx):
+    db, _ = ctx
+    sid = add_staff(db, "Summary Joiner", "COR121", joining="2026-10-15")
+    add_summary(db, sid, 27, 0, 0)
+    with pytest.raises(PayrollAttendanceError, match="2026-10-15 to 2026-10-31"):
+        pay(db, sid, 2026, 10)
+
+
+@pytest.mark.parametrize(
+    "worked,half,absent,expected",
+    [
+        (13, 0, 0, 13000.00),   # explicit in-window entry, working-day basis
+        (11, 0, 2, 11000.00),   # 2 genuine absences inside the window
+        (15, 0, 0, 13000.00),   # calendar basis (Sundays included), capped at 13 working days
+        (12, 1, 0, 12500.00),   # 12 full + 1 half day (halves are entries; present = 12.5)
+    ],
+)
+def test_explicit_in_window_summary_entry_is_accepted_as_entered(ctx, worked, half, absent, expected):
+    db, _ = ctx
+    sid = add_staff(db, "Valid Summary", "COR122")
+    add_summary(db, sid, worked, half, absent)
+    set_exit(db, sid, "2026-10-15")
+    assert pay(db, sid, 2026, 10)["gross_salary"] == expected
+
+
+def test_dated_attendance_in_window_is_used_when_the_summary_does_not_fit(ctx):
+    db, _ = ctx
+    sid = add_staff(db, "Dated Wins", "COR123")
+    add_summary(db, sid, 13, 0, 14)                  # invalid for the window
+    attend(db, sid, oct_days(1, 15))
+    set_exit(db, sid, "2026-10-15")
+    assert pay(db, sid, 2026, 10)["gross_salary"] == 13000.00
+
+
+def test_unrestricted_summary_behaviour_is_unchanged(ctx):
+    db, _ = ctx
+    sid = add_staff(db, "Plain Summary", "COR124")
+    add_summary(db, sid, 25, 0, 2)
+    assert pay(db, sid, 2026, 10)["gross_salary"] == 25000.00
+
+
+def test_person_not_employed_in_the_period_needs_no_attendance_and_pays_nothing(ctx):
+    db, _ = ctx
+    sid = add_staff(db, "Left Earlier", "COR125")
+    add_summary(db, sid, 27, 0, 0, ym="2026-11")
+    set_exit(db, sid, "2026-10-15")
+    assert pay(db, sid, 2026, 11)["gross_salary"] == 0
+
+
+def test_validation_lists_every_problem_and_generation_creates_nothing(ctx):
+    db, _ = ctx
+    bad1 = add_staff(db, "Bad One", "COR130")
+    bad2 = add_staff(db, "Bad Two", "COR131", joining="2026-10-20")
+    good = add_staff(db, "Good One", "COR132")
+    for sid in (bad1, bad2):
+        add_summary(db, sid, 27, 0, 0)
+    attend(db, good, _working_dates(2026, 10))
+    set_exit(db, bad1, "2026-10-10")
+    rows = [dict(db.execute("SELECT * FROM staff WHERE id=?", (s,)).fetchone()) for s in (bad1, bad2, good)]
+    problems = validate_monthly_attendance_basis(db, rows, "2026-10-01", "2026-10-31")
+    assert len(problems) == 2 and "Bad One" in problems[0] and "Bad Two" in problems[1]
+    with pytest.raises(ValueError, match="Attendance does not match employment dates"):
+        _generate(db, [bad1, bad2, good])
+    db.rollback()
+    assert db.execute("SELECT COUNT(*) FROM payroll_runs").fetchone()[0] == 0
+    assert db.execute("SELECT COUNT(*) FROM payroll_lines").fetchone()[0] == 0
+
+
+def test_validation_message_reaches_the_user_and_blocks_the_run(ctx, client):
+    db, _ = ctx
+    sid = add_staff(db, "Visible Error", "COR133")
+    add_summary(db, sid, 27, 0, 0)
+    set_exit(db, sid, "2026-10-15")
+    form = {
+        "form_action": "generate", "gen_mode": "monthly", "month": "10", "year": "2026",
+        "employment_category": "company_staff", "employee_ids": [f"staff:{sid}"],
+    }
+    html = client.post("/payroll", data=form, follow_redirects=True).get_data(as_text=True)
+    assert "Attendance does not match employment dates" in html and "Visible Error" in html
+    assert db.execute("SELECT COUNT(*) FROM payroll_runs").fetchone()[0] == 0
+
+
+# 4 ─ exit date is shown on detail, payslip, register, export and dashboard
+
+def test_exit_date_is_shown_on_detail_payslip_register_export_and_dashboard(ctx, client):
+    db, _ = ctx
+    leaver = add_staff(db, "Shown Leaver", "COR140", status="Inactive")
+    stayer = add_staff(db, "Shown Stayer", "COR141")
+    attend(db, leaver, oct_days(1, 15))
+    attend(db, stayer, _working_dates(2026, 10))
+    set_exit(db, leaver, "2026-10-15")
+    run_id = _generate(db, [leaver, stayer])
+    db.commit()
+    lines = {r["staff_id"]: r["id"] for r in db.execute("SELECT id, staff_id FROM payroll_lines")}
+
+    slip = client.get(f"/payroll/print/{lines[leaver]}").get_data(as_text=True)
+    assert "Exit Date" in slip and "2026-10-15" in slip and "Employed This Period" in slip
+    stayer_slip = client.get(f"/payroll/print/{lines[stayer]}").get_data(as_text=True)
+    assert "Exit Date" not in stayer_slip and "Employed This Period" not in stayer_slip
+
+    register = client.get(f"/payroll/print-run/{run_id}").get_data(as_text=True)
+    assert register.count("Exit: 2026-10-15") == 1          # only the leaver
+
+    detail = client.get(f"/payroll?view={run_id}").get_data(as_text=True)
+    assert detail.count("Exit: 2026-10-15") == 1
+
+    dash = client.get("/payroll?month=10&year=2026").get_data(as_text=True)
+    assert "Exit 2026-10-15" in dash
+
+    import pandas as pd
+    export = client.get(f"/payroll/export/{run_id}")
+    frame = pd.read_excel(io.BytesIO(export.data))
+    got = dict(zip(frame["employee_name"], frame["exit_date"].fillna("")))
+    assert got["Shown Leaver"] == "2026-10-15" and got["Shown Stayer"] == ""
+
+
+# 5 ─ history and duplicate protection survive the corrections
+
+def test_paid_history_and_duplicate_protection_survive(ctx):
+    db, _ = ctx
+    sid = add_staff(db, "History", "COR150", joining="2026-10-15")
+    attend(db, sid, _working_dates(2026, 10))
+    run_id = _generate(db, [sid])
+    db.execute("UPDATE payroll_runs SET status='Paid' WHERE id=?", (run_id,))
+    db.commit()
+    before = dict(db.execute("SELECT * FROM payroll_lines WHERE payroll_run_id=?", (run_id,)).fetchone())
+    set_exit(db, sid, "2026-10-20")                  # edited afterwards
+    set_join(db, sid, "2026-10-01")
+    after = dict(db.execute("SELECT * FROM payroll_lines WHERE payroll_run_id=?", (run_id,)).fetchone())
+    assert before == after and after["gross_salary"] == 15000.00
+    with pytest.raises(ValueError, match="already exists"):
+        _generate(db, [sid])
+    db.rollback()
+    assert db.execute("SELECT COUNT(*) FROM payroll_runs").fetchone()[0] == 1
+
+
+import io  # noqa: E402

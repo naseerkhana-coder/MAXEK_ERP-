@@ -164,7 +164,7 @@
 
           <td>{{ line.employee_code or '—' }}</td>
 
-          <td>{% if line.employee_name %}<a href="{{ url_for('employee_profile', employee_type=line.employee_type, employee_id=line.staff_id or line.worker_id) }}">{{ line.employee_name }}</a>{% else %}—{% endif %}</td>
+          <td>{% if line.employee_name %}<a href="{{ url_for('employee_profile', employee_type=line.employee_type, employee_id=line.staff_id or line.worker_id) }}">{{ line.employee_name }}</a>{% if line.basis and line.basis.exit_date %}<br><small class="pd-muted">Exit: {{ line.basis.exit_date }}</small>{% endif %}{% else %}—{% endif %}</td>
 
           <td>{{ line.employee_type }}</td>
 
@@ -449,7 +449,7 @@
             <td data-label="Employee">
               <div class="pd-emp">
                 <a href="{{ url_for('employee_profile', employee_type=r.employee_type, employee_id=r.employee_id) }}">{{ r.name or '—' }}</a>
-                <small>{{ r.code or '—' }}{% if r.employee_type == 'subcontractor' %} &middot; Sub contractor{% elif r.employee_type == 'company_worker' %} &middot; Company worker{% endif %}{% if r.department %} &middot; {{ r.department }}{% endif %}</small>
+                <small>{{ r.code or '—' }}{% if r.exit_date %} &middot; Exit {{ r.exit_date }}{% endif %}{% if r.employee_type == 'subcontractor' %} &middot; Sub contractor{% elif r.employee_type == 'company_worker' %} &middot; Company worker{% endif %}{% if r.department %} &middot; {{ r.department }}{% endif %}</small>
               </div>
             </td>
             <td class="num" data-label="Monthly salary">{{ r.monthly_salary|inr if r.monthly_salary else '—' }}{% if r.monthly_salary and r.salary_type != 'Monthly' %}<small class="pd-muted"> / {{ 'hr' if r.salary_type == 'Hourly' else 'day' }}</small>{% endif %}</td>

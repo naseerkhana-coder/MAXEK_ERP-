@@ -41,7 +41,7 @@
         <tr>
           <td>{{ loop.index }}</td>
           <td>{{ line.employee_code or '—' }}</td>
-          <td>{{ line.employee_name }}</td>
+          <td>{{ line.employee_name }}{% if line.basis and line.basis.exit_date %}<br><small>Exit: {{ line.basis.exit_date }}</small>{% endif %}</td>
           <td>{{ line.employee_type }}</td>
           <td>{{ line.basis.working_days if line.basis and line.basis.working_days is not none else '—' }}</td>
           <td>{{ line.basis.payable_days if line.basis and line.basis.payable_days is not none else (line.present_days or 0) }}{% if line.basis and line.basis.legacy %}*{% endif %}</td>
