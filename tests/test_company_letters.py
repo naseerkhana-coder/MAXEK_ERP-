@@ -25,7 +25,7 @@ BASE = "/administration/company-letters"
 
 def form(**over):
     data = {
-        "reference_no": "MAX/LT/26/001", "letter_date": "2026-11-03",
+        "reference_no": "MAX/LET/26/001", "letter_date": "2026-11-03",
         "letter_type": "General Administration Letter", "recipient_name": "HiLITE Contracting",
         "recipient_org": "Projects", "recipient_address": "Kozhikode\n673014",
         "subject": "Revised work order", "salutation": "Dear Sir,",
@@ -36,7 +36,7 @@ def form(**over):
     return data
 
 
-def set_counter(db, n, fy="2026-27"):
+def set_counter(db, n, fy="CY2026"):
     """Configure the letter counter the way the ERP's numbering service stores it."""
     import document_numbering_service as numbering
     numbering.seed_default_sequences(db, fy)
@@ -93,10 +93,10 @@ def test_create_edit_and_view(ctx, client):
     r = client.post(f"{BASE}/new", data=form(), follow_redirects=False)
     assert r.status_code == 302 and r.headers["Location"].endswith(f"{BASE}/1")
     row = dict(db.execute("SELECT * FROM company_letters").fetchone())
-    assert row["reference_no"] == "MAX/LT/26/001" and row["created_by"] and row["subject"] == "Revised work order"
+    assert row["reference_no"] == "MAX/LET/26/001" and row["created_by"] and row["subject"] == "Revised work order"
 
     page = client.get(f"{BASE}/1/edit").get_data(as_text=True)
-    assert 'value="MAX/LT/26/001"' in page and "Revised work order" in page
+    assert 'value="MAX/LET/26/001"' in page and "Revised work order" in page
 
     r = client.post(f"{BASE}/1/edit", data=form(subject="Changed subject", body_html="<p><b>New</b> body</p>"))
     assert r.status_code == 302
@@ -125,7 +125,6 @@ def test_offer_letter_type_and_all_types_are_accepted(ctx, client):
         ("signatory_name", "", "signatory name is required"),
         ("letter_date", "", "Letter date is required"),
         ("letter_date", "31/10/2026", "not a valid date"),
-        ("reference_no", "", "No starting number is recorded"),
         ("letter_type", "Bogus", "valid letter type"),
     ],
 )
@@ -152,165 +151,10 @@ def test_body_is_sanitised_on_save_and_on_render(ctx, client):
 # ───────────────────────────── reference numbers ─────────────────────────────
 
 
-def test_reference_numbers_are_unique_even_with_case_and_spacing(ctx, client):
-    db, _ = ctx
-    client.post(f"{BASE}/new", data=form())
-    for dup in ("MAX/LT/26/001", " max/lt/26/001 "):
-        html = client.post(f"{BASE}/new", data=form(reference_no=dup)).get_data(as_text=True)
-        assert "already used by another letter" in html
-    assert count(db) == 1
-    # Editing a letter may keep its own number but may not take another's.
-    client.post(f"{BASE}/new", data=form(reference_no="MAX/LT/26/002"))
-    assert client.post(f"{BASE}/2/edit", data=form(reference_no="MAX/LT/26/002", subject="s2")).status_code == 302
-    html = client.post(f"{BASE}/2/edit", data=form(reference_no="MAX/LT/26/001")).get_data(as_text=True)
-    assert "already used by another letter" in html
-    assert db.execute("SELECT reference_no FROM company_letters WHERE id=2").fetchone()[0] == "MAX/LT/26/002"
 
 
-def test_database_itself_enforces_uniqueness(ctx):
-    import sqlite3
-    db, _ = ctx
-    cl.ensure_company_letters_schema(db)
-    values, errs = cl.validate_letter_form(db, form())
-    assert errs == []
-    cl.save_letter(db, values, "t")
-    with pytest.raises(ValueError, match="already used"):    # bypassing validation still cannot duplicate
-        cl.save_letter(db, dict(values, reference_no=" MAX/LT/26/001"), "t")
-    db.rollback()
 
 
-def test_suggestion_is_not_guessed_from_one_sample(ctx, client):
-    """With nothing recorded for the year there is NO suggestion; the user must enter the number."""
-    db, _ = ctx
-    cl.ensure_company_letters_schema(db)
-    sug = cl.suggest_reference(db, "2026-11-03")
-    assert sug["reference"] == "" and sug["configured"] is False and "2026-27" in sug["basis"]
-    page = client.get(f"{BASE}/new").get_data(as_text=True)
-    assert "No letter number is recorded" in page and 'name="reference_no"' in page
-    assert "MAX/LT/26/117" not in page and "MAX/LT/26/001" not in page
-    # saving without entering one is refused with an explanation, nothing is invented
-    html = client.post(f"{BASE}/new", data=form(reference_no="")).get_data(as_text=True)
-    assert "Enter the reference number manually" in html and count(db) == 0
-
-
-def test_provisional_sample_number_is_only_used_when_entered(ctx, client):
-    """MAX/LT/26/117 is one sample: entering it makes later numbers continue, nothing more."""
-    db, _ = ctx
-    client.post(f"{BASE}/new", data=form(reference_no="MAX/LT/26/117"))
-    sug = cl.suggest_reference(db, "2026-11-03")
-    assert sug["reference"] == "MAX/LT/26/118" and "Continues from MAX/LT/26/117" in sug["basis"]
-    page = client.get(f"{BASE}/new").get_data(as_text=True)
-    assert 'value="MAX/LT/26/118"' in page and "Check it against your register" in page
-
-
-def test_existing_references_in_other_registers_are_inspected(ctx, client):
-    """The next number is above everything already recorded, wherever it was recorded."""
-    db, _ = ctx
-    cl.ensure_company_letters_schema(db)
-    client.post("/office/letters", data={
-        "letter_type": "Official Letter", "letter_date": "2026-11-01", "to_name": "Old", "to_address": "x",
-        "subject": "Old subject", "body": "Body", "signed_by": "A"})
-    db.execute("UPDATE office_letters SET letter_number='MAX/LT/26/131', reference_no='MAX/LT/26/131'")
-    db.commit()
-    assert cl.suggest_reference(db, "2026-11-03")["reference"] == "MAX/LT/26/132"
-    cl.ensure_company_letters_schema(db)
-    db.execute("INSERT INTO office_outward(register_number, reference_no) VALUES('MAX/LT/26/140','MAX/LT/26/141')")
-    db.commit()
-    assert cl.suggest_reference(db, "2026-11-03")["reference"] == "MAX/LT/26/142"
-    set_counter(db, 150)                                         # the configured counter can be ahead too
-    assert cl.suggest_reference(db, "2026-11-03")["reference"] == "MAX/LT/26/151"
-    # free-form references in the registers are ignored, not misread
-    db.execute("INSERT INTO office_outward(register_number) VALUES('custom-99')")
-    db.commit()
-    assert cl.suggest_reference(db, "2026-11-03")["reference"] == "MAX/LT/26/151"
-
-
-def test_numbers_restart_each_financial_year_and_year_change_needs_a_first_number(ctx, client):
-    """April-March years, one counter each. A new year has no number until one is entered."""
-    db, _ = ctx
-    cl.ensure_company_letters_schema(db)
-    set_counter(db, 116)
-    assert cl.suggest_reference(db, "2027-03-31")["reference"] == "MAX/LT/26/117"   # still FY 2026-27
-    nxt = cl.suggest_reference(db, "2027-04-01")                                    # FY 2027-28 starts
-    assert nxt["reference"] == "" and nxt["configured"] is False and nxt["fiscal_year"] == "2027-28"
-    assert cl.suggest_reference(db, "2026-03-31")["fiscal_year"] == "2025-26"       # previous year, own counter
-    client.post(f"{BASE}/new", data=form(reference_no="MAX/LT/27/001", letter_date="2027-04-02"))
-    assert cl.suggest_reference(db, "2027-04-10")["reference"] == "MAX/LT/27/002"
-    assert cl.suggest_reference(db, "2027-03-01")["reference"] == "MAX/LT/26/117"   # old year untouched
-
-
-def test_auto_number_is_allocated_and_counter_advances(ctx, client):
-    db, _ = ctx
-    set_counter(db, 116)
-    html = client.get(f"{BASE}/new").get_data(as_text=True)
-    assert 'value="MAX/LT/26/117"' in html
-    client.post(f"{BASE}/new", data=form(reference_no="MAX/LT/26/117", suggested_reference="MAX/LT/26/117"))
-    client.post(f"{BASE}/new", data=form(reference_no="MAX/LT/26/118", suggested_reference="MAX/LT/26/118"))
-    refs = [r[0] for r in db.execute("SELECT reference_no FROM company_letters ORDER BY id")]
-    assert refs == ["MAX/LT/26/117", "MAX/LT/26/118"]
-    cur = db.execute("SELECT current_sequence FROM document_number_sequences WHERE doc_type='company_letter_no' AND fiscal_year='2026-27'").fetchone()[0]
-    assert cur == 118
-
-
-def test_stale_suggestion_gets_a_fresh_number_and_user_is_told(ctx, client):
-    """Two people open the form at the same time; the second save must not duplicate or fail silently."""
-    db, _ = ctx
-    set_counter(db, 116)
-    a = client.get(f"{BASE}/new").get_data(as_text=True)          # both see ...117
-    client.post(f"{BASE}/new", data=form(reference_no="MAX/LT/26/117", suggested_reference="MAX/LT/26/117", subject="first"))
-    r = client.post(f"{BASE}/new", data=form(reference_no="MAX/LT/26/117", suggested_reference="MAX/LT/26/117", subject="second"),
-                    follow_redirects=True)
-    refs = [r_[0] for r_ in db.execute("SELECT reference_no FROM company_letters ORDER BY id")]
-    assert refs == ["MAX/LT/26/117", "MAX/LT/26/118"]
-    assert "was taken by another letter" in r.get_data(as_text=True) and "MAX/LT/26/118" in r.get_data(as_text=True)
-    # a hand-typed number is never silently changed: it is refused
-    html = client.post(f"{BASE}/new", data=form(reference_no="MAX/LT/26/117", suggested_reference="MAX/LT/26/150")).get_data(as_text=True)
-    assert "already used by another letter" in html and count(db) == 2
-
-
-def test_concurrent_saves_never_duplicate_a_number(ctx, tmp_path):
-    """Separate connections (as separate requests/workers use) saving at the same instant."""
-    import sqlite3
-    import threading
-    db, _ = ctx
-    cl.ensure_company_letters_schema(db)
-    set_counter(db, 116)
-    path = db.execute("PRAGMA database_list").fetchone()[2]
-    results, errors = [], []
-    barrier = threading.Barrier(8)
-
-    def worker(i):
-        conn = sqlite3.connect(path, timeout=30)
-        conn.row_factory = sqlite3.Row
-        try:
-            values, errs = cl.validate_letter_form(conn, form(reference_no="", subject=f"s{i}"))
-            assert not errs
-            barrier.wait()
-            lid, ref = cl.save_letter(conn, values, f"u{i}")
-            conn.commit()
-            results.append(ref)
-        except Exception as exc:                                  # pragma: no cover - reported below
-            errors.append(repr(exc))
-            conn.rollback()
-        finally:
-            conn.close()
-
-    threads = [threading.Thread(target=worker, args=(i,)) for i in range(8)]
-    [t.start() for t in threads]
-    [t.join() for t in threads]
-    assert not errors, errors
-    assert sorted(results) == [f"MAX/LT/26/{n}" for n in range(117, 125)]
-    assert len(set(results)) == 8
-    db.rollback()
-    assert db.execute("SELECT COUNT(DISTINCT reference_no) FROM company_letters").fetchone()[0] == 8
-    assert db.execute("SELECT current_sequence FROM document_number_sequences WHERE doc_type='company_letter_no'").fetchone()[0] == 124
-
-
-def test_numbering_service_default_layout():
-    import document_numbering_service as n
-    assert n.DEFAULT_PREFIXES["company_letter_no"] == "MAX/LT"
-    assert n.format_document_number("MAX/LT", "2026-27", 117, n.DEFAULT_PATTERNS["company_letter_no"]) == "MAX/LT/26/117"
-    assert n.format_document_number("PO", "2026-27", 5) == "PO/2627/0005"      # other types unchanged
 
 
 # ───────────────────────────── employee autofill ─────────────────────────────
@@ -355,7 +199,7 @@ def test_register_search_filter_and_pagination(ctx, client):
     cl.ensure_company_letters_schema(db)
     for i in range(1, 26):
         values, errs = cl.validate_letter_form(
-            db, form(reference_no=f"MAX/LT/26/{i:03d}", recipient_name=f"Recipient {i}",
+            db, form(reference_no=f"MAX/LET/26/{i:03d}", recipient_name=f"Recipient {i}",
                      subject=("Quarterly audit" if i % 5 == 0 else f"Subject {i}"),
                      letter_type="Offer Letter" if i % 2 else "General Administration Letter",
                      letter_date=f"2026-10-{i:02d}"))
@@ -364,15 +208,15 @@ def test_register_search_filter_and_pagination(ctx, client):
     db.commit()
     page1 = client.get(BASE).get_data(as_text=True)
     assert "25 letters" in page1 and "page 1 of 2" in page1 and page1.count(">Preview<") == 20
-    assert "MAX/LT/26/025" in page1 and "MAX/LT/26/001" not in page1      # newest first
+    assert "MAX/LET/26/025" in page1 and "MAX/LET/26/001" not in page1      # newest first
     page2 = client.get(f"{BASE}?page=2").get_data(as_text=True)
-    assert "MAX/LT/26/001" in page2 and "MAX/LT/26/025" not in page2
+    assert "MAX/LET/26/001" in page2 and "MAX/LET/26/025" not in page2
     assert "page 3" not in client.get(f"{BASE}?page=9").get_data(as_text=True)    # clamped
     hit = client.get(f"{BASE}?q=audit").get_data(as_text=True)
     assert "5 letters" in hit and "Quarterly audit" in hit
     assert "13 letters" in client.get(f"{BASE}?type=Offer+Letter").get_data(as_text=True)
     assert "No letters match" in client.get(f"{BASE}?q=zzzz").get_data(as_text=True)
-    row_actions = client.get(f"{BASE}?q=MAX/LT/26/005").get_data(as_text=True)
+    row_actions = client.get(f"{BASE}?q=MAX/LET/26/005").get_data(as_text=True)
     for label in (">View<", ">Edit<", ">Preview<", ">Print<"):
         assert label in row_actions
     assert "print=1" in row_actions
@@ -405,7 +249,7 @@ def test_guest_and_base_hr_users_are_refused(ctx, client, session_vals, monkeypa
     for path in (BASE, f"{BASE}/new", f"{BASE}/1", f"{BASE}/1/edit", f"{BASE}/1/preview"):
         r = client.get(path)
         assert r.status_code == 302 and "dashboard" in r.headers["Location"], path
-    r = client.post(f"{BASE}/new", data=form(reference_no="MAX/LT/26/777"))
+    r = client.post(f"{BASE}/new", data=form(reference_no="MAX/LET/26/777"))
     assert r.status_code == 302 and count(db) == 1
     assert client.get(f"{BASE}/employees").status_code == 403
     assert client.get(f"{BASE}/employee/1").status_code == 403
@@ -533,7 +377,7 @@ def test_tenant_and_company_restrictions_apply_to_letters_and_employees(ctx, cli
     assert cc.get(f"{BASE}/1").status_code == 302
     assert cc.get(f"{BASE}/employee/{s_a}").status_code == 404
     # the same reference text may exist in two tenants without clashing
-    assert cb.post(f"{BASE}/new", data=form(reference_no="MAX/LT/26/117", subject="B letter")).status_code == 302
+    assert cb.post(f"{BASE}/new", data=form(reference_no="MAX/LET/26/117", subject="B letter")).status_code == 302
     assert db.execute("SELECT COUNT(*) FROM company_letters").fetchone()[0] == 2
 
 
@@ -565,7 +409,7 @@ def test_offer_letter_has_no_prewritten_terms_and_needs_user_content(ctx, client
     assert "offer_body" not in form_page and "offerBody" not in js
     # choosing Offer Letter and an employee leaves the body empty; saving it blank is refused
     html = client.post(f"{BASE}/new", data=form(letter_type="Offer Letter", employee_id=str(sid),
-                                               body_html="", reference_no="MAX/LT/26/200")).get_data(as_text=True)
+                                               body_html="", reference_no="MAX/LET/26/200")).get_data(as_text=True)
     assert "body cannot be empty" in html and count(db) == 0
     assert 'id="cl-copy-from"' in form_page and 'id="cl-insert-facts"' in form_page
 
@@ -590,7 +434,7 @@ def test_copy_content_from_an_earlier_letter(ctx, client):
     assert "Standard wording" in d["body_html"] and d["subject"] == "Earlier"
     assert client.get(f"{BASE}/99/content").status_code == 404
     page = client.get(f"{BASE}/new").get_data(as_text=True)
-    assert "MAX/LT/26/001" in page and "Copy content from an earlier letter" in page
+    assert "MAX/LET/26/001" in page and "Copy content from an earlier letter" in page
 
 
 # ───────────────────────────── existing letters preserved ─────────────────────────────
@@ -760,7 +604,7 @@ def _overflow(page):
 
 
 def test_phone_width_register_form_view_and_preview(ctx, client):
-    client.post(f"{BASE}/new", data=form(reference_no="MAX/LT/26/001", body_html="<p>Body.</p>"))
+    client.post(f"{BASE}/new", data=form(reference_no="MAX/LET/26/001", body_html="<p>Body.</p>"))
     pages = {name: client.get(BASE + path).get_data(as_text=True) for name, path in
              (("register", ""), ("form", "/new"), ("view", "/1"), ("preview", "/1/preview"))}
     for name, html in pages.items():
@@ -865,55 +709,300 @@ def test_hr_department_staff_and_administrators_have_employee_data_access(ctx, c
 NUM = f"{BASE}/numbering"
 
 
-def test_administrator_can_configure_prefix_layout_year_basis_and_last_number(ctx, client):
+
+
+
+
+
+
+
+
+
+
+
+# ═════════════════════ numbering: MAX/LET/YY/NNN, calendar year, restarts each January ═════════════════════
+
+import threading  # noqa: E402
+
+import document_numbering_service as numbering  # noqa: E402
+
+NUM = f"{BASE}/numbering"
+AUTO = dict(reference_no="")          # blank reference = take the next number
+
+
+def _ref(db, n=1):
+    return [r[0] for r in db.execute("SELECT reference_no FROM company_letters ORDER BY id")]
+
+
+def test_default_format_is_MAX_LET_year_sequence(ctx, client):
+    db, _ = ctx
+    cl.ensure_company_letters_schema(db)
+    assert cl.suggest_reference(db, "2026-11-03")["reference"] == "MAX/LET/26/001"
+    assert 'value="MAX/LET/26/001"' in client.get(f"{BASE}/new").get_data(as_text=True)
+    for subject in ("a", "b", "c"):
+        client.post(f"{BASE}/new", data=form(subject=subject, **AUTO))
+    assert _ref(db) == ["MAX/LET/26/001", "MAX/LET/26/002", "MAX/LET/26/003"]
+    assert cl.suggest_reference(db, "2026-11-03")["reference"] == "MAX/LET/26/004"
+    # at least three digits, more when needed; prefix LET (not LT)
+    pattern = numbering.DEFAULT_PATTERNS["company_letter_no"]
+    assert numbering.DEFAULT_PREFIXES["company_letter_no"] == "MAX/LET"
+    assert [numbering.format_document_number("MAX/LET", "CY2026", n, pattern) for n in (1, 9, 10, 99, 100, 999, 1000)] == [
+        "MAX/LET/26/001", "MAX/LET/26/009", "MAX/LET/26/010", "MAX/LET/26/099", "MAX/LET/26/100", "MAX/LET/26/999", "MAX/LET/26/1000"]
+    assert numbering.format_document_number("PO", "2026-27", 5) == "PO/2627/0005"       # other documents unchanged
+
+
+def test_each_january_starts_at_001_and_the_old_year_keeps_counting(ctx, client):
+    db, _ = ctx
+    cl.ensure_company_letters_schema(db)
+    client.post(f"{BASE}/new", data=form(letter_date="2026-12-31", **AUTO))
+    client.post(f"{BASE}/new", data=form(letter_date="2027-01-01", **AUTO))
+    client.post(f"{BASE}/new", data=form(letter_date="2027-01-02", **AUTO))
+    assert _ref(db) == ["MAX/LET/26/001", "MAX/LET/27/001", "MAX/LET/27/002"]
+    # a late-saved letter dated in 2026 continues the 2026 series, not 2027
+    client.post(f"{BASE}/new", data=form(letter_date="2026-12-30", **AUTO))
+    assert _ref(db)[-1] == "MAX/LET/26/002"
+    assert cl.suggest_reference(db, "2028-01-01")["reference"] == "MAX/LET/28/001"
+    assert cl.suggest_reference(db, "2027-06-01")["reference"] == "MAX/LET/27/003"
+    assert cl.suggest_reference(db, "2026-02-01")["reference"] == "MAX/LET/26/003"
+    # the calendar year, not April: 31 March and 1 April are the same series
+    assert cl.suggest_reference(db, "2027-03-31")["reference"] == cl.suggest_reference(db, "2027-04-01")["reference"] == "MAX/LET/27/003"
+
+
+def test_existing_references_are_inspected_before_the_next_number(ctx, client):
+    db, _ = ctx
+    cl.ensure_company_letters_schema(db)
+    client.post("/office/letters", data={
+        "letter_type": "Official Letter", "letter_date": "2026-11-01", "to_name": "Old", "to_address": "x",
+        "subject": "Old subject", "body": "Body", "signed_by": "A"})
+    db.execute("UPDATE office_letters SET letter_number='MAX/LET/26/041', reference_no='MAX/LET/26/041'")
+    db.commit()
+    assert cl.suggest_reference(db, "2026-11-03")["reference"] == "MAX/LET/26/042"
+    db.execute("INSERT INTO office_outward(register_number, reference_no) VALUES('MAX/LET/26/050','max/let/26/57')")
+    db.commit()
+    assert cl.suggest_reference(db, "2026-11-03")["reference"] == "MAX/LET/26/058"      # case and padding do not hide a number
+    client.post(f"{BASE}/new", data=form(reference_no="MAX/LET/26/070"))                # a hand-entered number counts too
+    assert cl.suggest_reference(db, "2026-11-03")["reference"] == "MAX/LET/26/071"
+    # other years, other prefixes and free-form references are ignored (and left alone)
+    db.execute("INSERT INTO office_outward(register_number) VALUES('MAX/LET/27/200')")
+    db.execute("INSERT INTO office_outward(register_number) VALUES('MAX/LT/26/999')")
+    db.execute("INSERT INTO office_outward(register_number) VALUES('custom-99')")
+    db.commit()
+    assert cl.suggest_reference(db, "2026-11-03")["reference"] == "MAX/LET/26/071"
+    assert cl.suggest_reference(db, "2027-02-01")["reference"] == "MAX/LET/27/201"
+    # allocation uses the same inspection
+    client.post(f"{BASE}/new", data=form(subject="auto", **AUTO))
+    assert _ref(db)[-1] == "MAX/LET/26/071"
+    assert [r[0] for r in db.execute("SELECT register_number FROM office_outward")][:1] == ["MAX/LET/26/050"]   # untouched
+
+
+def test_references_are_unique_whatever_the_case_spacing_or_padding(ctx, client):
+    db, _ = ctx
+    client.post(f"{BASE}/new", data=form(reference_no="MAX/LET/26/005"))
+    for dup in ("MAX/LET/26/005", " max/let/26/005 ", "MAX/LET/26/5", "MAX/LET/26/0005"):
+        html = client.post(f"{BASE}/new", data=form(reference_no=dup)).get_data(as_text=True)
+        assert "already used by another letter" in html, dup
+    assert count(db) == 1
+    client.post(f"{BASE}/new", data=form(reference_no="MAX/LET/26/006"))
+    assert client.post(f"{BASE}/2/edit", data=form(reference_no="MAX/LET/26/006", subject="s2")).status_code == 302
+    html = client.post(f"{BASE}/2/edit", data=form(reference_no="MAX/LET/26/5")).get_data(as_text=True)
+    assert "already used by another letter" in html
+    assert db.execute("SELECT reference_no FROM company_letters WHERE id=2").fetchone()[0] == "MAX/LET/26/006"
+
+
+def test_database_and_service_refuse_duplicates_even_if_validation_is_bypassed(ctx):
+    db, _ = ctx
+    cl.ensure_company_letters_schema(db)
+    values, errs = cl.validate_letter_form(db, form())
+    assert errs == []
+    cl.save_letter(db, values, "t")
+    for variant in (" MAX/LET/26/001", "max/let/26/1"):
+        with pytest.raises(ValueError, match="already used"):
+            cl.save_letter(db, dict(values, reference_no=variant), "t")
+        db.rollback()
+    import sqlite3
+    with pytest.raises(sqlite3.IntegrityError):                       # the unique index is the last line of defence
+        db.execute("INSERT INTO company_letters(reference_no, letter_date, letter_type, recipient_name, subject, body_html, "
+                   "signatory_name) VALUES('max/let/26/001','2026-11-03','Other','x','x','<p>x</p>','x')")
+    db.rollback()
+
+
+def test_historical_references_are_preserved(ctx, client):
+    db, _ = ctx
+    client.post(f"{BASE}/new", data=form(subject="first", **AUTO))
+    client.post(f"{BASE}/new", data=form(subject="second", letter_date="2026-12-01", **AUTO))
+    # editing keeps the number, even when the date moves to another year
+    client.post(f"{BASE}/1/edit", data=form(reference_no="MAX/LET/26/001", letter_date="2027-02-01", subject="first (edited)"))
+    assert db.execute("SELECT reference_no, subject FROM company_letters WHERE id=1").fetchone()[:] == ("MAX/LET/26/001", "first (edited)")
+    # changing the numbering settings never renumbers existing letters
+    client.post(NUM, data={"prefix": "ABC/LET", "pattern": "{prefix}/{yy}/{seq:03d}", "basis": "calendar", "last_number": "0"})
+    assert _ref(db) == ["MAX/LET/26/001", "MAX/LET/26/002"]
+    client.post(f"{BASE}/new", data=form(subject="third", **AUTO))
+    assert _ref(db)[-1] == "ABC/LET/26/001"
+    # the counter never goes backwards on its own: setting it lower still cannot reuse a recorded MAX number
+    client.post(NUM, data={"prefix": "MAX/LET", "pattern": "{prefix}/{yy}/{seq:03d}", "basis": "calendar", "last_number": "0"})
+    client.post(f"{BASE}/new", data=form(subject="fourth", **AUTO))
+    assert _ref(db)[-1] == "MAX/LET/26/003"
+
+
+def test_stale_suggestion_gets_a_fresh_number_and_user_is_told(ctx, client):
+    db, _ = ctx
+    page = client.get(f"{BASE}/new").get_data(as_text=True)                       # two people both see ...001
+    assert 'value="MAX/LET/26/001"' in page
+    client.post(f"{BASE}/new", data=form(reference_no="MAX/LET/26/001", suggested_reference="MAX/LET/26/001", subject="first"))
+    r = client.post(f"{BASE}/new", data=form(reference_no="MAX/LET/26/001", suggested_reference="MAX/LET/26/001", subject="second"),
+                    follow_redirects=True)
+    assert _ref(db) == ["MAX/LET/26/001", "MAX/LET/26/002"]
+    text = r.get_data(as_text=True)
+    assert "was taken by another letter" in text and "MAX/LET/26/002" in text
+    # a hand-typed number is never silently changed: it is refused
+    html = client.post(f"{BASE}/new", data=form(reference_no="MAX/LET/26/001", suggested_reference="MAX/LET/26/150")).get_data(as_text=True)
+    assert "already used by another letter" in html and count(db) == 2
+
+
+def _db_path(db):
+    return db.execute("PRAGMA database_list").fetchone()[2]
+
+
+def test_simultaneous_automatic_saves_never_duplicate(ctx):
+    import sqlite3
+    db, _ = ctx
+    cl.ensure_company_letters_schema(db)
+    db.commit()
+    path, results, errors = _db_path(db), [], []
+    barrier = threading.Barrier(10)
+
+    def worker(i):
+        conn = sqlite3.connect(path, timeout=30)
+        conn.row_factory = sqlite3.Row
+        try:
+            values, errs = cl.validate_letter_form(conn, form(reference_no="", subject=f"s{i}"))
+            assert not errs
+            barrier.wait()
+            _, ref = cl.save_letter(conn, values, f"u{i}")
+            conn.commit()
+            results.append(ref)
+        except Exception as exc:                                              # pragma: no cover
+            errors.append(repr(exc))
+            conn.rollback()
+        finally:
+            conn.close()
+
+    threads = [threading.Thread(target=worker, args=(i,)) for i in range(10)]
+    [t.start() for t in threads]
+    [t.join() for t in threads]
+    assert not errors, errors
+    assert sorted(results) == [f"MAX/LET/26/{n:03d}" for n in range(1, 11)]
+    db.rollback()
+    assert db.execute("SELECT COUNT(DISTINCT reference_no) FROM company_letters").fetchone()[0] == 10
+
+
+def test_simultaneous_manual_saves_of_the_same_number_allow_exactly_one(ctx):
+    import sqlite3
+    db, _ = ctx
+    cl.ensure_company_letters_schema(db)
+    db.commit()
+    path, outcomes = _db_path(db), []
+    barrier = threading.Barrier(6)
+    spellings = ["MAX/LET/26/020", "max/let/26/020", "MAX/LET/26/20", "MAX/LET/26/0020", " MAX/LET/26/020 ", "MAX/LET/26/020"]
+
+    def worker(i):
+        conn = sqlite3.connect(path, timeout=30)
+        conn.row_factory = sqlite3.Row
+        try:
+            values, errs = cl.validate_letter_form(conn, form(reference_no=spellings[i], subject=f"m{i}"))
+            barrier.wait()
+            cl.save_letter(conn, values, f"u{i}")
+            conn.commit()
+            outcomes.append("saved")
+        except ValueError:
+            conn.rollback()
+            outcomes.append("refused")
+        finally:
+            conn.close()
+
+    threads = [threading.Thread(target=worker, args=(i,)) for i in range(6)]
+    [t.start() for t in threads]
+    [t.join() for t in threads]
+    assert outcomes.count("saved") == 1 and outcomes.count("refused") == 5, outcomes
+    db.rollback()
+    assert count(db) == 1
+
+
+def test_mixed_automatic_and_manual_saves_do_not_collide(ctx):
+    """Automatic saves always succeed; a hand-typed number that an automatic save took first is
+    refused with a message - never duplicated, never saved twice."""
+    import sqlite3
+    db, _ = ctx
+    cl.ensure_company_letters_schema(db)
+    db.commit()
+    path, outcomes = _db_path(db), {}
+    barrier = threading.Barrier(8)
+
+    def worker(i):
+        conn = sqlite3.connect(path, timeout=30)
+        conn.row_factory = sqlite3.Row
+        manual = i % 2 == 1
+        try:
+            ref = f"MAX/LET/26/{i + 1:03d}" if manual else ""                   # manual: 002, 004, 006, 008
+            values, _ = cl.validate_letter_form(conn, form(reference_no=ref, subject=f"x{i}"))
+            barrier.wait()
+            cl.save_letter(conn, values, f"u{i}")
+            conn.commit()
+            outcomes[i] = "saved"
+        except ValueError as exc:
+            conn.rollback()
+            outcomes[i] = f"refused: {exc}"
+        finally:
+            conn.close()
+
+    threads = [threading.Thread(target=worker, args=(i,)) for i in range(8)]
+    [t.start() for t in threads]
+    [t.join() for t in threads]
+    db.rollback()
+    refs = [r[0] for r in db.execute("SELECT reference_no FROM company_letters")]
+    assert len(refs) == len(set(refs))                                           # no duplicate, ever
+    assert all(outcomes[i] == "saved" for i in (0, 2, 4, 6))                     # automatic saves always get a number
+    saved = sum(v == "saved" for v in outcomes.values())
+    assert saved == len(refs) and 4 <= saved <= 8
+    assert all("already used" in v for v in outcomes.values() if v != "saved")   # refusals say why
+
+
+# ───────────────────────────── numbering settings (administrator) ─────────────────────────────
+
+
+def test_settings_panel_shows_the_default_format_and_administrators_can_adjust_it(ctx, client):
     db, _ = ctx
     page = client.get(BASE).get_data(as_text=True)
-    assert "Letter numbering settings" in page and "not set yet" in page                # nothing assumed
-    r = client.post(NUM, data={"prefix": "MAX/LT", "pattern": "{prefix}/{yy}/{seq:03d}", "basis": "financial", "last_number": "116"})
-    assert r.status_code == 302
-    assert cl.suggest_reference(db, "2026-11-03")["reference"] == "MAX/LT/26/117"
-    assert "next number: <span>MAX/LT/26/117" in client.get(BASE).get_data(as_text=True)
-    # a different real sequence and layout are accepted without code changes
-    client.post(NUM, data={"prefix": "MXK", "pattern": "{prefix}-{fy}-{seq:04d}", "basis": "financial", "last_number": "40"})
-    assert cl.suggest_reference(db, "2026-11-03")["reference"] == "MXK-2627-0041"
-    # existing letters are never renumbered
-    client.post(f"{BASE}/new", data=form(reference_no="", subject="after settings"))
-    assert db.execute("SELECT reference_no FROM company_letters").fetchone()[0] == "MXK-2627-0041"
-    client.post(NUM, data={"prefix": "MAX/LT", "pattern": "{prefix}/{yy}/{seq:03d}", "basis": "financial", "last_number": "116"})
-    assert db.execute("SELECT reference_no FROM company_letters").fetchone()[0] == "MXK-2627-0041"
-
-
-def test_calendar_year_basis_and_new_year_inherits_the_configured_layout(ctx, client):
-    db, _ = ctx
-    client.post(NUM, data={"prefix": "MAX/LT", "pattern": "{prefix}/{yy}/{seq:03d}", "basis": "calendar", "last_number": "9"})
-    assert cl.get_year_basis(db) == "calendar"
-    assert cl.suggest_reference(db, "2027-01-15")["fiscal_year"] == "CY2027"
-    assert cl.suggest_reference(db, "2026-12-31")["reference"] == "MAX/LT/26/010"        # December is still 2026
-    assert cl.suggest_reference(db, "2027-01-01")["reference"] == ""                       # new year: number must be entered
-    client.post(f"{BASE}/new", data=form(reference_no="MAX/LT/27/001", letter_date="2027-01-02"))
-    assert cl.suggest_reference(db, "2027-02-01")["reference"] == "MAX/LT/27/002"          # inherits prefix and layout
-    # switching back to financial years uses its own counter
-    client.post(NUM, data={"prefix": "MAX/LT", "pattern": "{prefix}/{yy}/{seq:03d}", "basis": "financial", "last_number": "116"})
-    assert cl.suggest_reference(db, "2026-11-03")["reference"] == "MAX/LT/26/117"
+    assert "Letter numbering settings" in page and "next number: <span>MAX/LET/26/" in page
+    assert 'value="MAX/LET"' in page and 'value="{prefix}/{yy}/{seq:03d}"' in page and 'value="calendar" selected' in page
+    # entering the real last number from the paper register moves the series on
+    client.post(NUM, data={"prefix": "MAX/LET", "pattern": "{prefix}/{yy}/{seq:03d}", "basis": "calendar", "last_number": "41"})
+    assert cl.suggest_reference(db, "2026-11-03")["reference"] == "MAX/LET/26/042"
+    # a new year inherits prefix and layout and starts at 001
+    assert cl.suggest_reference(db, "2027-01-01")["reference"] == "MAX/LET/27/001"
+    # switching to financial years uses its own counter
+    client.post(NUM, data={"prefix": "MAX/LET", "pattern": "{prefix}/{yy}/{seq:03d}", "basis": "financial", "last_number": "0"})
+    assert cl.get_year_basis(db) == "financial"
+    assert cl.suggest_reference(db, "2027-03-31")["fiscal_year"] == "2026-27"
 
 
 @pytest.mark.parametrize(
     "data,message",
     [
-        ({"prefix": "", "pattern": "{prefix}/{seq:03d}", "basis": "financial", "last_number": "1"}, "Prefix is required"),
-        ({"prefix": "X", "pattern": "{prefix}/001", "basis": "financial", "last_number": "1"}, "must contain {seq"),
-        ({"prefix": "X", "pattern": "{prefix}/{bogus}/{seq}", "basis": "financial", "last_number": "1"}, "may only use"),
+        ({"prefix": "", "pattern": "{prefix}/{seq:03d}", "basis": "calendar", "last_number": "1"}, "Prefix is required"),
+        ({"prefix": "X", "pattern": "{prefix}/001", "basis": "calendar", "last_number": "1"}, "must contain {seq"),
+        ({"prefix": "X", "pattern": "{prefix}/{bogus}/{seq}", "basis": "calendar", "last_number": "1"}, "may only use"),
         ({"prefix": "X", "pattern": "{prefix}/{seq:03d}", "basis": "lunar", "last_number": "1"}, "financial year or calendar"),
-        ({"prefix": "X", "pattern": "{prefix}/{seq:03d}", "basis": "financial", "last_number": "-3"}, "whole number"),
-        ({"prefix": "X", "pattern": "{prefix}/{seq:03d}", "basis": "financial", "last_number": "abc"}, "whole number"),
+        ({"prefix": "X", "pattern": "{prefix}/{seq:03d}", "basis": "calendar", "last_number": "-3"}, "whole number"),
+        ({"prefix": "X", "pattern": "{prefix}/{seq:03d}", "basis": "calendar", "last_number": "abc"}, "whole number"),
     ],
 )
 def test_numbering_settings_validation(ctx, client, data, message):
     db, _ = ctx
     r = client.post(NUM, data=data, follow_redirects=True)
     assert message in r.get_data(as_text=True)
-    assert cl.get_year_basis(db) == "financial"
-    assert db.execute("SELECT COUNT(*) FROM document_number_sequences WHERE doc_type='company_letter_no' AND current_sequence>0").fetchone()[0] == 0
+    assert cl.get_year_basis(db) == "calendar"
+    assert cl.suggest_reference(db, "2026-11-03")["reference"] == "MAX/LET/26/001"             # nothing changed
 
 
 def test_only_administrators_can_change_numbering(ctx, client):
@@ -923,10 +1012,8 @@ def test_only_administrators_can_change_numbering(ctx, client):
     approver = client_for(app, db, make_user(db, "ap_num", "Approver"))
     for c in (maker, approver):
         assert "Letter numbering settings" not in c.get(BASE).get_data(as_text=True)
-        c.post(NUM, data={"prefix": "HACK", "pattern": "{prefix}/{seq}", "basis": "calendar", "last_number": "999"})
-    assert cl.get_year_basis(db) == "financial"
-    assert db.execute("SELECT COUNT(*) FROM document_number_sequences WHERE prefix='HACK'").fetchone()[0] == 0
-    assert client.post(NUM, data={"prefix": "OK", "pattern": "{prefix}/{seq:03d}", "basis": "financial", "last_number": "5"}).status_code == 302
-    assert cl.suggest_reference(db, "2026-11-03")["reference"] == "OK/006"
+        c.post(NUM, data={"prefix": "HACK", "pattern": "{prefix}/{seq}", "basis": "financial", "last_number": "999"})
+    assert cl.get_year_basis(db) == "calendar"
+    assert cl.suggest_reference(db, "2026-11-03")["reference"] == "MAX/LET/26/001"
     anon = app.test_client()
-    assert anon.post(NUM, data={"prefix": "X"}).status_code == 302 and "/login" in anon.post(NUM, data={}).headers["Location"]
+    assert "/login" in anon.post(NUM, data={}).headers["Location"]

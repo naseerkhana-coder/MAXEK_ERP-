@@ -11,9 +11,8 @@ Access (enforced in the routes, see ``app.company_letter_access``):
     letter and on the staff record used for autofill.
 
 Reference numbers use the ERP's existing document numbering service
-(``document_numbering_service``): one counter per financial year (April-March).
-A suggestion is made only when the counter, or letters already recorded in the
-ERP, establish a sequence; the ERP never assumes a starting number.
+(``document_numbering_service``): one counter per calendar year (default; financial year selectable).
+Format ``MAX/LET/26/001``; the number is always taken above the highest reference already recorded.
 """
 
 from __future__ import annotations
@@ -217,21 +216,24 @@ def html_to_text(html: str | None) -> str:
 
 # ───────────────────────────── references ─────────────────────────────
 #
-# One counter per financial year (April-March), kept in ``document_number_sequences`` by
-# the ERP's document numbering service. Rule on year change: a new financial year has its
-# own counter row, which starts unconfigured (0); the first letter of that year therefore
-# needs its number entered explicitly, and later letters continue from it automatically.
+# Reference format: ``MAX/LET/26/001`` = company prefix / letters / last two digits of the
+# CALENDAR year of the letter date / running number padded to at least three digits.
+# One counter per calendar year, kept in ``document_number_sequences`` by the ERP's document
+# numbering service. Each January a new year's counter starts at 001. Before every number is
+# offered or taken, the references already recorded (company letters, office letters, outward
+# register) are inspected, so the next number is always above the highest one in use.
+# An administrator can still change prefix, layout, year basis and last number (settings panel).
 
 
 YEAR_BASIS_KEY = "company_letter_year_basis"
-YEAR_BASES = {"financial": "Financial year (April - March)", "calendar": "Calendar year (January - December)"}
+YEAR_BASES = {"calendar": "Calendar year (January - December)", "financial": "Financial year (April - March)"}
 MAX_PREFIX = 30
 
 
 def get_year_basis(db) -> str:
     row = db.execute("SELECT setting_value FROM app_settings WHERE setting_key=?", (YEAR_BASIS_KEY,)).fetchone()
-    value = (row[0] if row else "") or "financial"
-    return value if value in YEAR_BASES else "financial"
+    value = (row[0] if row else "") or "calendar"
+    return value if value in YEAR_BASES else "calendar"
 
 
 def _letter_date(letter_date: str | None) -> date:
@@ -258,9 +260,11 @@ def _sequence(db, letter_date: str | None) -> dict:
     fy = fiscal_year_for(letter_date, get_year_basis(db))
     numbering.ensure_document_numbering_schema(db)
     if not db.execute("SELECT 1 FROM document_number_sequences WHERE doc_type=? AND fiscal_year=?", (DOC_TYPE, fy)).fetchone():
+        like = "CY%" if fy.startswith("CY") else "%-%"          # same kind of year only
         prev = db.execute(
-            "SELECT prefix, format_pattern FROM document_number_sequences WHERE doc_type=? ORDER BY id DESC LIMIT 1",
-            (DOC_TYPE,),
+            "SELECT prefix, format_pattern FROM document_number_sequences "
+            "WHERE doc_type=? AND fiscal_year LIKE ? ORDER BY id DESC LIMIT 1",
+            (DOC_TYPE, like),
         ).fetchone()
         if prev:
             db.execute(
@@ -279,7 +283,7 @@ def numbering_settings(db, letter_date: str | None = None, scope: dict | None = 
     sug = suggest_reference(db, letter_date, scope)
     return {
         "prefix": row["prefix"], "pattern": row["format_pattern"], "basis": get_year_basis(db),
-        "year_label": row["fiscal_year"], "counter": int(row["current_sequence"] or 0),
+        "year_label": year_display(row["fiscal_year"]), "counter": int(row["current_sequence"] or 0),
         "recorded": highest_recorded_sequence(db, row, scope), "next": sug["reference"], "configured": sug["configured"],
         "basis_options": YEAR_BASES,
     }
@@ -327,7 +331,7 @@ def _reference_regex(row: dict) -> re.Pattern:
     sample = numbering.format_document_number(
         row["prefix"], row["fiscal_year"], 987654321, row["format_pattern"]
     )
-    return re.compile("^" + re.escape(sample).replace("987654321", r"(\d+)") + "$")
+    return re.compile("^" + re.escape(sample).replace("987654321", r"(\d+)") + "$", re.I)
 
 
 def recorded_references(db, scope: dict | None = None) -> list[str]:
@@ -355,44 +359,51 @@ def highest_recorded_sequence(db, row: dict, scope: dict | None = None) -> int:
     return best
 
 
-def suggest_reference(db, letter_date: str | None = None, scope: dict | None = None) -> dict:
-    """Suggestion for the next reference, with how it was derived.
+def year_display(fiscal_year: str) -> str:
+    return fiscal_year[2:] if fiscal_year.startswith("CY") else fiscal_year
 
-    Returns ``{"reference", "configured", "basis", "fiscal_year"}``. ``reference`` is empty,
-    and ``configured`` False, when nothing establishes a sequence for the letter's financial
-    year - the user must then enter the number from the real letter register.
+
+def suggest_reference(db, letter_date: str | None = None, scope: dict | None = None) -> dict:
+    """The next reference for the letter's year, and how it was derived.
+
+    Returns ``{"reference", "configured", "basis", "fiscal_year"}``. The number is one above the
+    highest of (a) the year's counter and (b) every reference already recorded in the letter
+    registers for that year; with none recorded the year starts at 001.
     """
     row = _sequence(db, letter_date)
     counter = int(row["current_sequence"] or 0)
     recorded = highest_recorded_sequence(db, row, scope)
     base = max(counter, recorded)
-    fy = row["fiscal_year"]
+    fy, label = row["fiscal_year"], year_display(row["fiscal_year"])
+    nxt = numbering.format_document_number(row["prefix"], fy, base + 1, row["format_pattern"])
     if base <= 0:
         return {
-            "reference": "", "configured": False, "fiscal_year": fy,
-            "basis": (
-                f"No letter number is recorded for financial year {fy} yet. Enter the next number "
-                "from your letter register; later letters will continue from it."
-            ),
+            "reference": nxt, "configured": True, "fiscal_year": fy,
+            "basis": f"First letter of {label}: the series starts at {nxt}. Check it against your register.",
         }
     last = numbering.format_document_number(row["prefix"], fy, base, row["format_pattern"])
-    nxt = numbering.format_document_number(row["prefix"], fy, base + 1, row["format_pattern"])
     return {
         "reference": nxt, "configured": True, "fiscal_year": fy,
-        "basis": f"Continues from {last} (highest number recorded for financial year {fy}). Check it against your register.",
+        "basis": f"Continues from {last} (highest number recorded for {label}). Check it against your register.",
     }
 
 
+def _norm_ref(reference_no: str | None) -> str:
+    """Comparison key: case, spaces and zero-padding of the running number do not matter, so
+    MAX/LET/26/005, max/let/26/5 and ' MAX/LET/26/005 ' are the same reference."""
+    return re.sub(r"(\d+)$", lambda m: str(int(m.group(1))), re.sub(r"\s+", "", reference_no or "").upper())
+
+
 def reference_exists(db, reference_no: str, exclude_id: int | None = None, scope: dict | None = None) -> bool:
-    sql = "SELECT 1 FROM company_letters WHERE LOWER(TRIM(reference_no)) = LOWER(TRIM(?))"
-    params: list = [reference_no]
-    cust = (scope or {}).get("customer_id")
-    sql += " AND COALESCE(customer_id, 0) = ?"
-    params.append(cust or 0)
-    if exclude_id:
-        sql += " AND id <> ?"
-        params.append(exclude_id)
-    return db.execute(sql, params).fetchone() is not None
+    key = _norm_ref(reference_no)
+    sql = "SELECT id, reference_no FROM company_letters WHERE COALESCE(customer_id, 0) = ?"
+    params: list = [(scope or {}).get("customer_id") or 0]
+    for rid, ref in db.execute(sql, params).fetchall():
+        if exclude_id and rid == exclude_id:
+            continue
+        if _norm_ref(ref) == key:
+            return True
+    return False
 
 
 def _begin_write(db) -> None:
@@ -407,11 +418,6 @@ def allocate_reference(db, letter_date: str | None, scope: dict | None = None) -
     _begin_write(db)
     row = _sequence(db, letter_date)
     recorded = highest_recorded_sequence(db, row, scope)
-    if max(int(row["current_sequence"] or 0), recorded) <= 0:
-        raise ValueError(
-            f"No starting number is recorded for financial year {row['fiscal_year']}. "
-            "Enter the reference number manually; later letters will continue from it."
-        )
     for _ in range(100):
         db.execute(
             "UPDATE document_number_sequences SET current_sequence = MAX(current_sequence, ?) + 1, "
@@ -694,6 +700,11 @@ def save_letter(db, values: dict, username: str, record_id: int | None = None, s
     )
     values = dict(values)
     try:
+        _begin_write(db)                       # one writer at a time from here to the caller's commit
+        if (record_id or not values.get("reference_auto")) and reference_exists(
+            db, values["reference_no"], record_id, scope
+        ):
+            raise ValueError(f"Reference number {values['reference_no']} is already used by another letter.")
         if record_id:
             data = [values[c] for c in cols]
             db.execute(

@@ -50,7 +50,7 @@ DEFAULT_PREFIXES: dict[str, str] = {
     "payment_voucher_no": "PV",
     "receipt_voucher_no": "RV",
     "bg_no": "BG",
-    "company_letter_no": "MAX/LT",
+    "company_letter_no": "MAX/LET",
 }
 
 DEFAULT_FORMAT_PATTERN = "{prefix}/{fy}/{seq:04d}"
