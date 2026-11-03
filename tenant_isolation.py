@@ -22,6 +22,7 @@ TENANT_SCOPED_TABLES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("payroll_records", ("customer_id", "company_id", "branch_id")),
     ("account_transactions", ("customer_id", "company_id", "branch_id")),
     ("petty_cash_requests", ("customer_id", "company_id", "branch_id")),
+    ("company_letters", ("customer_id", "company_id", "branch_id")),
 )
 
 # Deferred — large module-specific tables; columns can be added in later phases.

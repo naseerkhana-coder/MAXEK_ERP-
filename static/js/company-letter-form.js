@@ -5,9 +5,9 @@
   if (!form) return;
   var editor = document.getElementById("cl-editor");
   var body = document.getElementById("cl-body");
-  var typeSel = document.getElementById("cl-type");
-  var offerBody = form.getAttribute("data-offer-body") || "";
-  var offerTemplates = {}; // the last offer body we inserted, so we never overwrite typed text
+  var factsBtn = document.getElementById("cl-insert-facts");
+  var copySel = document.getElementById("cl-copy-from");
+  var factsHtml = "";
 
   document.querySelectorAll(".cl-editor-bar [data-cmd]").forEach(function (btn) {
     btn.addEventListener("mousedown", function (e) { e.preventDefault(); });
@@ -28,11 +28,26 @@
 
   function editorIsBlank() { return !editor.textContent.trim(); }
   function setBody(html) { editor.innerHTML = html; sync(); }
-  function maybeInsertOffer(html) {
-    var untouched = editorIsBlank() || editor.innerHTML === offerTemplates.last;
-    if (typeSel.value === "Offer Letter" && untouched) { offerTemplates.last = html; setBody(html); offerTemplates.last = editor.innerHTML; }
-  }
-  typeSel.addEventListener("change", function () { maybeInsertOffer(offerBody); });
+  function appendBody(html) { editor.innerHTML = (editorIsBlank() ? "" : editor.innerHTML) + html; sync(); }
+
+  // "Insert employee details": only facts held on the staff record, added when asked for.
+  factsBtn.addEventListener("click", function () { if (factsHtml) appendBody(factsHtml); });
+
+  // Start from the content of an earlier letter; asks first if something is already typed.
+  copySel.addEventListener("change", function () {
+    var id = copySel.value;
+    if (!id) return;
+    if (!editorIsBlank() && !window.confirm("Replace the current letter body with the content of the selected letter?")) { copySel.value = ""; return; }
+    fetch(form.getAttribute("data-copy-url").replace(/0$/, id), { credentials: "same-origin", headers: { Accept: "application/json" } })
+      .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
+      .then(function (d) {
+        setBody(d.body_html || "");
+        var subj = form.elements.subject;
+        if (subj && !subj.value.trim()) subj.value = d.subject || "";
+      })
+      .catch(function () { window.alert("Could not load that letter."); })
+      .then(function () { copySel.value = ""; });
+  });
 
   // Reference number follows the letter date's year only while it is still the suggestion.
   // (The server validates uniqueness either way.)
@@ -67,13 +82,15 @@
         document.getElementById("cl-rorg").value = d.recipient_org || "";
         if (d.address) document.getElementById("cl-raddr").value = d.address;
         document.getElementById("cl-sal").value = d.salutation;
-        offerBody = d.offer_body_html;
-        maybeInsertOffer(offerBody);
+        factsHtml = d.facts_html || "";
+        factsBtn.disabled = !factsHtml;
+        factsBtn.title = factsHtml ? "Add this employee's recorded details to the body" : "No details recorded";
       })
       .catch(function () { search.setCustomValidity("Could not load that employee."); search.reportValidity(); search.setCustomValidity(""); });
   }
   search.addEventListener("input", function () {
     idField.value = "";                                    // typing again detaches the link
+    factsHtml = ""; factsBtn.disabled = true;
     clearTimeout(timer);
     var q = search.value.trim();
     if (q.length < 2) { hide(); return; }

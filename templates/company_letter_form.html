@@ -15,17 +15,23 @@
   .cl-emp-results{position:absolute;z-index:30;left:0;right:0;top:100%;background:#fff;border:1px solid #cbd5e1;border-radius:8px;max-height:240px;overflow:auto;box-shadow:0 6px 18px rgba(0,0,0,.15)}
   .cl-emp-results button{display:block;width:100%;text-align:left;border:0;background:none;padding:8px 12px;cursor:pointer}
   .cl-emp-results button:hover,.cl-emp-results button:focus{background:#f1f5f9}
+  .cl-hint{display:block;font-size:12px;color:#475569;margin-top:4px;line-height:1.35}
+  .cl-hint-warn{color:#92400e;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;padding:4px 8px}
+  .cl-tools{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin-bottom:8px}
+  .cl-tools select{max-width:100%;border:1px solid #cbd5e1;border-radius:6px;padding:5px 8px;background:#fff;color:#1e293b}
   .cl-errors{border:1px solid #e31e27;background:#fff1f1;color:#7a0a0f;border-radius:8px;padding:.7rem 1rem;margin-bottom:1rem}
 </style>
 {% endblock %}
 {% block content %}
 {% if errors %}<div class="cl-errors" role="alert"><strong>Please fix the following:</strong><ul style="margin:.4rem 0 0 1.1rem;">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
-<form method="post" class="erp-form-card cl-scope" id="cl-form" data-employee-url="{{ url_for('company_letter_employee', employee_id=0) }}" data-search-url="{{ url_for('company_letter_employees') }}" data-offer-body="{{ offer_body|e }}">
+<form method="post" class="erp-form-card cl-scope" id="cl-form" data-employee-url="{{ url_for('company_letter_employee', employee_id=0) }}" data-search-url="{{ url_for('company_letter_employees') }}" data-copy-url="{{ copy_url }}">
   <input type="hidden" name="employee_id" id="cl-employee-id" value="{{ v.employee_id or '' }}">
+  <input type="hidden" name="suggested_reference" value="{{ suggested_reference or '' }}">
   <h3 class="erp-form-title">{% if letter and letter.id %}Edit {{ letter.reference_no }}{% else %}New Company Letter{% endif %}</h3>
   <div class="erp-form-grid">
-    <div class="erp-field"><input name="reference_no" id="cl-ref" required maxlength="60" placeholder=" " value="{{ v.reference_no }}"><label>Reference No *</label></div>
+    <div class="erp-field"><input name="reference_no" id="cl-ref" {% if suggestion and not suggestion.configured %}required {% endif %}maxlength="60" placeholder=" " value="{{ v.reference_no }}"><label>Reference No *</label></div>
     <div class="erp-field"><input type="date" name="letter_date" id="cl-date" required value="{{ v.letter_date }}"><label>Letter Date *</label></div>
+    {% if suggestion %}<div class="span-2"><small class="cl-hint {{ '' if suggestion.configured else 'cl-hint-warn' }}" id="cl-ref-hint">{{ suggestion.basis }}</small></div>{% endif %}
     <div class="erp-field"><select name="letter_type" id="cl-type" required>{% for t in letter_types %}<option value="{{ t }}" {% if v.letter_type == t %}selected{% endif %}>{{ t }}</option>{% endfor %}</select><label>Letter Type *</label></div>
     <div class="erp-field" style="position:relative;"><input id="cl-emp-search" autocomplete="off" placeholder=" " value="{{ employee_label }}"><label>Employee (optional &mdash; search name or code)</label><div class="cl-emp-results" id="cl-emp-results" hidden></div></div>
     <div class="erp-field"><input name="recipient_name" id="cl-rname" required placeholder=" " value="{{ v.recipient_name }}"><label>Recipient Name *</label></div>
@@ -36,6 +42,11 @@
     <div class="erp-field"><input name="closing" placeholder=" " value="{{ v.closing }}"><label>Closing</label></div>
     <div class="erp-field span-2" style="display:block;">
       <label style="position:static;display:block;margin-bottom:4px;">Letter Body *</label>
+      <div class="cl-tools">
+        <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" id="cl-insert-facts" disabled title="Select an employee first">Insert employee details</button>
+        <select id="cl-copy-from" aria-label="Copy content from an earlier letter"><option value="">Copy content from an earlier letter&hellip;</option>{% for r in earlier_letters %}<option value="{{ r.id }}">{{ r.reference_no }} &mdash; {{ r.subject }}</option>{% endfor %}</select>
+      </div>
+      <small class="cl-hint">The body is not pre-written. Type it, copy it from an earlier approved letter, or insert employee facts, then review it before issuing.</small>
       <div class="cl-editor-bar" role="toolbar" aria-label="Formatting">
         <button type="button" data-cmd="bold" title="Bold"><b>B</b></button>
         <button type="button" data-cmd="italic" title="Italic"><i>I</i></button>
@@ -55,10 +66,10 @@
     <div class="erp-field"><input name="signatory_designation" placeholder=" " value="{{ v.signatory_designation }}"><label>Signatory Designation</label></div>
   </div>
   <div style="display:flex;gap:.6rem;flex-wrap:wrap;margin-top:1rem;">
-    <button type="submit" name="after" value="view" class="erp-btn erp-btn-primary">Save</button>
+    <button type="submit" name="after" value="view" class="erp-btn erp-btn-primary">Save as Draft</button>
     <button type="submit" name="after" value="preview" class="erp-btn erp-btn-ghost">Save &amp; Preview</button>
     <a class="erp-btn erp-btn-ghost" href="{{ url_for('company_letters') }}">Cancel</a>
   </div>
 </form>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='js/company-letter-form.js') }}"></script>{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/phone-sidebar.js') }}"></script><script src="{{ url_for('static', filename='js/company-letter-form.js') }}"></script>{% endblock %}

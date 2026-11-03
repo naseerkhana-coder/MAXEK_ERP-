@@ -531,32 +531,74 @@ class PayrollAttendanceError(ValueError):
     """Attendance cannot establish payable days for the employment window."""
 
 
-def _summary_window_issue(summary: dict, window: dict, staff_row: dict) -> str | None:
-    """Why a monthly-summary entry cannot be trusted for a restricted window, or None.
+def _window_sundays(window: dict) -> list[str]:
+    start, end = _parse_date(window["window_start"] or ""), _parse_date(window["window_end"] or "")
+    if not start or not end:
+        return []
+    out, d = [], start
+    while d <= end:
+        if d.weekday() == 6:
+            out.append(d.strftime("%d/%m"))
+        d += timedelta(days=1)
+    return out
 
-    A monthly entry is only totals, so it cannot say *which* days were worked. It is
-    accepted for a partial-period employee only when it explicitly accounts for the
-    employment window: worked + half + absent days must equal the window's working
-    days (or its calendar days, the Sunday-inclusive convention already allowed for
-    monthly entries). Otherwise the entry plainly covers days outside the window and
-    we refuse to guess how its absences should be split.
+
+def classify_monthly_summary(summary: dict, window: dict, staff_row: dict) -> dict:
+    """What day basis a monthly attendance entry is on, and whether it can be trusted.
+
+    A monthly entry is only totals: worked + half + absent. How those totals relate to the
+    employment window tells which convention they were keyed in:
+
+    * ``working_days``  - total equals the window's working days (Sundays excluded). The
+      figures are used as entered: worked days pay, absences and half-days reduce pay.
+      No Sunday can be in the figures, so none can change the payable days.
+    * ``calendar_days`` - total equals the window's calendar days (Sundays counted as
+      "present"). Sundays are removed by capping worked days at the window's working
+      days, which is exact when nobody was absent or on half-day. With any absent or
+      half-day the entry cannot say whether those fell on a Sunday, and guessing either
+      way would pay the wrong amount, so it is ``ambiguous``.
+    * ``mismatch``      - any other total: it does not describe the employment window.
+
+    Returns ``{"basis", "total", "ok", "issue"}``; ``issue`` is a correction message.
     """
-    entered = round(
-        float(summary.get("worked_days") or 0)
-        + float(summary.get("half_days") or 0)
-        + float(summary.get("absent_days") or 0),
-        2,
-    )
-    if entered in (float(window["working_days"]), float(window["calendar_days"])):
-        return None
+    worked = float(summary.get("worked_days") or 0)
+    half = float(summary.get("half_days") or 0)
+    absent = float(summary.get("absent_days") or 0)
+    total = round(worked + half + absent, 2)
+    wd, cd = float(window["working_days"]), float(window["calendar_days"])
     who = staff_row.get("staff_name") or staff_row.get("employee_code") or f"staff #{staff_row.get('id')}"
-    return (
-        f"{who}: the monthly attendance entry totals {entered:g} days (worked + half + absent) but "
-        f"employment in this period runs {window['window_start']} to {window['window_end']} "
-        f"({window['working_days']} working days, {window['calendar_days']} calendar days). "
-        "Enter dated attendance for those dates, or correct the monthly entry so it covers only "
-        f"that range ({window['working_days']} days, or {window['calendar_days']} counting Sundays)."
-    )
+    span = f"{window['window_start']} to {window['window_end']}"
+    sundays = _window_sundays(window)
+    sunday_txt = (f"Sundays in that range: {', '.join(sundays)}" if sundays else "there are no Sundays in that range")
+    if total == wd:
+        return {"basis": "working_days", "total": total, "ok": True, "issue": None}
+    if total == cd:
+        if absent == 0 and half == 0:
+            return {"basis": "calendar_days", "total": total, "ok": True, "issue": None}
+        return {
+            "basis": "ambiguous", "total": total, "ok": False,
+            "issue": (
+                f"{who}: the monthly attendance entry counts {total:g} calendar days for {span} and includes "
+                f"{absent:g} absent and {half:g} half-day(s). Sundays are not working days, and the entry does not "
+                f"say whether those absences or half-days fell on a Sunday ({sunday_txt}), so the payable days "
+                f"cannot be worked out safely. Re-enter the entry on a working-day basis ({wd:g} days: worked + half "
+                f"+ absent, leaving Sundays out), or enter dated attendance for those dates."
+            ),
+        }
+    return {
+        "basis": "mismatch", "total": total, "ok": False,
+        "issue": (
+            f"{who}: the monthly attendance entry totals {total:g} days (worked + half + absent) but employment in "
+            f"this period runs {span} ({wd:g} working days, {cd:g} calendar days; {sunday_txt}). "
+            f"Enter dated attendance for those dates, or correct the monthly entry so it covers only that range "
+            f"({wd:g} working days, or {cd:g} calendar days when nobody was absent or on half-day)."
+        ),
+    }
+
+
+def _summary_window_issue(summary: dict, window: dict, staff_row: dict) -> str | None:
+    """Correction message when a monthly entry cannot be trusted for a restricted window."""
+    return classify_monthly_summary(summary, window, staff_row)["issue"]
 
 
 def _monthly_attendance_basis(db, staff_row: dict, start: str, end: str, window: dict | None) -> dict:
@@ -647,7 +689,17 @@ def calculate_monthly_staff_pay(
     monthly_summary = basis["summary"]
     sunday_worked_days = 0.0
     recorded_absent_days = None
+    summary_basis = None
+    summary_note = None
     if monthly_summary:
+        classified = classify_monthly_summary(monthly_summary, window or {
+            "working_days": working_days, "calendar_days": counts["calendar_days"],
+            "window_start": start, "window_end": end}, staff_row)
+        summary_basis = classified["basis"]
+        if not classified["ok"]:
+            # Whole-period employees keep the existing behaviour (their entry was never
+            # blocked); the unresolved convention is recorded so it can be reviewed.
+            summary_note = classified["issue"]
         # Monthly summary entries already account for holidays (existing rule).
         # For a restricted window the entry has been validated as an explicit
         # in-window entry, so its figures are used as entered - never re-assigned.
@@ -719,6 +771,8 @@ def calculate_monthly_staff_pay(
         "daily_rate": breakdown["daily_rate"],
         "earned_base": breakdown["earned_base"],
         "attendance_source": monthly_summary.get("source") if monthly_summary else "daily",
+        "summary_basis": summary_basis,
+        "summary_note": summary_note,
         "ot_hours": ot_hours,
         "ot_amount": ot_amount,
         "holiday_pay": breakdown["holiday_pay"],

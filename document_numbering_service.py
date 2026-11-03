@@ -18,6 +18,7 @@ DOC_TYPES = (
     "payment_voucher_no",
     "receipt_voucher_no",
     "bg_no",
+    "company_letter_no",
 )
 
 DOC_TYPE_LABELS: dict[str, str] = {
@@ -33,6 +34,7 @@ DOC_TYPE_LABELS: dict[str, str] = {
     "payment_voucher_no": "Payment Voucher No",
     "receipt_voucher_no": "Receipt Voucher No",
     "bg_no": "BG No",
+    "company_letter_no": "Company Letter No",
 }
 
 DEFAULT_PREFIXES: dict[str, str] = {
@@ -48,9 +50,16 @@ DEFAULT_PREFIXES: dict[str, str] = {
     "payment_voucher_no": "PV",
     "receipt_voucher_no": "RV",
     "bg_no": "BG",
+    "company_letter_no": "MAX/LT",
 }
 
 DEFAULT_FORMAT_PATTERN = "{prefix}/{fy}/{seq:04d}"
+
+# Types whose default layout differs from DEFAULT_FORMAT_PATTERN. ``{yy}`` is the two-digit
+# year in which the financial year starts (2026-27 -> 26).
+DEFAULT_PATTERNS: dict[str, str] = {
+    "company_letter_no": "{prefix}/{yy}/{seq:03d}",
+}
 
 
 def _table_exists(db, table: str) -> bool:
@@ -130,7 +139,7 @@ def seed_default_sequences(db, fiscal_year: str | None = None) -> None:
                 doc_type,
                 DEFAULT_PREFIXES.get(doc_type, doc_type.upper()[:3]),
                 fy,
-                DEFAULT_FORMAT_PATTERN,
+                DEFAULT_PATTERNS.get(doc_type, DEFAULT_FORMAT_PATTERN),
                 ts,
             ),
         )
@@ -167,7 +176,8 @@ def format_document_number(
 ) -> str:
     pat = (pattern or DEFAULT_FORMAT_PATTERN).strip()
     fy = fiscal_year_short(fiscal_year)
-    return pat.format(prefix=prefix, fy=fy, fiscal_year=fiscal_year, seq=sequence)
+    yy = (fiscal_year or "")[2:4] if len(fiscal_year or "") >= 4 else fy[:2]
+    return pat.format(prefix=prefix, fy=fy, yy=yy, fiscal_year=fiscal_year, seq=sequence)
 
 
 def peek_next_number(

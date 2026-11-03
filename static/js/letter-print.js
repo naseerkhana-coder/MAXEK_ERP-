@@ -28,10 +28,31 @@
   function clearGaps() {
     document.querySelectorAll("tr.lp-gap").forEach(function (r) { r.remove(); });
   }
+  // Phones: scale the 210 mm sheet to the window width (screen only; print is never scaled).
+  function fit() {
+    var stage = document.getElementById("lp-stage"), sheet = document.querySelector(".lp-sheet");
+    if (!stage || !sheet) return;
+    var natural = 210 * MM, avail = document.documentElement.clientWidth - 16;
+    var scale = Math.min(1, avail / natural);
+    if (scale >= 0.999) {
+      stage.classList.remove("lp-scaled"); stage.style.width = stage.style.height = "";
+      sheet.style.transform = ""; return;
+    }
+    stage.classList.add("lp-scaled");
+    sheet.style.transform = "scale(" + scale + ")";
+    stage.style.width = natural * scale + "px";
+    stage.style.height = sheet.offsetHeight * scale + 40 + "px";
+    stage.style.margin = "8px auto 24px";
+  }
+  function unfit() {
+    var sheet = document.querySelector(".lp-sheet");
+    if (sheet) sheet.style.transform = "none";
+  }
   function layoutGaps() {
     clearGaps();
     var sheet = document.querySelector(".lp-sheet");
     if (!sheet) return;
+    unfit();                                   // measure at natural size
     var base = sheet.getBoundingClientRect().top + window.scrollY;
     var rows = Array.prototype.slice.call(sheet.querySelectorAll("tbody > tr"));
     rows.forEach(function (row) {
@@ -51,6 +72,8 @@
     var count = Math.max(1, Math.ceil((sheet.scrollHeight - 1) / PAGE));
     var el = document.getElementById("lp-pages");
     if (el) el.textContent = count + (count === 1 ? " page" : " pages");
+    sheet.style.transform = "";
+    fit();
   }
 
   document.addEventListener("click", function (ev) {

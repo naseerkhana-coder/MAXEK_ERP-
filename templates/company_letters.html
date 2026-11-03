@@ -12,6 +12,24 @@
   .cl-scope .erp-field input, .cl-scope .erp-field select, .cl-scope .erp-field textarea {
     color: #1e293b !important; background: #fff !important; border: 1px solid #cbd5e1 !important; }
   .cl-scope .erp-field input::placeholder { color: transparent; }
+  /* Phone width: one card per letter instead of a wide table, so every column and the
+     View / Edit / Preview / Print actions are visible without sideways scrolling. */
+  @media (max-width: 640px) {
+    .cl-reg table, .cl-reg tbody, .cl-reg tr, .cl-reg td { display:block; width:100%; }
+    .cl-reg thead { display:none; }
+    .cl-reg tr { background:#fff !important; color:#1e293b !important; border:1px solid #cbd5e1; border-radius:10px; margin:0 0 10px; padding:8px 12px; }
+    .cl-reg td { background:transparent !important; color:#1e293b !important; border:0 !important; padding:3px 0 !important; display:flex; gap:10px; justify-content:space-between; text-align:right; }
+    .cl-reg td::before { content:attr(data-label); font-weight:600; color:#64748b; text-align:left; flex:0 0 78px; }
+    .cl-reg td a:not(.erp-btn) { color:#b91c1c !important; font-weight:600; }
+    .cl-reg td.cl-actions { flex-wrap:wrap; justify-content:flex-start; padding:8px 64px 2px 0 !important; }
+    .cl-reg td.cl-actions::before { display:none; }
+    .cl-reg td.cl-actions .erp-btn { color:#1e293b !important; background:#fff !important; border:1px solid #cbd5e1 !important; }
+    .cl-reg td[colspan] { display:block; text-align:left; }
+    .cl-reg td[colspan]::before { display:none; }
+  }
+  .cl-actions { white-space:nowrap; }
+  .cl-badge{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;background:#fef3c7;color:#92400e}
+  .cl-badge-ok{background:#dcfce7;color:#166534}
 </style>
 {% endblock %}
 {% block content %}
@@ -23,27 +41,28 @@
   {% if q or type_filter %}<a class="erp-btn erp-btn-ghost" href="{{ url_for('company_letters') }}">Clear</a>{% endif %}
 </form>
 
-<div class="erp-table-panel" data-erp-table>
+<div class="erp-table-panel cl-reg" data-erp-table>
   <div class="erp-table-scroll">
     <table class="erp-table">
-      <thead><tr><th>Reference</th><th>Date</th><th>Type</th><th>Recipient</th><th>Subject</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Reference</th><th>Date</th><th>Type</th><th>Recipient</th><th>Subject</th><th>Status</th><th>Actions</th></tr></thead>
       <tbody>
         {% for row in data.rows %}
         <tr>
-          <td><a href="{{ url_for('company_letter_view', letter_id=row.id) }}">{{ row.reference_no }}</a></td>
-          <td>{{ row.letter_date|letter_date }}</td>
-          <td>{{ row.letter_type }}</td>
-          <td>{{ row.recipient_name }}{% if row.recipient_org %}<br><small>{{ row.recipient_org }}</small>{% endif %}</td>
-          <td>{{ row.subject }}</td>
-          <td style="white-space:nowrap;">
+          <td data-label="Reference"><a href="{{ url_for('company_letter_view', letter_id=row.id) }}">{{ row.reference_no }}</a></td>
+          <td data-label="Date">{{ row.letter_date|letter_date }}</td>
+          <td data-label="Type">{{ row.letter_type }}</td>
+          <td data-label="Recipient">{{ row.recipient_name }}{% if row.recipient_org %}<br><small>{{ row.recipient_org }}</small>{% endif %}</td>
+          <td data-label="Subject">{{ row.subject }}</td>
+          <td data-label="Status"><span class="cl-badge {{ 'cl-badge-ok' if row.status == 'Issued' else '' }}">{{ row.status or 'Draft' }}</span></td>
+          <td data-label="Actions" class="cl-actions">
             <a class="erp-btn erp-btn-ghost erp-btn-sm" href="{{ url_for('company_letter_view', letter_id=row.id) }}">View</a>
-            {% if can_edit %}<a class="erp-btn erp-btn-ghost erp-btn-sm" href="{{ url_for('company_letter_form', letter_id=row.id) }}">Edit</a>{% endif %}
+            {% if can_edit and (row.status != 'Issued' or can_issue) %}<a class="erp-btn erp-btn-ghost erp-btn-sm" href="{{ url_for('company_letter_form', letter_id=row.id) }}">Edit</a>{% endif %}
             <a class="erp-btn erp-btn-ghost erp-btn-sm" href="{{ url_for('company_letter_preview', letter_id=row.id) }}">Preview</a>
             <a class="erp-btn erp-btn-ghost erp-btn-sm" target="_blank" rel="noopener" href="{{ url_for('company_letter_preview', letter_id=row.id, print=1) }}">Print</a>
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="6">{% if q or type_filter %}No letters match this search.{% else %}No company letters yet.{% endif %}</td></tr>
+        <tr><td colspan="7">{% if q or type_filter %}No letters match this search.{% else %}No company letters yet.{% endif %}</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -57,3 +76,4 @@
   </div>
 </div>
 {% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/phone-sidebar.js') }}"></script>{% endblock %}

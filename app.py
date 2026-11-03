@@ -6250,6 +6250,8 @@ OFFICE_NAV_ACTIVE = [
     "company_letter_form",
     "company_letter_view",
     "company_letter_preview",
+    "company_letter_issue",
+    "company_letter_content",
     "office_admin",
     "office_inward",
     "office_outward",
@@ -7326,7 +7328,7 @@ NAV_GROUPS = [
                 "endpoint": "company_letters",
                 "label": "Company Letters",
                 "icon": "fa-file-lines",
-                "active_endpoints": ["company_letters", "company_letter_form", "company_letter_view", "company_letter_preview"],
+                "active_endpoints": ["company_letters", "company_letter_form", "company_letter_view", "company_letter_preview", "company_letter_issue", "company_letter_content"],
             },
             {
                 "endpoint": "office_quotations",
@@ -8617,7 +8619,7 @@ def get_department_portals():
                 {"endpoint": "office_inward", "label": "Letter In / Inward Register", "icon": "fa-inbox", "active_endpoints": ["office_inward"]},
                 {"endpoint": "office_outward", "label": "Letter Out / Outward Register", "icon": "fa-paper-plane", "active_endpoints": ["office_outward"]},
                 {"endpoint": "office_letters", "label": "Letter Preparation", "icon": "fa-envelope-open-text", "active_endpoints": ["office_letters", "office_letter_print"]},
-                {"endpoint": "company_letters", "label": "Company Letters", "icon": "fa-file-lines", "active_endpoints": ["company_letters", "company_letter_form", "company_letter_view", "company_letter_preview"]},
+                {"endpoint": "company_letters", "label": "Company Letters", "icon": "fa-file-lines", "active_endpoints": ["company_letters", "company_letter_form", "company_letter_view", "company_letter_preview", "company_letter_issue", "company_letter_content"]},
                 {"endpoint": "office_agreements", "label": "Agreements", "icon": "fa-handshake", "active_endpoints": ["office_agreements"]},
                 {"endpoint": "office_legal", "label": "Legal Documents", "icon": "fa-scale-balanced", "active_endpoints": ["office_legal"]},
                 {"endpoint": "corporate_dms", "label": "Corporate DMS", "icon": "fa-folder-tree", "active_endpoints": ["corporate_dms", "corporate_dms_file", "corporate_dms_download"]},
@@ -19373,25 +19375,88 @@ def _letter_html_filter(value):
 
 def _prepare_company_letters_db(db):
     company_letters_service.ensure_company_letters_schema(db)
+    db.commit()  # schema/seed writes must not leave a transaction open before numbering
 
 
-def _company_letters_denied():
-    """None when the user may use Company Letters, else a response to return.
+def company_letter_access(db=None) -> dict:
+    """What the logged-in user may do with Company Letters, decided on the server.
 
-    Same audience as the Administration & Compliance menu: guests and base HR/payroll
-    users are not offered it, so they are refused here too. Everyone else who is logged
-    in may prepare and print letters.
+    Built only from the ERP's existing access model, nothing new:
+
+    * Administrators: everything.
+    * Guests and base HR/payroll users: nothing (same as the menu).
+    * Everyone else needs the *Company Letters* tab of the Administration department
+      (Users -> department tab permissions; no tab rows saved = unrestricted, as for every
+      other tab), and then their workflow role decides the action:
+        view / print       any role with the tab
+        create / edit      Maker (``can_create``)
+        autofill employee  same as create, and only staff of the user's own company
+        issue              Approver (``can_approve``)
+    * Which letters and employees they see is further limited to their own
+      tenant/company by ``company_letters_service.make_scope``.
     """
-    if is_guest_user() or is_hr_base_user():
-        flash("You do not have access to Company Letters.")
-        return redirect(url_for("dashboard"))
-    return None
+    cached = getattr(request, "_company_letter_access", None)
+    if cached is not None:
+        return cached
+    none = {"view": False, "create": False, "issue": False, "print": False}
+    if not session.get("user_id") or is_guest_user() or is_hr_base_user():
+        request._company_letter_access = none
+        return none
+    db = db or get_db()
+    if is_admin_user():
+        full = {"view": True, "create": True, "issue": True, "print": True}
+        request._company_letter_access = full
+        return full
+    uid = session["user_id"]
+    ensure_user_tab_permissions_schema(db)
+    has_rows = db.execute(
+        "SELECT 1 FROM user_tab_permissions WHERE user_id=? AND department_slug='administration' LIMIT 1",
+        (uid,),
+    ).fetchone()
+    tab_ok = True
+    if has_rows:  # tab rows saved for the department = restricted to the tabs granted there
+        granted = db.execute(
+            "SELECT 1 FROM user_tab_permissions WHERE user_id=? AND department_slug='administration' "
+            "AND granted=1 AND (tab_key=? OR endpoint=?) LIMIT 1",
+            (uid, "company_letters::Company Letters", "company_letters"),
+        ).fetchone()
+        tab_ok = granted is not None
+    if not tab_ok:
+        request._company_letter_access = none
+        return none
+    caps = user_workflow_capabilities(db, uid, False)
+    access = {
+        "view": True,
+        "print": True,
+        "create": bool(caps.get("can_create")),
+        "issue": bool(caps.get("can_approve")),
+    }
+    request._company_letter_access = access
+    return access
+
+
+def _company_letters_denied(action: str = "view", *, as_json: bool = False):
+    """None when the user may ``action`` (view/create/issue/print), else a response."""
+    if company_letter_access().get(action):
+        return None
+    if as_json:
+        return jsonify({"error": "forbidden"}), 403
+    flash(
+        "You do not have permission to "
+        + {"view": "open", "print": "print", "create": "create or edit", "issue": "issue"}.get(action, action)
+        + " Company Letters."
+    )
+    return redirect(url_for("company_letters" if company_letter_access().get("view") else "dashboard"))
+
+
+def _company_letter_scope():
+    return company_letters_service.make_scope(session)
 
 
 @app.route("/administration/company-letters")
 @login_required
 def company_letters():
-    denied = _company_letters_denied()
+    denied = _company_letters_denied("view")
     if denied:
         return denied
     db = get_db()
@@ -19402,6 +19467,7 @@ def company_letters():
         type_filter = ""
     data = company_letters_service.list_letters(
         db,
+        scope=_company_letter_scope(),
         query=q,
         letter_type=type_filter,
         page=request.args.get("page", 1, type=int),
@@ -19414,12 +19480,13 @@ def company_letters():
             per_page=data["per_page"], page=page,
         )
 
+    access = company_letter_access()
     return render_template(
         "company_letters.html",
         data=data, q=q, type_filter=type_filter, page_url=page_url,
         letter_types=company_letters_service.LETTER_TYPES,
         page_sizes=company_letters_service.PAGE_SIZES,
-        can_edit=True,
+        can_edit=access["create"], can_issue=access["issue"],
     )
 
 
@@ -19427,31 +19494,42 @@ def company_letters():
 @app.route("/administration/company-letters/<int:letter_id>/edit", methods=["GET", "POST"])
 @login_required
 def company_letter_form(letter_id=None):
-    denied = _company_letters_denied()
+    denied = _company_letters_denied("create")
     if denied:
         return denied
     db = get_db()
     _prepare_company_letters_db(db)
+    scope = _company_letter_scope()
     letter = None
     if letter_id:
-        letter = company_letters_service.get_letter(db, letter_id)
+        letter = company_letters_service.get_letter(db, letter_id, scope)
         if not letter:
             flash("Letter not found.")
             return redirect(url_for("company_letters"))
+        if letter["status"] == company_letters_service.STATUS_ISSUED and not company_letter_access()["issue"]:
+            flash("This letter has been issued. Only a user who can issue letters may change it "
+                  "(it then returns to Draft until issued again).")
+            return redirect(url_for("company_letter_view", letter_id=letter_id))
     errors: list[str] = []
+    suggestion = None
     if request.method == "POST":
-        values, errors = company_letters_service.validate_letter_form(db, request.form, letter_id)
+        values, errors = company_letters_service.validate_letter_form(db, request.form, letter_id, scope)
         if not errors:
             try:
-                saved_id = company_letters_service.save_letter(
-                    db, values, session.get("username", ""), letter_id
+                saved_id, saved_ref = company_letters_service.save_letter(
+                    db, values, session.get("username", ""), letter_id, scope
                 )
                 db.commit()
             except ValueError as exc:
                 db.rollback()
                 errors = [str(exc)]
             else:
-                flash("Letter saved.")
+                msg = "Letter saved as Draft."
+                suggested = request.form.get("suggested_reference", "").strip()
+                if values.get("reference_auto") and suggested and suggested != saved_ref:
+                    msg += (f" The number {suggested} was taken by another letter while you were "
+                            f"editing, so this letter was given {saved_ref}.")
+                flash(msg)
                 if request.form.get("after") == "preview":
                     return redirect(url_for("company_letter_preview", letter_id=saved_id))
                 return redirect(url_for("company_letter_view", letter_id=saved_id))
@@ -19459,10 +19537,11 @@ def company_letter_form(letter_id=None):
     elif letter:
         v = dict(letter)
     else:
-        sig_name, sig_title = company_letters_service.last_signatory(db)
+        sig_name, sig_title = company_letters_service.last_signatory(db, scope)
         today = datetime.now().strftime("%Y-%m-%d")
+        suggestion = company_letters_service.suggest_reference(db, today, scope)
         v = {
-            "reference_no": company_letters_service.suggest_reference(db, today),
+            "reference_no": suggestion["reference"],
             "letter_date": today,
             "letter_type": "General Administration Letter",
             "recipient_name": "", "recipient_org": "", "recipient_address": "",
@@ -19473,51 +19552,75 @@ def company_letter_form(letter_id=None):
         }
     employee_label = ""
     if v.get("employee_id"):
-        emp = db.execute(
-            "SELECT staff_name, employee_code FROM staff WHERE id=?", (v["employee_id"],)
-        ).fetchone()
+        emp = company_letters_service.employee_details(db, v["employee_id"], scope)
         if emp:
-            employee_label = f"{emp['staff_name']} ({emp['employee_code'] or '—'})"
+            employee_label = f"{emp['name']} ({emp.get('employee_code') or '—'})"
     return render_template(
         "company_letter_form.html",
         letter=letter, v=v, errors=errors, employee_label=employee_label,
         letter_types=company_letters_service.LETTER_TYPES,
-        offer_body=company_letters_service.OFFER_LETTER_BODY.format(
-            designation="[designation]", joining_date="[date of joining]"
-        ),
+        suggestion=suggestion,
+        suggested_reference=(suggestion or {}).get("reference", ""),
+        earlier_letters=company_letters_service.recent_letters(db, scope),
+        copy_url=url_for("company_letter_content", letter_id=0),
     )
 
 
 @app.route("/administration/company-letters/<int:letter_id>")
 @login_required
 def company_letter_view(letter_id):
-    denied = _company_letters_denied()
+    denied = _company_letters_denied("view")
     if denied:
         return denied
     db = get_db()
     _prepare_company_letters_db(db)
-    letter = company_letters_service.get_letter(db, letter_id)
+    scope = _company_letter_scope()
+    letter = company_letters_service.get_letter(db, letter_id, scope)
     if not letter:
         flash("Letter not found.")
         return redirect(url_for("company_letters"))
     employee = None
     if letter.get("employee_id"):
-        employee = db.execute(
-            "SELECT staff_name, employee_code FROM staff WHERE id=?", (letter["employee_id"],)
-        ).fetchone()
-    return render_template("company_letter_view.html", letter=letter, employee=employee, can_edit=True)
+        employee = company_letters_service.employee_details(db, letter["employee_id"], scope)
+    access = company_letter_access()
+    return render_template(
+        "company_letter_view.html", letter=letter, employee=employee,
+        can_edit=access["create"] and (letter["status"] != company_letters_service.STATUS_ISSUED or access["issue"]),
+        can_issue=access["issue"], can_print=access["print"],
+    )
+
+
+@app.route("/administration/company-letters/<int:letter_id>/issue", methods=["POST"])
+@login_required
+def company_letter_issue(letter_id):
+    denied = _company_letters_denied("issue")
+    if denied:
+        return denied
+    db = get_db()
+    _prepare_company_letters_db(db)
+    try:
+        company_letters_service.issue_letter(
+            db, letter_id, session.get("username", ""),
+            confirmed=request.form.get("confirm_content") == "1", scope=_company_letter_scope(),
+        )
+        db.commit()
+        flash("Letter issued.")
+    except ValueError as exc:
+        db.rollback()
+        flash(str(exc))
+    return redirect(url_for("company_letter_view", letter_id=letter_id))
 
 
 @app.route("/administration/company-letters/<int:letter_id>/preview")
 @login_required
 def company_letter_preview(letter_id):
     """A4 preview and the print screen (print with letterhead / on preprinted paper)."""
-    denied = _company_letters_denied()
+    denied = _company_letters_denied("print")
     if denied:
         return denied
     db = get_db()
     _prepare_company_letters_db(db)
-    letter = company_letters_service.get_letter(db, letter_id)
+    letter = company_letters_service.get_letter(db, letter_id, _company_letter_scope())
     if not letter:
         flash("Letter not found.")
         return redirect(url_for("company_letters"))
@@ -19526,27 +19629,49 @@ def company_letter_preview(letter_id):
         letter=letter,
         body_blocks=company_letters_service.split_blocks(letter["body_html"]),
         back_url=url_for("company_letter_view", letter_id=letter_id),
+        is_draft=letter["status"] != company_letters_service.STATUS_ISSUED,
+        can_edit=company_letter_access()["create"],
     )
+
+
+@app.route("/administration/company-letters/<int:letter_id>/content")
+@login_required
+def company_letter_content(letter_id):
+    """Subject and body of an earlier letter (same company) to start a new one from."""
+    denied = _company_letters_denied("create", as_json=True)
+    if denied:
+        return denied
+    db = get_db()
+    _prepare_company_letters_db(db)
+    letter = company_letters_service.get_letter(db, letter_id, _company_letter_scope())
+    if not letter:
+        return jsonify({"error": "not found"}), 404
+    return jsonify({
+        "reference_no": letter["reference_no"], "subject": letter["subject"],
+        "salutation": letter["salutation"], "body_html": letter["body_html"],
+        "closing": letter["closing"], "letter_type": letter["letter_type"],
+    })
 
 
 @app.route("/administration/company-letters/employees")
 @login_required
 def company_letter_employees():
-    denied = _company_letters_denied()
+    denied = _company_letters_denied("create", as_json=True)
     if denied:
-        return jsonify({"employees": []}), 403
+        return denied
     db = get_db()
-    return jsonify({"employees": company_letters_service.search_employees(db, request.args.get("q", ""))})
+    return jsonify({"employees": company_letters_service.search_employees(
+        db, request.args.get("q", ""), scope=_company_letter_scope())})
 
 
 @app.route("/administration/company-letters/employee/<int:employee_id>")
 @login_required
 def company_letter_employee(employee_id):
-    denied = _company_letters_denied()
+    denied = _company_letters_denied("create", as_json=True)
     if denied:
-        return jsonify({"error": "forbidden"}), 403
+        return denied
     db = get_db()
-    details = company_letters_service.employee_details(db, employee_id)
+    details = company_letters_service.employee_details(db, employee_id, _company_letter_scope())
     if not details:
         return jsonify({"error": "not found"}), 404
     return jsonify(details)

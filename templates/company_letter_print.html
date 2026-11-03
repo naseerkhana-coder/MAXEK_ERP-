@@ -1,11 +1,13 @@
 {% extends 'letter_print_base.html' %}
 {% block doc_title %}{{ letter.reference_no }}{% endblock %}
 {% block toolbar_extra %}
-  <a href="{{ url_for('company_letter_form', letter_id=letter.id) }}">Edit</a>
+  {% if can_edit %}<a href="{{ url_for('company_letter_form', letter_id=letter.id) }}">Edit</a>{% endif %}
+  {% if is_draft %}<span style="color:#b45309;font-weight:700;">DRAFT &mdash; not issued</span>{% endif %}
   <strong>{{ letter.reference_no }}</strong>
 {% endblock %}
 {% block rows %}
 <tr><td>
+  {% if is_draft %}<div class="lp-draft">DRAFT &mdash; NOT ISSUED</div>{% endif %}
   <div class="lp-refdate"><span>Ref: {{ letter.reference_no }}</span><span>Date: {{ letter.letter_date|letter_date }}</span></div>
   <div class="lp-to lp-keep">
     <div>To,</div>

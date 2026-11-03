@@ -17,6 +17,7 @@
     <button type="button" class="lp-primary" data-lp-mode="letterhead" data-lp-print>Print with MAXEK Letterhead</button>
     <button type="button" class="lp-primary" data-lp-mode="preprinted" data-lp-print>Print on Preprinted Paper</button>
   </div>
+  <div class="lp-stage" id="lp-stage">
   <div class="lp-sheet">
     <img class="lp-bg-print" src="{{ url_for('static', filename='assets/letterhead/maxek-letterhead.png') }}" alt="" width="794" height="1123">
     <table class="lp-doc">
@@ -26,6 +27,7 @@
         {% block rows %}{% endblock %}
       </tbody>
     </table>
+  </div>
   </div>
   <script src="{{ url_for('static', filename='js/letter-print.js') }}"></script>
 </body>

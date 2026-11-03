@@ -40,6 +40,16 @@ body.lp-body {
 .lp-toolbar [aria-pressed="true"] { outline: 2px solid #fff; outline-offset: 1px; }
 
 /* ---------- the sheet ---------- */
+/* On a narrow screen JS scales the A4 sheet down to fit (screen only; never in print). */
+.lp-stage { width: 210mm; margin: 0 auto; }
+.lp-stage.lp-scaled { margin: 0; }
+.lp-stage.lp-scaled .lp-sheet { margin: 0; transform-origin: 0 0; }
+@media (max-width: 760px) {
+  .lp-toolbar { padding: 8px 10px; gap: 6px; font-size: 13px; }
+  .lp-toolbar a, .lp-toolbar button { padding: 8px 10px; flex: 1 1 44%; text-align: center; }
+  .lp-toolbar .lp-spacer { display: none; }
+  .lp-toolbar .lp-note { flex: 1 1 100%; }
+}
 .lp-sheet {
   position: relative; width: 210mm; margin: 14px auto 40px; background: #fff;
   box-shadow: 0 2px 14px rgba(0, 0, 0, .25); min-height: 297mm;
@@ -91,6 +101,8 @@ body.lp-body {
   html { background: #fff !important; }
   body, body.lp-body { background: transparent !important; }
   .lp-toolbar, .no-print { display: none !important; }
+  .lp-stage, .lp-stage.lp-scaled { width: auto !important; height: auto !important; margin: 0 !important; }
+  .lp-stage .lp-sheet, .lp-stage.lp-scaled .lp-sheet { transform: none !important; }
   .lp-sheet { width: 210mm; margin: 0; box-shadow: none; min-height: 0; background: none !important; }
   /* Full-page letterhead repeated on every printed page, behind the text. */
   .lp-bg-print {
@@ -104,3 +116,5 @@ body.lp-body {
   .lp-block p, .lp-block li { orphans: 3; widows: 3; }
   .lp-foot-note { display: none; }
 }
+
+.lp-draft{font:700 9pt Arial,sans-serif;letter-spacing:.12em;color:#b45309;border:1px solid #b45309;display:inline-block;padding:1px 6px;margin-bottom:4mm}
