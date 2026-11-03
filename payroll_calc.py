@@ -103,6 +103,48 @@ def month_day_counts(month: int, year: int) -> dict[str, int]:
     )
 
 
+def employment_window(joining_date: Any, exit_date: Any, start: Any, end: Any) -> dict[str, Any] | None:
+    """Days an employee with an exit date can be paid for inside a payroll period.
+
+    Returns ``None`` when no (valid) exit date is set, so records without one are
+    calculated exactly as before. With an exit date, pay runs from the later of the
+    period start and the joining date to the earlier of the period end and the exit
+    date, **inclusive** of the exit date. An exit on a Sunday simply ends the window
+    on that Sunday (Sundays are never working days, so nothing extra is paid).
+
+    The daily-rate divisor is still the *full period's* working days; this window
+    only limits how many of those days can be payable.
+    """
+    exit_on = parse_iso_date(exit_date)
+    if exit_on is None:
+        return None
+    s, e = parse_iso_date(start), parse_iso_date(end)
+    if not s or not e or e < s:
+        return None
+    joined = parse_iso_date(joining_date)
+    win_start = max(s, joined) if joined else s
+    win_end = min(e, exit_on)
+    if win_end < win_start:
+        counts = {"calendar_days": 0, "sundays": 0, "working_days": 0}
+        return {"exit_date": exit_on.isoformat(), "window_start": None, "window_end": None, **counts}
+    return {
+        "exit_date": exit_on.isoformat(),
+        "window_start": win_start.isoformat(),
+        "window_end": win_end.isoformat(),
+        **period_day_counts(win_start, win_end),
+    }
+
+
+def in_window(value: Any, window: dict[str, Any] | None) -> bool:
+    """True if ``value`` falls inside ``window`` (always True when there is no window)."""
+    if window is None:
+        return True
+    d = parse_iso_date(value)
+    if d is None or not window.get("window_start"):
+        return False
+    return window["window_start"] <= d.isoformat() <= window["window_end"]
+
+
 def resolve_payable_days(
     working_days: Any,
     *,

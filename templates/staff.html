@@ -180,6 +180,7 @@
       <div class="erp-field"><select name="holiday_pay_applicable" class="has-value"><option value="No"{% if not form_employee or form_employee.holiday_pay_applicable != 'Yes' %} selected{% endif %}>No</option><option value="Yes"{% if form_employee and form_employee.holiday_pay_applicable == 'Yes' %} selected{% endif %}>Yes</option></select><label>Holiday Pay Applicable</label></div>
       <div class="erp-field"><input name="working_hours" type="number" step="0.1" value="{{ form_employee.working_hours if form_employee else '' }}" placeholder=" "><label>Working Hours</label></div>
       <div class="erp-field"><input name="joining_date" type="date" value="{{ form_employee.joining_date if form_employee else '' }}" placeholder=" "><label>Joining Date</label></div>
+      <div class="erp-field"><input name="exit_date" type="date" value="{{ (form_employee.exit_date or '') if form_employee else '' }}" placeholder=" " title="Optional. Last day of employment (inclusive). Leave blank for current employees."><label>Exit Date (optional)</label></div>
       <div class="erp-field"><input name="bank_account" value="{{ form_employee.bank_account if form_employee else '' }}" placeholder=" "><label>Bank Account Number</label></div>
       <div class="erp-field"><input name="bank_name" value="{{ form_employee.bank_name if form_employee else '' }}" placeholder=" "><label>Bank Name</label></div>
       <div class="erp-field"><input name="ifsc_code" value="{{ form_employee.ifsc_code if form_employee else '' }}" placeholder=" "><label>IFSC Code</label></div>
@@ -327,6 +328,7 @@
         <div><span>OT Applicable</span><strong>{{ row.ot_applicable or '—' }}</strong></div>
         <div><span>Working Hours</span><strong>{{ row.working_hours if row.working_hours is not none else '—' }}</strong></div>
         <div><span>Joining Date</span><strong>{{ row.joining_date or '—' }}</strong></div>
+        {% if row.exit_date %}<div><span>Exit Date</span><strong>{{ row.exit_date }}</strong></div>{% endif %}
         <div><span>Date of Birth</span><strong>{{ row.date_of_birth or '—' }}</strong></div>
         <div><span>Aadhaar Number</span><strong>{{ row.aadhaar_number or '—' }}</strong></div>
         <div><span>PAN Number</span><strong>{{ row.pan_number or '—' }}</strong></div>

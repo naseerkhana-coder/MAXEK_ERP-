@@ -8,6 +8,8 @@ from datetime import datetime, timedelta
 
 from payroll_calc import (
     CALC_BASIS,
+    employment_window,
+    in_window,
     is_sunday,
     monthly_pay_breakdown,
     parse_iso_date,
@@ -541,11 +543,15 @@ def calculate_monthly_staff_pay(
     holiday_pay = (staff_row.get("holiday_pay_applicable") or "No") == "Yes"
     counts = period_day_counts(start, end)
     working_days = counts["working_days"]
+    # Optional exit date: pay only through it (inclusive), but keep the FULL month's
+    # working days as the divisor. No exit date -> window is None -> unchanged maths.
+    window = employment_window(staff_row.get("joining_date"), staff_row.get("exit_date"), start, end)
+    entitled_working_days = window["working_days"] if window else working_days
     # A holiday on a Sunday is already a non-working day: never pay it twice.
     holiday_dates = {
         str(h["holiday_date"])[:10]
         for h in (holidays or [])
-        if not is_sunday(h["holiday_date"])
+        if not is_sunday(h["holiday_date"]) and in_window(h["holiday_date"], window)
     }
     monthly_summary = _fetch_monthly_attendance_summary(db, staff_id, start, end)
     sunday_worked_days = 0.0
@@ -553,16 +559,28 @@ def calculate_monthly_staff_pay(
     if monthly_summary:
         # Monthly summary entries already account for holidays (existing rule).
         recorded_absent_days = float(monthly_summary.get("absent_days") or 0)
+        # Absences recorded against days after the exit date (or before joining)
+        # are not chargeable: assume they fall on the days outside the window first.
+        outside_days = working_days - entitled_working_days
+        chargeable_absent = max(recorded_absent_days - outside_days, 0.0) if window else recorded_absent_days
         resolved = resolve_payable_days(
-            working_days,
+            entitled_working_days,
             present_days=monthly_summary["present_days"],
-            recorded_absent_days=recorded_absent_days,
+            recorded_absent_days=chargeable_absent,
             half_days=monthly_summary.get("half_days") or 0,
         )
         ot_hours = float(monthly_summary["ot_hours"] or 0)
     else:
         attendance = fetch_attendance_for_employee(db, "staff", staff_id, start, end)
-        att_summary = summarize_attendance(attendance)
+        full_summary = summarize_attendance(attendance)
+        # Payable days only count attendance inside the employment window; OT hours
+        # keep coming from every attendance row, so no overtime under the existing
+        # rules is dropped.
+        att_summary = (
+            summarize_attendance([r for r in attendance if in_window(r.get("attendance_date"), window)])
+            if window
+            else full_summary
+        )
         sunday_worked_days = float(att_summary["sunday_present_days"])
         paid_holidays = 0
         if holiday_pay and holiday_dates:
@@ -570,11 +588,11 @@ def calculate_monthly_staff_pay(
                 holiday_dates, att_summary["present_dates"]
             )
         resolved = resolve_payable_days(
-            working_days,
+            entitled_working_days,
             present_days=att_summary["working_present_days"],
             paid_holiday_days=paid_holidays,
         )
-        ot_hours = float(att_summary["ot_hours"])
+        ot_hours = float(full_summary["ot_hours"])
 
     breakdown = monthly_pay_breakdown(
         monthly_salary,
@@ -602,6 +620,9 @@ def calculate_monthly_staff_pay(
         "calendar_days": counts["calendar_days"],
         "sundays": counts["sundays"],
         "working_days": working_days,
+        "exit_date": window["exit_date"] if window else None,
+        "entitled_working_days": entitled_working_days,
+        "not_employed_days": working_days - entitled_working_days,
         "present_days": resolved["worked_working_days"],
         "payable_days": resolved["payable_days"],
         "unpaid_absence_days": resolved["unpaid_absence_days"],
@@ -1300,11 +1321,24 @@ def list_eligible_employees(
         types = list(EMPLOYEE_TYPES)
 
     if "staff" in types and _table_exists(db, "staff"):
+        params: list = []
+        if period_start and "exit_date" in _table_columns(db, "staff"):
+            # Staff with an exit date are judged by that date, not by current status:
+            # someone who left during (or after) the period still gets that payroll,
+            # even if now marked Inactive. Someone who left before it does not.
+            # Staff without an exit date keep the original Active-only rule.
+            blank_exit = "(s.exit_date IS NULL OR TRIM(s.exit_date) = '')"
+            where = (
+                f"(({_active_status_sql('s.status')} AND {blank_exit}) "
+                f"OR (NOT {blank_exit} AND SUBSTR(TRIM(s.exit_date), 1, 10) >= ?))"
+            )
+            params.append(period_start)
+        else:
+            where = _active_status_sql("s.status")
         query = (
             "SELECT s.*, s.staff_name AS employee_name, s.employee_code AS employee_code "
-            f"FROM staff s WHERE {_active_status_sql('s.status')}"
+            f"FROM staff s WHERE {where}"
         )
-        params: list = []
         if department and "department" in _table_columns(db, "staff"):
             query += " AND s.department=?"
             params.append(department)
@@ -1445,6 +1479,31 @@ def ensure_no_payroll_overlap(
 # ---------------------------------------------------------------------------
 
 
+def ensure_staff_not_departed(db, employees: list[tuple[str, int]], period_start: str) -> None:
+    """Refuse payroll for staff whose exit date is before the period starts.
+
+    Selection by explicit id bypasses ``list_eligible_employees``, so the same
+    rule is enforced here. Staff without an exit date are never affected.
+    """
+    ids = [int(eid) for et, eid in employees if et == "staff"]
+    if not ids or not period_start or "exit_date" not in _table_columns(db, "staff"):
+        return
+    rows = db.execute(
+        "SELECT staff_name, employee_code, exit_date FROM staff "
+        f"WHERE id IN ({','.join('?' * len(ids))}) "
+        "AND exit_date IS NOT NULL AND TRIM(exit_date) <> '' "
+        "AND SUBSTR(TRIM(exit_date), 1, 10) < ?",
+        [*ids, period_start],
+    ).fetchall()
+    if rows:
+        who = "; ".join(
+            f"{r['staff_name'] or r['employee_code']} (left {str(r['exit_date'])[:10]})" for r in rows[:8]
+        )
+        raise ValueError(
+            f"Cannot generate payroll for staff who left before this period: {who}. Deselect them."
+        )
+
+
 def explain_payroll_eligibility(
     db,
     query: str,
@@ -1522,13 +1581,25 @@ def explain_payroll_eligibility(
 
         raw_status = emp.get("status")
         is_active = _norm_text(raw_status or "Active") == "active"
-        checks.append({
-            "check": "Status is Active",
-            "ok": is_active,
-            "detail": f"status = {raw_status!r}",
-        })
-        if not is_active:
-            reasons.append(f"Status is {raw_status!r}, not Active.")
+        exit_raw = str(emp.get("exit_date") or "").strip()[:10] if et == "staff" else ""
+        if exit_raw and period_start:
+            # Same rule as list_eligible_employees: an exit date overrides status.
+            left_before = exit_raw < period_start
+            checks.append({
+                "check": "Exit date is not before the period",
+                "ok": not left_before,
+                "detail": f"exit date = {exit_raw}; status = {raw_status!r} (ignored when an exit date is set)",
+            })
+            if left_before:
+                reasons.append(f"Exit date {exit_raw} is before the period starts ({period_start}).")
+        else:
+            checks.append({
+                "check": "Status is Active",
+                "ok": is_active,
+                "detail": f"status = {raw_status!r}",
+            })
+            if not is_active:
+                reasons.append(f"Status is {raw_status!r}, not Active.")
 
         in_category = et in category_types
         checks.append({

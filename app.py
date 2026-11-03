@@ -30,6 +30,7 @@ from cost_planning_service import (
     build_monitoring_row,
 )
 
+from payroll_calc import parse_iso_date as payroll_parse_iso_date
 from payroll_service import (
     calculate_daily_wage,
     generate_payroll_run,
@@ -46,6 +47,7 @@ from payroll_service import (
     employee_has_period_data,
     serialize_eligible_employee,
     ensure_no_payroll_overlap,
+    ensure_staff_not_departed,
     explain_payroll_eligibility,
     line_day_basis,
     payroll_overlap_index,
@@ -3970,6 +3972,7 @@ def _generate_payroll_run_selected(
         raise ValueError("No employees selected.")
     employees = list(dict.fromkeys((et, int(eid)) for et, eid in employees))
     ensure_no_payroll_overlap(db, employees, period_start, period_end)
+    ensure_staff_not_departed(db, employees, period_start)
     if employment_category == "company_staff":
         project_id = None
     run_ref = f"PR-{datetime.now().strftime('%Y%m%d%H%M%S')}"
@@ -5833,6 +5836,7 @@ def init_db():
         "UPDATE users SET status='Active' WHERE status IS NULL OR TRIM(status)=''"
     )
     _ensure_column(db, "staff", "designation_id", "INTEGER")
+    _ensure_column(db, "staff", "exit_date", "TEXT")
     _ensure_column(db, "staff", "reporting_manager", "TEXT")
     _ensure_column(db, "staff", "workflow_role", "TEXT")
     _ensure_column(db, "staff", "aadhaar_number", "TEXT")
@@ -10261,6 +10265,7 @@ def staff():
         holiday_pay_applicable = request.form.get("holiday_pay_applicable", "No").strip()
         working_hours = request.form.get("working_hours", "0").strip()
         joining_date = request.form.get("joining_date", "").strip()
+        exit_date = request.form.get("exit_date", "").strip()
         date_of_birth = request.form.get("date_of_birth", "").strip()
         gender = request.form.get("gender", "").strip()
         status = request.form.get("status", "Active").strip()
@@ -10328,6 +10333,16 @@ def staff():
         except ValueError:
             flash("Enter valid numeric values for salary and working hours.")
             return redirect(url_for("staff"))
+        if exit_date:
+            exit_parsed = payroll_parse_iso_date(exit_date)
+            if exit_parsed is None:
+                flash("Exit date must be a valid date.")
+                return redirect(url_for("staff", edit=staff_id) if staff_id else url_for("staff"))
+            exit_date = exit_parsed.isoformat()
+            join_parsed = payroll_parse_iso_date(joining_date)
+            if join_parsed and exit_parsed < join_parsed:
+                flash("Exit date cannot be earlier than the joining date.")
+                return redirect(url_for("staff", edit=staff_id) if staff_id else url_for("staff"))
         values = (
             employee_code, staff_name, mobile, email, department, designation_name,
             designation_id, reporting_manager, workflow_role or None,
@@ -10337,6 +10352,7 @@ def staff():
             bank_account, bank_name, ifsc_code, branch_name,
             id_proof, aadhaar_document, pan_document,
             company_room_provided or "No", company_food_provided or "No",
+            exit_date or None,
         )
         if existing_staff:
             db.execute(
@@ -10346,7 +10362,7 @@ def staff():
                 "working_hours=?, joining_date=?, date_of_birth=?, gender=?, photo=?, status=?, "
                 "aadhaar_number=?, pan_number=?, bank_account=?, bank_name=?, ifsc_code=?, "
                 "branch_name=?, id_proof=?, aadhaar_document=?, pan_document=?, "
-                "company_room_provided=?, company_food_provided=? WHERE id=?",
+                "company_room_provided=?, company_food_provided=?, exit_date=? WHERE id=?",
                 values + (staff_id,),
             )
             saved_id = int(staff_id)
@@ -10358,7 +10374,7 @@ def staff():
                 "ot_applicable, ot_rate_per_hour, holiday_pay_applicable, working_hours, joining_date, "
                 "date_of_birth, gender, photo, status, "
                 "aadhaar_number, pan_number, bank_account, bank_name, ifsc_code, branch_name, id_proof, "
-                "aadhaar_document, pan_document, company_room_provided, company_food_provided) "
+                "aadhaar_document, pan_document, company_room_provided, company_food_provided, exit_date) "
                 "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 values,
             )
