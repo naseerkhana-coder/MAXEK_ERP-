@@ -35,8 +35,15 @@
 
     <table>
       <tbody>
-        <tr><th>Base / Daily Rate</th><td>₹ {{ '%.2f'|format(line.base_salary or 0) }}</td></tr>
+        <tr><th>Base / Monthly Salary</th><td>₹ {{ '%.2f'|format(line.base_salary or 0) }}</td></tr>
+        {% if line.basis and not line.basis.legacy %}
+        <tr><th>Calendar Days / Sundays</th><td>{{ line.basis.calendar_days }} / {{ line.basis.sundays }}</td></tr>
+        <tr><th>Working Days (excl. Sundays)</th><td>{{ line.basis.working_days }}</td></tr>
+        <tr><th>Daily Rate (monthly &divide; working days)</th><td>₹ {{ '%.2f'|format(line.basis.daily_rate or 0) }}</td></tr>
+        <tr><th>Payable Days</th><td>{{ line.basis.payable_days }} / {{ line.basis.working_days }}{% if line.basis.unpaid_absence_days %} ({{ line.basis.unpaid_absence_days }} unpaid){% endif %}</td></tr>
+        {% else %}
         <tr><th>Present Days</th><td>{{ line.present_days or 0 }} / {{ line.working_days or 0 }}</td></tr>
+        {% endif %}
         <tr><th>OT ({{ line.ot_hours or 0 }} hrs)</th><td>₹ {{ '%.2f'|format(line.ot_amount or 0) }}</td></tr>
         <tr><th>Holiday Pay</th><td>₹ {{ '%.2f'|format(line.holiday_pay or 0) }}</td></tr>
         <tr><th><strong>Gross Salary</strong></th><td><strong>₹ {{ '%.2f'|format(line.gross_salary or 0) }}</strong></td></tr>

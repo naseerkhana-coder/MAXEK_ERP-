@@ -9,6 +9,7 @@ import pandas as pd
 import bcrypt
 from datetime import datetime, timedelta
 from calendar import monthrange
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from zoneinfo import ZoneInfo
 
 from cost_planning_service import (
@@ -44,6 +45,14 @@ from payroll_service import (
     calculate_worker_period_pay,
     employee_has_period_data,
     serialize_eligible_employee,
+    ensure_no_payroll_overlap,
+    explain_payroll_eligibility,
+    line_day_basis,
+    payroll_overlap_index,
+    build_payroll_dashboard,
+    fetch_payroll_runs_page,
+    DASHBOARD_PAGE_SIZES,
+    DASHBOARD_STATUS_LABELS,
     _row_employee_identity,
     PAYROLL_RUN_STATUSES,
     EMPLOYEE_TYPES,
@@ -3788,6 +3797,31 @@ def format_app_datetime(dt=None, fmt="%A, %d %b %Y | %H:%M", db=None):
     return dt.strftime(fmt)
 
 
+@app.template_filter("inr")
+def inr_filter(value, places=2):
+    """Indian-grouped rupee amount, e.g. 1234567.5 -> '₹ 12,34,567.50' ('—' when blank)."""
+    if value is None or value == "":
+        return "\u2014"
+    try:
+        amount = Decimal(str(value)).quantize(
+            Decimal(1).scaleb(-int(places)), rounding=ROUND_HALF_UP
+        )
+    except (InvalidOperation, ValueError):
+        return "\u2014"
+    sign = "-" if amount < 0 else ""
+    whole, _, frac = f"{abs(amount):.{int(places)}f}".partition(".")
+    if len(whole) > 3:
+        head, tail = whole[:-3], whole[-3:]
+        groups = []
+        while len(head) > 2:
+            groups.insert(0, head[-2:])
+            head = head[:-2]
+        if head:
+            groups.insert(0, head)
+        whole = ",".join(groups + [tail])
+    return f"{sign}\u20b9 {whole}" + (f".{frac}" if frac else "")
+
+
 @app.template_filter("app_datetime")
 def app_datetime_filter(value, fmt="%d %b %Y %H:%M"):
     if value is None or value == "":
@@ -3934,6 +3968,8 @@ def _generate_payroll_run_selected(
 
     if not employees:
         raise ValueError("No employees selected.")
+    employees = list(dict.fromkeys((et, int(eid)) for et, eid in employees))
+    ensure_no_payroll_overlap(db, employees, period_start, period_end)
     if employment_category == "company_staff":
         project_id = None
     run_ref = f"PR-{datetime.now().strftime('%Y%m%d%H%M%S')}"
@@ -18539,46 +18575,81 @@ def payroll():
         if view_run:
             view_run = dict(view_run)
             view_lines = fetch_payroll_lines(db, run_id=view_id)
+            for line in view_lines:
+                line["basis"] = line_day_basis(line)
             wf_ctx = _workflow_view_context(
                 module_id, view_id, record_table, view_run.get("approval_status")
             )
 
-    runs = [
-        dict(r) for r in db.execute(
-            "SELECT pr.*, p.project_name FROM payroll_runs pr "
-            "LEFT JOIN projects p ON pr.project_id = p.id "
-            "ORDER BY pr.id DESC LIMIT 100"
-        ).fetchall()
-    ]
-    attach_run_employee_summaries(db, runs)
     projects = query_db("SELECT id, project_name FROM projects ORDER BY project_name")
     departments = get_departments()
     now = get_app_now(db)
-    pending_month_filter = request.args.get("pending_month", "").strip() or None
-    try:
-        pending_payroll = list_pending_payroll_months(
-            db,
-            year_month_filter=pending_month_filter,
-        )
-        pending_month_summary = summarize_pending_payroll_months(pending_payroll)
-    except Exception:
-        app.logger.exception("Pending payroll dashboard failed")
-        pending_payroll = []
-        pending_month_summary = []
+
+    # --- Dashboard (month selector, summary cards, searchable/paginated staff table) ---
+    dash_month = request.args.get("month", type=int) or now.month
+    dash_year = request.args.get("year", type=int) or now.year
+    if not 1 <= dash_month <= 12:
+        dash_month = now.month
+    if not 2000 <= dash_year <= 2100:
+        dash_year = now.year
+    dash_tab = "runs" if request.args.get("tab") == "runs" else "staff"
+
+    def dash_url(**overrides):
+        """Dashboard URL keeping the current filters; ``None`` removes a parameter."""
+        params = {k: v for k, v in request.args.items() if v not in ("", None) and k != "view"}
+        params.update(overrides)
+        return url_for("payroll", **{k: v for k, v in params.items() if v not in ("", None)})
+
+    dashboard = dashboard_error = None
+    runs_page = None
+    pending_month_summary = []
+    if not view_run:
+        try:
+            if dash_tab == "staff":
+                dashboard = build_payroll_dashboard(
+                    db,
+                    month=dash_month,
+                    year=dash_year,
+                    query=request.args.get("q", "").strip(),
+                    category=request.args.get("category", "").strip(),
+                    status=request.args.get("status", "").strip(),
+                    department=request.args.get("department", "").strip(),
+                    page=request.args.get("page", type=int) or 1,
+                    per_page=request.args.get("per_page", type=int) or 25,
+                )
+            else:
+                runs_page = fetch_payroll_runs_page(
+                    db, page=request.args.get("page", type=int) or 1, per_page=10
+                )
+        except Exception:
+            app.logger.exception("Payroll dashboard failed")
+            dashboard_error = "The payroll dashboard could not be loaded."
+        try:
+            pending_month_summary = summarize_pending_payroll_months(
+                list_pending_payroll_months(db)
+            )
+        except Exception:
+            app.logger.exception("Pending payroll summary failed")
     return render_template(
         "payroll.html",
-        runs=runs,
+        dashboard=dashboard,
+        dashboard_error=dashboard_error,
+        dash_url=dash_url,
+        dash_tab=dash_tab,
+        dash_month=dash_month,
+        dash_year=dash_year,
+        runs_page=runs_page,
+        page_sizes=DASHBOARD_PAGE_SIZES,
+        status_labels=DASHBOARD_STATUS_LABELS,
         view_run=view_run,
         view_lines=view_lines,
         projects=projects,
         departments=departments,
-        pending_payroll=pending_payroll,
         pending_month_summary=pending_month_summary,
-        pending_month_filter=pending_month_filter,
         employee_types=EMPLOYEE_TYPES,
         employment_categories=PAYROLL_EMPLOYMENT_CATEGORIES,
-        current_month=now.month,
-        current_year=now.year,
+        current_month=dash_month,
+        current_year=dash_year,
         history=wf_ctx.get("history"),
         edit_role=wf_ctx.get("edit_role"),
         can_reopen=wf_ctx.get("can_reopen", False) or is_admin_user(),
@@ -18629,10 +18700,46 @@ def payroll_eligible_employees():
         department,
         period_start=period_start,
         period_end=period_end,
+        include_without_data=True,
     )
-    payload = [serialize_eligible_employee(emp) for emp in employees]
-    message = empty_message if not payload else ""
+    overlaps = payroll_overlap_index(db, period_start, period_end)
+    payload = [
+        serialize_eligible_employee(
+            emp, overlap=overlaps.get((emp["employee_type"], emp["employee_id"]))
+        )
+        for emp in employees
+    ]
+    if not payload:
+        message = "No active employees found for this employment type."
+    elif not any(row["selectable"] for row in payload):
+        message = empty_message
+    else:
+        message = ""
     return jsonify({"employees": payload, "message": message})
+
+
+@app.route("/payroll/eligibility-check")
+@login_required
+def payroll_eligibility_check():
+    """Read-only: explain why a person is (not) selectable for a payroll period."""
+    db = get_db()
+    prepare_payroll_page_db(db)
+    employment_category = request.args.get("employment_category", "company_staff").strip()
+    if employment_category not in PAYROLL_EMPLOYMENT_CATEGORIES:
+        employment_category = "company_staff"
+    month = request.args.get("month", type=int)
+    year = request.args.get("year", type=int)
+    period_start = period_end = None
+    if month and year and 1 <= month <= 12:
+        period_start, period_end = period_from_month_year(month, year)
+    results = explain_payroll_eligibility(
+        db,
+        request.args.get("q", ""),
+        employment_category=employment_category,
+        period_start=period_start,
+        period_end=period_end,
+    )
+    return jsonify({"results": results, "period_start": period_start, "period_end": period_end})
 
 
 @app.route("/payroll/holidays", methods=["GET", "POST"])
@@ -18795,6 +18902,8 @@ def payroll_print_run(run_id):
         app.logger.exception("Payroll register print failed for run_id=%s", run_id)
         flash("Could not load payroll register. Please contact support if this persists.")
         return redirect(url_for("payroll", view=run_id))
+    for line in lines:
+        line["basis"] = line_day_basis(line)
     _prepare_corporate_template_db(db)
     ctx = _build_corporate_report_context(
         db,
@@ -18824,6 +18933,7 @@ def payroll_print_slip(line_id):
         flash("Pay slip not found.")
         return redirect(url_for("payroll"))
     line = line_rows[0]
+    line["basis"] = line_day_basis(line)
     bank = {}
     if line.get("staff_id"):
         row = db.execute(
@@ -18873,9 +18983,10 @@ def payroll_export_register(run_id):
     df = pd.DataFrame(rows)
     cols = [
         "run_ref", "employee_code", "employee_name", "employee_type", "department",
-        "period_start", "period_end", "base_salary", "present_days", "ot_hours",
+        "period_start", "period_end", "base_salary", "working_days", "present_days",
+        "payable_days", "daily_rate", "ot_hours",
         "ot_amount", "holiday_pay", "gross_salary", "deductions", "advance_deduction",
-        "net_salary", "payment_status", "verification_status", "approval_status",
+        "net_salary", "calc_basis", "payment_status", "verification_status", "approval_status",
     ]
     export_cols = [c for c in cols if c in df.columns]
     df = df[export_cols]
