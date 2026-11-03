@@ -23,6 +23,7 @@
     <div><strong>IFSC:</strong> {{ profile.ifsc_code or '—' }}</div>
     <div><strong>Status:</strong> {{ profile.status or 'Active' }}</div>
     <div><strong>Joining:</strong> {{ profile.joining_date or '—' }}</div>
+    {% if profile.exit_date %}<div><strong>Exit:</strong> {{ profile.exit_date }}</div>{% endif %}
   </div>
 </div>
 

@@ -2,9 +2,13 @@
 
 {% from 'macros/erp_ui.html' import role_status_badge, maker_row_actions, rejection_notice, workflow_modals, transaction_view_tabs, erp_pagination, erp_module_toolbar, erp_module_table_panel %}
 
-{% set page_title = 'Payroll Generation' %}
+{% set page_title = 'Payroll' %}
 
 {% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; HR &gt; Payroll' %}
+
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/payroll-dashboard.css') }}">
+{% endblock %}
 
 {% block page_actions %}
 
@@ -144,7 +148,7 @@
 
         <tr>
 
-          <th>Staff ID</th><th>Name</th><th>Type</th><th>Present</th><th>OT</th>
+          <th>Staff ID</th><th>Name</th><th>Type</th><th>Working days</th><th>Payable days</th><th>OT</th>
 
           <th>Gross</th><th>Deductions</th><th>Net</th><th>Verify</th><th>Actions</th>
 
@@ -160,11 +164,13 @@
 
           <td>{{ line.employee_code or '—' }}</td>
 
-          <td>{% if line.employee_name %}<a href="{{ url_for('employee_profile', employee_type=line.employee_type, employee_id=line.staff_id or line.worker_id) }}">{{ line.employee_name }}</a>{% else %}—{% endif %}</td>
+          <td>{% if line.employee_name %}<a href="{{ url_for('employee_profile', employee_type=line.employee_type, employee_id=line.staff_id or line.worker_id) }}">{{ line.employee_name }}</a>{% if line.basis and line.basis.exit_date %}<br><small class="pd-muted">Exit: {{ line.basis.exit_date }}</small>{% endif %}{% else %}—{% endif %}</td>
 
           <td>{{ line.employee_type }}</td>
 
-          <td>{{ line.present_days }}</td>
+          <td>{{ line.basis.working_days if line.basis and line.basis.working_days is not none else '—' }}</td>
+
+          <td>{{ line.basis.payable_days if line.basis and line.basis.payable_days is not none else line.present_days }}{% if line.basis and line.basis.legacy %}<span title="Generated before the Sunday-excluded working-day rule; shown on its original basis"> *</span>{% endif %}</td>
 
           <td>{{ line.ot_hours }} / ₹ {{ '%.2f'|format(line.ot_amount or 0) }}</td>
 
@@ -200,7 +206,7 @@
 
         <tr data-payroll-edit-panel="{{ line.id }}" hidden>
 
-          <td colspan="10" style="background: #f8fafc;">
+          <td colspan="11" style="background: #f8fafc;">
 
             <form method="post" class="erp-form-grid" style="padding: 0.75rem;">
 
@@ -260,7 +266,7 @@
 
         {% else %}
 
-        <tr><td colspan="10">No lines in this run.</td></tr>
+        <tr><td colspan="11">No lines in this run.</td></tr>
 
         {% endfor %}
 
@@ -276,435 +282,400 @@
 
 
 
-{% if not view_run %}
-
-<div class="erp-table-panel" id="pending-payroll-dashboard" data-erp-table style="margin-bottom: 1rem;">
-
-  <div class="erp-table-toolbar">
-
-    <h3 class="erp-table-title"><i class="fa-solid fa-clock-rotate-left"></i> Pending Payroll by Month</h3>
-
-    <div class="erp-table-controls" style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
-
-      <form method="get" class="erp-inline-form" style="display:flex;gap:0.35rem;align-items:center;margin:0;">
-
-        <input type="month" name="pending_month" value="{{ pending_month_filter or '' }}" title="Filter by month">
-
-        <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Filter</button>
-
-        {% if pending_month_filter %}
-
-        <a href="{{ url_for('payroll') }}" class="erp-btn erp-btn-ghost erp-btn-sm">Clear</a>
-
-        {% endif %}
-
-      </form>
-
-      <div class="erp-table-search"><i class="fa-solid fa-magnifying-glass"></i><input type="search" data-table-search placeholder="Search pending…"></div>
-
-    </div>
-
-  </div>
-
-  {% if pending_month_summary %}
-
-  <div style="display:flex;flex-wrap:wrap;gap:0.5rem;padding:0 0.75rem 0.75rem;">
-
-    {% for bucket in pending_month_summary %}
-
-    <a href="{{ url_for('payroll', pending_month=bucket.year_month) }}#pending-payroll-dashboard"
-
-       class="erp-btn erp-btn-ghost erp-btn-sm{% if pending_month_filter == bucket.year_month %} erp-btn-primary{% endif %}"
-
-       style="border-radius:999px;">
-
-      {{ bucket.month_label }} · {{ bucket.count }}
-
-    </a>
-
-    {% endfor %}
-
-  </div>
-
-  {% endif %}
-
-  <p class="erp-form-hint" style="padding:0 0.75rem 0.5rem;margin:0;">
-
-    Staff or workers with attendance, monthly summary, or timesheet data but payroll not finalized for that month (not generated, draft only, or approved but unpaid).
-
-  </p>
-
-  <div class="erp-table-scroll">
-
-    <table class="erp-table erp-table-module">
-
-      <thead>
-
-        <tr>
-
-          <th>Staff ID</th>
-
-          <th>Name</th>
-
-          <th>Type</th>
-
-          <th>Pending Month</th>
-
-          <th>Data Source</th>
-
-          <th>Status</th>
-
-          <th>Action</th>
-
-        </tr>
-
-      </thead>
-
-      <tbody>
-
-        {% for row in pending_payroll %}
-
-        <tr>
-
-          <td>{{ row.employee_code or '—' }}</td>
-
-          <td>
-
-            <a href="{{ url_for('employee_profile', employee_type=row.employee_type, employee_id=row.employee_id) }}">{{ row.employee_name or '—' }}</a>
-
-          </td>
-
-          <td>{{ row.type_label }}</td>
-
-          <td><strong>{{ row.month_label }}</strong></td>
-
-          <td class="erp-form-hint">{{ row.data_source or '—' }}</td>
-
-          <td>
-
-            {% if row.payroll_status == 'draft' %}
-
-            <span style="color:#b45309;">{{ row.status_label }}</span>
-
-            {% elif row.payroll_status == 'unpaid' %}
-
-            <span style="color:#0369a1;">{{ row.status_label }}</span>
-
-            {% else %}
-
-            {{ row.status_label }}
-
-            {% endif %}
-
-          </td>
-
-          <td style="white-space:nowrap;">
-
-            {% if row.payroll_status == 'draft' and row.run_id %}
-
-            <a href="{{ url_for('payroll', view=row.run_id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Open Draft</a>
-
-            {% else %}
-
-            <button type="button" class="erp-btn erp-btn-primary erp-btn-sm" data-payroll-prefill-generate
-
-                    data-prefill-month="{{ row.month }}"
-
-                    data-prefill-year="{{ row.year }}"
-
-                    data-prefill-category="{{ row.employment_category }}"
-
-                    data-prefill-employee="{{ row.employee_type }}:{{ row.employee_id }}"
-
-                    {% if row.project_id %}data-prefill-project="{{ row.project_id }}"{% endif %}>
-
-              Generate
-
-            </button>
-
-            {% endif %}
-
-          </td>
-
-        </tr>
-
-        {% else %}
-
-        <tr><td colspan="7">No pending payroll months{% if pending_month_filter %} for {{ pending_month_filter }}{% endif %}.</td></tr>
-
-        {% endfor %}
-
-      </tbody>
-
-    </table>
-
-  </div>
-
-</div>
-
-{% endif %}
-
-
-
-<div class="erp-module-layout">
 
 {% if not view_run %}
+{% set d = dashboard %}
+{% set month_names = ['January','February','March','April','May','June','July','August','September','October','November','December'] %}
 
-  {{ erp_module_toolbar(
-    search_placeholder='Search payroll runs...',
-    add_url='#generate-payroll',
-    add_label='Generate Payroll',
-    export_name='payroll_runs',
-    print_target='#payroll-runs'
-  ) }}
+<div class="pd" id="payroll-dashboard" data-pd>
 
-{% endif %}
-
-<div class="module-layout module-layout--list-only">
-
-  {% if not view_run %}
-
-  <div class="erp-module-form-panel erp-form-card" id="generate-payroll">
-
-    <h3 class="erp-form-title">Generate Draft Payroll</h3>
-
-    <p class="erp-form-hint">Calculate payroll for selected employees. The run stays editable until you explicitly save the draft.</p>
-
-    <form method="post" class="erp-form-grid" data-payroll-generate-form>
-
-      <input type="hidden" name="form_action" value="generate">
-
-      <div class="erp-field span-2">
-
-        <select name="gen_mode" data-payroll-gen-mode class="has-value">
-
-          <option value="monthly" selected>Monthly (month / year)</option>
-
-          <option value="date_range">Date range</option>
-
-        </select>
-
-        <label>Generation Mode</label>
-
-      </div>
-
-      <div class="erp-field" data-payroll-monthly>
-
-        <select name="month" class="has-value">
-
+  {# ───────── Period, status and primary actions ───────── #}
+  <section class="pd-head" aria-label="Payroll period">
+    <form method="get" class="pd-period" data-pd-form>
+      <input type="hidden" name="tab" value="{{ dash_tab }}">
+      <label class="pd-field">
+        <span>Month</span>
+        <select name="month" data-pd-autosubmit aria-label="Payroll month">
           {% for m in range(1, 13) %}
-
-          <option value="{{ m }}"{% if m == current_month %} selected{% endif %}>{{ m }}</option>
-
+          <option value="{{ m }}"{% if m == dash_month %} selected{% endif %}>{{ month_names[m - 1] }}</option>
           {% endfor %}
-
         </select>
-
-        <label>Month</label>
-
-      </div>
-
-      <div class="erp-field" data-payroll-monthly>
-
-        <input name="year" type="number" value="{{ current_year }}" placeholder=" ">
-
-        <label>Year</label>
-
-      </div>
-
-      <div class="erp-field" data-payroll-range hidden>
-
-        <input name="period_start" type="date" placeholder=" ">
-
-        <label>From Date</label>
-
-      </div>
-
-      <div class="erp-field" data-payroll-range hidden>
-
-        <input name="period_end" type="date" placeholder=" ">
-
-        <label>To Date</label>
-
-      </div>
-
-      <div class="erp-field">
-
-        <select name="employment_category" data-payroll-employment-type required>
-
-          <option value="">Select employment type</option>
-
-          <option value="company_staff">Company Staff</option>
-
-          <option value="subcontractor">Sub Contractor</option>
-
-        </select>
-
-        <label>Employment Type</label>
-
-      </div>
-
-      <div class="erp-field" data-payroll-project-field hidden>
-
-        <select name="project_id" class="has-value" data-payroll-project-select>
-
-          <option value="">All Projects</option>
-
-          {% for p in projects %}
-
-          <option value="{{ p.id }}">{{ p.project_name }}</option>
-
+      </label>
+      <label class="pd-field">
+        <span>Year</span>
+        <select name="year" data-pd-autosubmit aria-label="Payroll year">
+          {% for y in range(2020, 2036) %}
+          <option value="{{ y }}"{% if y == dash_year %} selected{% endif %}>{{ y }}</option>
           {% endfor %}
-
         </select>
-
-        <label>Project (sub contractor only)</label>
-
-      </div>
-
-      <div class="erp-field">
-
-        <select name="department" class="has-value">
-
-          <option value="">All Departments</option>
-
-          {% for d in departments %}
-
-          <option value="{{ d }}">{{ d }}</option>
-
-          {% endfor %}
-
-        </select>
-
-        <label>Department</label>
-
-      </div>
-
-      <div class="span-2" data-payroll-staff-panel hidden>
-
-        <div class="erp-table-toolbar" style="margin-bottom: 0.5rem;">
-
-          <h4 class="erp-form-subtitle" style="margin: 0;">Select Employees</h4>
-
-          <div class="erp-form-actions" style="margin: 0;">
-
-            <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-payroll-select-all>Select all shown</button>
-
-            <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-payroll-clear-all>Clear</button>
-
-            <span class="erp-form-hint" data-payroll-selected-count style="margin-left: 0.5rem;">0 selected</span>
-
-          </div>
-
-        </div>
-
-        <p class="erp-form-hint">Only staff with attendance, monthly summary, or timesheet data for the selected period are listed.</p>
-
-        <p class="erp-form-hint" data-payroll-staff-message>Select employment type and period to load staff.</p>
-
-        <div class="erp-table-scroll" style="max-height: 16rem; border: 1px solid var(--erp-border, #e2e8f0); border-radius: 0.5rem; padding: 0.5rem;" data-payroll-staff-list>
-
-        </div>
-
-      </div>
-
-      <div class="erp-form-actions span-2">
-
-        <button type="submit" class="erp-btn erp-btn-primary"><i class="fa-solid fa-calculator"></i> Generate Draft</button>
-
-      </div>
-
+      </label>
+      <noscript><button type="submit" class="erp-btn erp-btn-ghost">Go</button></noscript>
     </form>
 
-  </div>
-
-  {% endif %}
-
-
-
-  {% call erp_module_table_panel(id='payroll-runs', title='Payroll Runs') %}
-
-    <div class="erp-table-scroll">
-
-      <table class="erp-table erp-table-module">
-
-        <thead>
-
-          <tr><th>Ref</th><th>Period</th><th>Employment</th><th>Staff / Name</th><th>Count</th><th>Net</th><th>Status</th><th>Actions</th></tr>
-
-        </thead>
-
-        <tbody>
-
-          {% for run in runs %}
-
-          {% set run_saved = run.draft_saved|default(0)|int %}
-
-          <tr>
-
-            <td>{{ run.run_ref or run.id }}</td>
-
-            <td>{{ run.period_start }} → {{ run.period_end }}</td>
-
-            <td>{% if run.employee_type == 'company_staff' %}Company Staff{% elif run.employee_type == 'subcontractor' %}Sub Contractor{% else %}{{ run.employee_type or 'all' }}{% endif %}</td>
-
-            <td class="erp-form-hint" style="max-width: 14rem; white-space: normal;">{{ run.employee_summary or '—' }}</td>
-
-            <td>{{ run.employee_count or 0 }}</td>
-
-            <td>₹ {{ '%.2f'|format(run.total_net or 0) }}</td>
-
-            <td>{{ run.status }}{% if run.status == 'Draft' %} ({{ 'saved' if run_saved else 'unsaved' }}){% endif %}{% if run.locked %} 🔒{% endif %}</td>
-
-            <td>
-
-              <a href="{{ url_for('payroll', view=run.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">{% if run.status == 'Draft' %}Edit{% else %}View{% endif %}</a>
-
-              {% if run.status == 'Draft' and run_saved %}
-
-              <a href="{{ url_for('payroll_print_run', run_id=run.id, print=1) }}" target="_blank" class="erp-btn erp-btn-ghost erp-btn-sm">Print</a>
-
-              {% endif %}
-
-              <a href="{{ url_for('payroll_export_register', run_id=run.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Export</a>
-
-              {% if run.status == 'Draft' and not run.locked %}
-
-              <form method="post" style="display:inline" onsubmit="return confirm('Delete this draft run?');">
-
-                <input type="hidden" name="form_action" value="delete_run">
-
-                <input type="hidden" name="run_id" value="{{ run.id }}">
-
-                <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Delete</button>
-
-              </form>
-
-              {% endif %}
-
-            </td>
-
-          </tr>
-
-          {% else %}
-
-          <tr><td colspan="8">No payroll runs yet.</td></tr>
-
-          {% endfor %}
-
-        </tbody>
-
-      </table>
-
+    <div class="pd-status" aria-live="polite">
+      <span class="pd-label">Payroll status</span>
+      {% if d %}
+      <span class="pd-badge pd-badge--{{ d.month_status.tone }}">{{ d.month_status.label }}</span>
+      <small class="pd-sub">{{ d.month_label }} &middot; {{ d.day_counts.working_days }} working days
+        <span class="pd-muted">({{ d.day_counts.calendar_days }} calendar &minus; {{ d.day_counts.sundays }} Sundays)</span></small>
+      {% else %}
+      <span class="pd-badge pd-badge--muted">&mdash;</span>
+      {% endif %}
     </div>
 
-    {{ erp_pagination(runs|length) }}
+    <div class="pd-actions">
+      <button type="button" class="erp-btn erp-btn-primary" data-pd-open-generate>
+        <i class="fa-solid fa-calculator" aria-hidden="true"></i> Generate Payroll
+      </button>
+    </div>
+  </section>
 
-  {% endcall %}
+  {% if pending_month_summary %}
+  <nav class="pd-chips" aria-label="Months with payroll pending">
+    <span class="pd-label">Pending months</span>
+    {% for bucket in pending_month_summary[:8] %}
+    <a class="pd-chip{% if bucket.year_month == '%04d-%02d'|format(dash_year, dash_month) %} is-active{% endif %}"
+       href="{{ dash_url(month=bucket.year_month[5:7]|int, year=bucket.year_month[:4]|int, page=None, tab='staff') }}">
+      {{ bucket.month_label }} <b>{{ bucket.count }}</b>
+    </a>
+    {% endfor %}
+  </nav>
+  {% endif %}
+
+  {% if dashboard_error %}
+  <div class="pd-alert pd-alert--error" role="alert">
+    <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+    <div><strong>{{ dashboard_error }}</strong> Your payroll data has not been changed.
+      <a href="{{ request.full_path.rstrip('?') }}">Try again</a>.</div>
+  </div>
+  {% endif %}
+
+  <div class="pd-tabs" role="tablist">
+    <a role="tab" class="pd-tab{% if dash_tab == 'staff' %} is-active{% endif %}" aria-selected="{{ 'true' if dash_tab == 'staff' else 'false' }}"
+       href="{{ url_for('payroll', month=dash_month, year=dash_year) }}">Staff payroll</a>
+    <a role="tab" class="pd-tab{% if dash_tab == 'runs' %} is-active{% endif %}" aria-selected="{{ 'true' if dash_tab == 'runs' else 'false' }}"
+       href="{{ url_for('payroll', month=dash_month, year=dash_year, tab='runs') }}">Payroll runs</a>
+  </div>
+
+  {% if dash_tab == 'staff' and d %}
+
+  {# ───────── Summary cards ───────── #}
+  <section class="pd-cards" aria-label="Payroll summary">
+    <article class="pd-card">
+      <span class="pd-label">Staff</span>
+      <strong>{{ d.summary.staff_count }}</strong>
+      <small>{{ d.summary.generated_count }} generated &middot; {{ d.summary.not_generated }} pending{% if d.summary.no_data %} &middot; {{ d.summary.no_data }} without attendance{% endif %}</small>
+    </article>
+    <article class="pd-card">
+      <span class="pd-label">Gross salary</span>
+      <strong>{{ d.summary.gross|inr }}</strong>
+      <small>Generated payroll</small>
+    </article>
+    <article class="pd-card">
+      <span class="pd-label">Deductions</span>
+      <strong>{{ d.summary.deductions|inr }}</strong>
+      <small>Statutory + advances</small>
+    </article>
+    <article class="pd-card pd-card--accent">
+      <span class="pd-label">Net payable</span>
+      <strong>{{ d.summary.net|inr }}</strong>
+      <small>{{ d.summary.net_unpaid|inr }} yet to be paid</small>
+    </article>
+  </section>
+
+  {# ───────── Filters ───────── #}
+  <form method="get" class="pd-filters" data-pd-form role="search">
+    <input type="hidden" name="month" value="{{ dash_month }}">
+    <input type="hidden" name="year" value="{{ dash_year }}">
+    <div class="pd-search">
+      <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+      <input type="search" name="q" value="{{ request.args.get('q', '') }}" placeholder="Search name, code or department" aria-label="Search employees">
+    </div>
+    <label class="pd-field pd-field--inline"><span>Type</span>
+      <select name="category" data-pd-autosubmit>
+        <option value="">All</option>
+        <option value="company_staff"{% if request.args.get('category') == 'company_staff' %} selected{% endif %}>Company staff</option>
+        <option value="subcontractor"{% if request.args.get('category') == 'subcontractor' %} selected{% endif %}>Sub contractor</option>
+      </select>
+    </label>
+    <label class="pd-field pd-field--inline"><span>Status</span>
+      <select name="status" data-pd-autosubmit>
+        <option value="">All ({{ d.scope_total }})</option>
+        {% for key, label in status_labels.items() %}
+        <option value="{{ key }}"{% if request.args.get('status') == key %} selected{% endif %}>{{ label }} ({{ d.status_counts[key] }})</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="pd-field pd-field--inline"><span>Department</span>
+      <select name="department" data-pd-autosubmit>
+        <option value="">All</option>
+        {% for dep in departments %}
+        <option value="{{ dep }}"{% if request.args.get('department') == dep %} selected{% endif %}>{{ dep }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="pd-field pd-field--inline"><span>Rows</span>
+      <select name="per_page" data-pd-autosubmit>
+        {% for n in page_sizes %}<option value="{{ n }}"{% if n == d.per_page %} selected{% endif %}>{{ n }}</option>{% endfor %}
+      </select>
+    </label>
+    <button type="submit" class="erp-btn erp-btn-ghost">Apply</button>
+    {% if request.args.get('q') or request.args.get('category') or request.args.get('status') or request.args.get('department') %}
+    <a class="erp-btn erp-btn-ghost" href="{{ url_for('payroll', month=dash_month, year=dash_year) }}">Clear</a>
+    {% endif %}
+  </form>
+
+  {# ───────── Staff table ───────── #}
+  <section class="pd-tablecard" data-pd-table aria-busy="false">
+    <div class="pd-loading" aria-hidden="true"><span class="pd-spinner"></span> Loading&hellip;</div>
+    {% if d.total %}
+    <div class="pd-table-wrap">
+      <table class="pd-table">
+        <thead>
+          <tr>
+            <th scope="col">Employee</th>
+            <th scope="col" class="num">Monthly salary</th>
+            <th scope="col" class="num">Working days</th>
+            <th scope="col" class="num">Payable days</th>
+            <th scope="col" class="num">Deductions</th>
+            <th scope="col" class="num">Net salary</th>
+            <th scope="col">Status</th>
+            <th scope="col" class="act"><span class="sr-only">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in d.rows %}
+          <tr>
+            <td data-label="Employee">
+              <div class="pd-emp">
+                <a href="{{ url_for('employee_profile', employee_type=r.employee_type, employee_id=r.employee_id) }}">{{ r.name or '—' }}</a>
+                <small>{{ r.code or '—' }}{% if r.exit_date %} &middot; Exit {{ r.exit_date }}{% endif %}{% if r.employee_type == 'subcontractor' %} &middot; Sub contractor{% elif r.employee_type == 'company_worker' %} &middot; Company worker{% endif %}{% if r.department %} &middot; {{ r.department }}{% endif %}</small>
+              </div>
+            </td>
+            <td class="num" data-label="Monthly salary">{{ r.monthly_salary|inr if r.monthly_salary else '—' }}{% if r.monthly_salary and r.salary_type != 'Monthly' %}<small class="pd-muted"> / {{ 'hr' if r.salary_type == 'Hourly' else 'day' }}</small>{% endif %}</td>
+            <td class="num" data-label="Working days">{{ r.working_days if r.working_days is not none else '—' }}</td>
+            <td class="num" data-label="Payable days">{{ r.payable_days if r.payable_days is not none else '—' }}{% if r.legacy %}<span class="pd-muted" title="Generated before the Sunday-excluded working-day rule; shown on its original basis"> *</span>{% endif %}</td>
+            <td class="num" data-label="Deductions">{{ r.deductions|inr }}</td>
+            <td class="num pd-strong" data-label="Net salary">{{ r.net|inr }}</td>
+            <td data-label="Status">
+              <span class="pd-badge pd-badge--{{ {'paid': 'ok', 'approved': 'info', 'in_approval': 'info', 'draft': 'warn', 'not_generated': 'muted', 'no_data': 'danger'}[r.status] }}"{% if r.blocked_reason %} title="{{ r.blocked_reason }}"{% endif %}>{{ r.status_label }}</span>
+            </td>
+            <td class="act" data-label="">
+              {% if r.run_id %}
+              <a class="erp-btn erp-btn-ghost erp-btn-sm" href="{{ url_for('payroll', view=r.run_id) }}">{{ 'Edit' if r.status == 'draft' else 'View' }}</a>
+              {% if r.status != 'draft' and r.line_id %}
+              <a class="erp-btn erp-btn-ghost erp-btn-sm" href="{{ url_for('payroll_print_slip', line_id=r.line_id, print=1) }}" target="_blank" rel="noopener" title="Print payslip" aria-label="Print payslip for {{ r.name }}"><i class="fa-solid fa-print" aria-hidden="true"></i> Slip</a>
+              {% endif %}
+              {% elif r.status == 'not_generated' %}
+              <button type="button" class="erp-btn erp-btn-primary erp-btn-sm" data-payroll-prefill-generate
+                      data-prefill-month="{{ dash_month }}" data-prefill-year="{{ dash_year }}"
+                      data-prefill-category="{{ 'subcontractor' if r.employee_type == 'subcontractor' else 'company_staff' }}"
+                      data-prefill-employee="{{ r.employee_type }}:{{ r.employee_id }}">Generate</button>
+              {% else %}
+              <span class="pd-muted pd-hint">Add attendance</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <footer class="pd-pager">
+      <span class="pd-muted">Showing {{ d.first_index }}&ndash;{{ d.last_index }} of {{ d.total }}{% if d.total != d.scope_total %} (filtered from {{ d.scope_total }}){% endif %}</span>
+      {% if d.pages > 1 %}
+      <nav aria-label="Pagination" class="pd-pages">
+        {% if d.page > 1 %}<a class="erp-btn erp-btn-ghost erp-btn-sm" href="{{ dash_url(page=d.page - 1) }}" rel="prev">Previous</a>{% endif %}
+        {% for n in range(1, d.pages + 1) if n == 1 or n == d.pages or (n - d.page)|abs <= 1 %}
+        <a class="erp-btn erp-btn-sm {{ 'erp-btn-primary' if n == d.page else 'erp-btn-ghost' }}" href="{{ dash_url(page=n) }}"{% if n == d.page %} aria-current="page"{% endif %}>{{ n }}</a>
+        {% endfor %}
+        {% if d.page < d.pages %}<a class="erp-btn erp-btn-ghost erp-btn-sm" href="{{ dash_url(page=d.page + 1) }}" rel="next">Next</a>{% endif %}
+      </nav>
+      {% endif %}
+    </footer>
+    <p class="pd-foot-note pd-muted">Payable salary = (monthly salary &divide; working days) &times; payable days; working days = calendar days &minus; Sundays.
+      {% if d.rows|selectattr('legacy')|list %}* Generated before this rule and shown on its original basis.{% endif %}</p>
+
+    {% elif d.scope_total == 0 %}
+    <div class="pd-empty">
+      <i class="fa-solid fa-user-slash" aria-hidden="true"></i>
+      <h3>No active employees for this selection</h3>
+      <p>There are no active staff to run payroll for. Add or reactivate employees in the staff master, then come back.</p>
+      <a class="erp-btn erp-btn-primary" href="{{ url_for('staff') }}">Open staff master</a>
+    </div>
+    {% else %}
+    <div class="pd-empty">
+      <i class="fa-solid fa-filter-circle-xmark" aria-hidden="true"></i>
+      <h3>No employees match these filters</h3>
+      <p>{{ d.scope_total }} employee{{ 's' if d.scope_total != 1 }} in {{ d.month_label }}, none matching your search or filters.</p>
+      <a class="erp-btn erp-btn-ghost" href="{{ url_for('payroll', month=dash_month, year=dash_year) }}">Clear filters</a>
+    </div>
+    {% endif %}
+  </section>
+
+  {% elif dash_tab == 'runs' and runs_page %}
+
+  {# ───────── Payroll runs ───────── #}
+  <section class="pd-tablecard" data-pd-table aria-busy="false">
+    {% if runs_page.runs %}
+    <div class="pd-table-wrap">
+      <table class="pd-table">
+        <thead>
+          <tr><th scope="col">Run</th><th scope="col">Period</th><th scope="col">Employment</th><th scope="col">Employees</th>
+              <th scope="col" class="num">Count</th><th scope="col" class="num">Net</th><th scope="col">Status</th><th scope="col" class="act"><span class="sr-only">Actions</span></th></tr>
+        </thead>
+        <tbody>
+          {% for run in runs_page.runs %}
+          {% set run_saved = run.draft_saved|default(0)|int %}
+          <tr>
+            <td data-label="Run"><strong>{{ run.run_ref or run.id }}</strong></td>
+            <td data-label="Period">{{ run.period_start }} &rarr; {{ run.period_end }}</td>
+            <td data-label="Employment">{% if run.employee_type == 'company_staff' %}Company staff{% elif run.employee_type == 'subcontractor' %}Sub contractor{% else %}{{ run.employee_type or 'All' }}{% endif %}</td>
+            <td data-label="Employees" class="pd-muted pd-wrap">{{ run.employee_summary or '—' }}</td>
+            <td class="num" data-label="Count">{{ run.employee_count or 0 }}</td>
+            <td class="num pd-strong" data-label="Net">{{ run.total_net|inr }}</td>
+            <td data-label="Status">
+              <span class="pd-badge pd-badge--{{ {'Paid': 'ok', 'Approved': 'info', 'Pending Verification': 'info', 'Pending Checker': 'info', 'Pending Approval': 'info', 'Draft': 'warn'}.get(run.status, 'muted') }}">{{ run.status }}{% if run.status == 'Draft' %} ({{ 'saved' if run_saved else 'unsaved' }}){% endif %}</span>{% if run.locked %} <i class="fa-solid fa-lock pd-muted" title="Locked" aria-label="Locked"></i>{% endif %}
+            </td>
+            <td class="act" data-label="">
+              <a href="{{ url_for('payroll', view=run.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">{% if run.status == 'Draft' %}Edit{% else %}View{% endif %}</a>
+              {% if run.status == 'Draft' and run_saved %}
+              <a href="{{ url_for('payroll_print_run', run_id=run.id, print=1) }}" target="_blank" rel="noopener" class="erp-btn erp-btn-ghost erp-btn-sm">Print</a>
+              {% endif %}
+              <a href="{{ url_for('payroll_export_register', run_id=run.id) }}" class="erp-btn erp-btn-ghost erp-btn-sm">Export</a>
+              {% if run.status == 'Draft' and not run.locked %}
+              <form method="post" class="pd-inline" onsubmit="return confirm('Delete this draft run? Its lines are removed; no other payroll is affected.');">
+                <input type="hidden" name="form_action" value="delete_run">
+                <input type="hidden" name="run_id" value="{{ run.id }}">
+                <button type="submit" class="erp-btn erp-btn-ghost erp-btn-sm">Delete</button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <footer class="pd-pager">
+      <span class="pd-muted">{{ runs_page.total }} run{{ 's' if runs_page.total != 1 }} &middot; page {{ runs_page.page }} of {{ runs_page.pages }}</span>
+      {% if runs_page.pages > 1 %}
+      <nav aria-label="Pagination" class="pd-pages">
+        {% if runs_page.page > 1 %}<a class="erp-btn erp-btn-ghost erp-btn-sm" href="{{ dash_url(tab='runs', page=runs_page.page - 1) }}">Previous</a>{% endif %}
+        {% if runs_page.page < runs_page.pages %}<a class="erp-btn erp-btn-ghost erp-btn-sm" href="{{ dash_url(tab='runs', page=runs_page.page + 1) }}">Next</a>{% endif %}
+      </nav>
+      {% endif %}
+    </footer>
+    {% else %}
+    <div class="pd-empty">
+      <i class="fa-solid fa-file-invoice-dollar" aria-hidden="true"></i>
+      <h3>No payroll runs yet</h3>
+      <p>Generate payroll for a month and the run will appear here.</p>
+      <button type="button" class="erp-btn erp-btn-primary" data-pd-open-generate>Generate Payroll</button>
+    </div>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  {# ───────── Generate payroll (collapsed until needed) ───────── #}
+  <details class="pd-generate" id="generate-payroll" data-pd-generate>
+    <summary><i class="fa-solid fa-calculator" aria-hidden="true"></i> Generate draft payroll</summary>
+    <div class="pd-generate-body">
+      <p class="pd-muted">Calculate payroll for the selected employees. The run stays editable until you save the draft. Payroll that already exists for a period is never overwritten.</p>
+      <form method="post" class="erp-form-grid" data-payroll-generate-form>
+        <input type="hidden" name="form_action" value="generate">
+
+        <div class="erp-field span-2">
+          <select name="gen_mode" data-payroll-gen-mode class="has-value">
+            <option value="monthly" selected>Monthly (month / year)</option>
+            <option value="date_range">Date range</option>
+          </select>
+          <label>Generation Mode</label>
+        </div>
+
+        <div class="erp-field" data-payroll-monthly>
+          <select name="month" class="has-value">
+            {% for m in range(1, 13) %}
+            <option value="{{ m }}"{% if m == current_month %} selected{% endif %}>{{ month_names[m - 1] }}</option>
+            {% endfor %}
+          </select>
+          <label>Month</label>
+        </div>
+        <div class="erp-field" data-payroll-monthly>
+          <input name="year" type="number" value="{{ current_year }}" placeholder=" ">
+          <label>Year</label>
+        </div>
+        <div class="erp-field" data-payroll-range hidden>
+          <input name="period_start" type="date" placeholder=" ">
+          <label>From Date</label>
+        </div>
+        <div class="erp-field" data-payroll-range hidden>
+          <input name="period_end" type="date" placeholder=" ">
+          <label>To Date</label>
+        </div>
+
+        <div class="erp-field">
+          <select name="employment_category" data-payroll-employment-type required>
+            <option value="">Select employment type</option>
+            <option value="company_staff">Company Staff</option>
+            <option value="subcontractor">Sub Contractor</option>
+          </select>
+          <label>Employment Type</label>
+        </div>
+        <div class="erp-field" data-payroll-project-field hidden>
+          <select name="project_id" class="has-value" data-payroll-project-select>
+            <option value="">All Projects</option>
+            {% for p in projects %}
+            <option value="{{ p.id }}">{{ p.project_name }}</option>
+            {% endfor %}
+          </select>
+          <label>Project (sub contractor only)</label>
+        </div>
+        <div class="erp-field">
+          <select name="department" class="has-value">
+            <option value="">All Departments</option>
+            {% for dep in departments %}
+            <option value="{{ dep }}">{{ dep }}</option>
+            {% endfor %}
+          </select>
+          <label>Department</label>
+        </div>
+
+        <div class="span-2 pd-selector" data-payroll-staff-panel hidden>
+          <div class="pd-selector-bar">
+            <h4>Select employees</h4>
+            <div class="pd-search pd-search--sm">
+              <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+              <input type="search" data-payroll-staff-search placeholder="Filter this list" aria-label="Filter employee list">
+            </div>
+            <div class="pd-selector-actions">
+              <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-payroll-select-all>Select all shown</button>
+              <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-payroll-clear-all>Clear</button>
+              <span class="pd-muted" data-payroll-selected-count aria-live="polite">0 selected</span>
+            </div>
+          </div>
+          <p class="pd-muted">Every active employee for the chosen type is listed once. Those without attendance or timesheet data for the period, or already in a payroll run, are shown greyed out with the reason.</p>
+          <p class="pd-muted" data-payroll-staff-message>Select employment type and period to load staff.</p>
+          <div class="pd-selector-list" data-payroll-staff-list></div>
+
+          <details class="pd-why" data-payroll-why>
+            <summary>Can&rsquo;t find someone? Check why</summary>
+            <div class="pd-why-row">
+              <input type="search" data-payroll-why-input placeholder="Name or employee code" aria-label="Employee name or code">
+              <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" data-payroll-why-go>Check</button>
+            </div>
+            <div data-payroll-why-result class="pd-why-result" aria-live="polite"></div>
+          </details>
+        </div>
+
+        <div class="erp-form-actions span-2">
+          <button type="submit" class="erp-btn erp-btn-primary"><i class="fa-solid fa-calculator" aria-hidden="true"></i> Generate Draft</button>
+        </div>
+      </form>
+    </div>
+  </details>
 
 </div>
-
-</div>
+{% endif %}
 
 {{ workflow_modals() }}
 
@@ -713,4 +684,3 @@
 <script src="{{ url_for('static', filename='js/payroll-forms.js') }}"></script>
 
 {% endblock %}
-

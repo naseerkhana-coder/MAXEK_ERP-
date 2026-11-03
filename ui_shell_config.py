@@ -204,6 +204,7 @@ DEPARTMENT_PORTAL_MENUS: dict[str, list[dict]] = {
         {"endpoint": "office_inward", "label": "Letter In / Inward Register", "icon": "fa-inbox", "active_endpoints": ["office_inward"]},
         {"endpoint": "office_outward", "label": "Letter Out / Outward Register", "icon": "fa-paper-plane", "active_endpoints": ["office_outward"]},
         {"endpoint": "office_letters", "label": "Letter Preparation", "icon": "fa-envelope-open-text", "active_endpoints": ["office_letters", "office_letter_print"]},
+        {"endpoint": "company_letters", "label": "Company Letters", "icon": "fa-file-lines", "active_endpoints": ["company_letters", "company_letter_form", "company_letter_view", "company_letter_preview"]},
         {"endpoint": "office_agreements", "label": "Agreements", "icon": "fa-handshake", "active_endpoints": ["office_agreements"]},
         {"endpoint": "office_legal", "label": "Legal Documents", "icon": "fa-scale-balanced", "active_endpoints": ["office_legal"]},
         {"endpoint": "corporate_dms", "label": "Corporate DMS", "icon": "fa-folder-tree", "active_endpoints": ["corporate_dms", "corporate_dms_file", "corporate_dms_download"]},

@@ -34,34 +34,37 @@
 
     <table>
       <thead>
-        <tr><th>#</th><th>Staff ID</th><th>Name</th><th>Type</th><th>Present</th><th>OT</th><th>Gross</th><th>Deductions</th><th>Net</th></tr>
+        <tr><th>#</th><th>Staff ID</th><th>Name</th><th>Type</th><th>Working days</th><th>Payable days</th><th>OT</th><th>Gross</th><th>Deductions</th><th>Net</th></tr>
       </thead>
       <tbody>
         {% for line in lines %}
         <tr>
           <td>{{ loop.index }}</td>
           <td>{{ line.employee_code or '—' }}</td>
-          <td>{{ line.employee_name }}</td>
+          <td>{{ line.employee_name }}{% if line.basis and line.basis.exit_date %}<br><small>Exit: {{ line.basis.exit_date }}</small>{% endif %}</td>
           <td>{{ line.employee_type }}</td>
-          <td>{{ line.present_days or 0 }}</td>
+          <td>{{ line.basis.working_days if line.basis and line.basis.working_days is not none else '—' }}</td>
+          <td>{{ line.basis.payable_days if line.basis and line.basis.payable_days is not none else (line.present_days or 0) }}{% if line.basis and line.basis.legacy %}*{% endif %}</td>
           <td>{{ line.ot_hours or 0 }}</td>
           <td>{{ '%.2f'|format(line.gross_salary or 0) }}</td>
           <td>{{ '%.2f'|format((line.deductions or 0) + (line.advance_deduction or 0)) }}</td>
           <td>{{ '%.2f'|format(line.net_salary or 0) }}</td>
         </tr>
         {% else %}
-        <tr><td colspan="9">No payroll lines.</td></tr>
+        <tr><td colspan="10">No payroll lines.</td></tr>
         {% endfor %}
       </tbody>
       <tfoot>
         <tr>
-          <td colspan="6">Totals</td>
+          <td colspan="7">Totals</td>
           <td>{{ '%.2f'|format(run.total_gross or 0) }}</td>
           <td>—</td>
           <td>{{ '%.2f'|format(run.total_net or 0) }}</td>
         </tr>
       </tfoot>
     </table>
+
+    <p style="font-size:0.66rem;margin:0.35rem 0 0;">Working days = calendar days &minus; Sundays; payable salary = (monthly salary &divide; working days) &times; payable days. * Generated before this rule; shown on its original day basis.</p>
 
     {{ corporate_report_signatures(ctx) }}
     {{ corporate_report_footer(ctx) }}

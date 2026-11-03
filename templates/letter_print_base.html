@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block doc_title %}Letter{% endblock %} — MAXEK</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/letter-print.css') }}">
+</head>
+<body class="lp-body lp-mode-letterhead">
+  <div class="lp-toolbar no-print">
+    <a href="{{ back_url }}">&larr; Back</a>
+    {% block toolbar_extra %}{% endblock %}
+    <span class="lp-spacer"></span>
+    <span class="lp-note">A4 &middot; <span id="lp-pages">1 page</span></span>
+    <button type="button" data-lp-mode="letterhead" aria-pressed="true">Preview: MAXEK letterhead</button>
+    <button type="button" data-lp-mode="preprinted" aria-pressed="false">Preview: preprinted paper</button>
+    <button type="button" class="lp-primary" data-lp-mode="letterhead" data-lp-print>Print with MAXEK Letterhead</button>
+    <button type="button" class="lp-primary" data-lp-mode="preprinted" data-lp-print>Print on Preprinted Paper</button>
+  </div>
+  <div class="lp-stage" id="lp-stage">
+  <div class="lp-sheet">
+    <img class="lp-bg-print" src="{{ url_for('static', filename='assets/letterhead/maxek-letterhead.png') }}" alt="" width="794" height="1123">
+    <table class="lp-doc">
+      <thead><tr><td></td></tr></thead>
+      <tfoot><tr><td></td></tr></tfoot>
+      <tbody>
+        {% block rows %}{% endblock %}
+      </tbody>
+    </table>
+  </div>
+  </div>
+  <script src="{{ url_for('static', filename='js/letter-print.js') }}"></script>
+</body>
+</html>

@@ -9,6 +9,7 @@ import pandas as pd
 import bcrypt
 from datetime import datetime, timedelta
 from calendar import monthrange
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from zoneinfo import ZoneInfo
 
 from cost_planning_service import (
@@ -29,6 +30,7 @@ from cost_planning_service import (
     build_monitoring_row,
 )
 
+from payroll_calc import parse_iso_date as payroll_parse_iso_date
 from payroll_service import (
     calculate_daily_wage,
     generate_payroll_run,
@@ -44,6 +46,16 @@ from payroll_service import (
     calculate_worker_period_pay,
     employee_has_period_data,
     serialize_eligible_employee,
+    ensure_no_payroll_overlap,
+    ensure_staff_not_departed,
+    ensure_attendance_covers_employment,
+    explain_payroll_eligibility,
+    line_day_basis,
+    payroll_overlap_index,
+    build_payroll_dashboard,
+    fetch_payroll_runs_page,
+    DASHBOARD_PAGE_SIZES,
+    DASHBOARD_STATUS_LABELS,
     _row_employee_identity,
     PAYROLL_RUN_STATUSES,
     EMPLOYEE_TYPES,
@@ -171,6 +183,7 @@ from user_activity_service import (
     should_track_page_view,
 )
 
+import company_letters as company_letters_service
 from office_fleet_service import (
     INWARD_MODES,
     OUTWARD_MODES,
@@ -3788,6 +3801,31 @@ def format_app_datetime(dt=None, fmt="%A, %d %b %Y | %H:%M", db=None):
     return dt.strftime(fmt)
 
 
+@app.template_filter("inr")
+def inr_filter(value, places=2):
+    """Indian-grouped rupee amount, e.g. 1234567.5 -> '₹ 12,34,567.50' ('—' when blank)."""
+    if value is None or value == "":
+        return "\u2014"
+    try:
+        amount = Decimal(str(value)).quantize(
+            Decimal(1).scaleb(-int(places)), rounding=ROUND_HALF_UP
+        )
+    except (InvalidOperation, ValueError):
+        return "\u2014"
+    sign = "-" if amount < 0 else ""
+    whole, _, frac = f"{abs(amount):.{int(places)}f}".partition(".")
+    if len(whole) > 3:
+        head, tail = whole[:-3], whole[-3:]
+        groups = []
+        while len(head) > 2:
+            groups.insert(0, head[-2:])
+            head = head[:-2]
+        if head:
+            groups.insert(0, head)
+        whole = ",".join(groups + [tail])
+    return f"{sign}\u20b9 {whole}" + (f".{frac}" if frac else "")
+
+
 @app.template_filter("app_datetime")
 def app_datetime_filter(value, fmt="%d %b %Y %H:%M"):
     if value is None or value == "":
@@ -3934,6 +3972,22 @@ def _generate_payroll_run_selected(
 
     if not employees:
         raise ValueError("No employees selected.")
+    employees = list(dict.fromkeys((et, int(eid)) for et, eid in employees))
+    ensure_no_payroll_overlap(db, employees, period_start, period_end)
+    ensure_staff_not_departed(db, employees, period_start)
+    _staff_ids = [int(eid) for et, eid in employees if et == "staff"]
+    if _staff_ids:
+        ensure_attendance_covers_employment(
+            db,
+            [
+                dict(r)
+                for r in db.execute(
+                    f"SELECT * FROM staff WHERE id IN ({','.join('?' * len(_staff_ids))})", _staff_ids
+                ).fetchall()
+            ],
+            period_start,
+            period_end,
+        )
     if employment_category == "company_staff":
         project_id = None
     run_ref = f"PR-{datetime.now().strftime('%Y%m%d%H%M%S')}"
@@ -5797,6 +5851,7 @@ def init_db():
         "UPDATE users SET status='Active' WHERE status IS NULL OR TRIM(status)=''"
     )
     _ensure_column(db, "staff", "designation_id", "INTEGER")
+    _ensure_column(db, "staff", "exit_date", "TEXT")
     _ensure_column(db, "staff", "reporting_manager", "TEXT")
     _ensure_column(db, "staff", "workflow_role", "TEXT")
     _ensure_column(db, "staff", "aadhaar_number", "TEXT")
@@ -6191,6 +6246,12 @@ FLEET_NAV_ACTIVE = [
 ]
 
 OFFICE_NAV_ACTIVE = [
+    "company_letters",
+    "company_letter_form",
+    "company_letter_view",
+    "company_letter_preview",
+    "company_letter_issue",
+    "company_letter_content",
     "office_admin",
     "office_inward",
     "office_outward",
@@ -7262,6 +7323,12 @@ NAV_GROUPS = [
                 "label": "Letter Preparation / General Letters",
                 "icon": "fa-envelope-open-text",
                 "active_endpoints": ["office_letters", "office_letter_print"],
+            },
+            {
+                "endpoint": "company_letters",
+                "label": "Company Letters",
+                "icon": "fa-file-lines",
+                "active_endpoints": ["company_letters", "company_letter_form", "company_letter_view", "company_letter_preview", "company_letter_issue", "company_letter_content"],
             },
             {
                 "endpoint": "office_quotations",
@@ -8552,6 +8619,7 @@ def get_department_portals():
                 {"endpoint": "office_inward", "label": "Letter In / Inward Register", "icon": "fa-inbox", "active_endpoints": ["office_inward"]},
                 {"endpoint": "office_outward", "label": "Letter Out / Outward Register", "icon": "fa-paper-plane", "active_endpoints": ["office_outward"]},
                 {"endpoint": "office_letters", "label": "Letter Preparation", "icon": "fa-envelope-open-text", "active_endpoints": ["office_letters", "office_letter_print"]},
+                {"endpoint": "company_letters", "label": "Company Letters", "icon": "fa-file-lines", "active_endpoints": ["company_letters", "company_letter_form", "company_letter_view", "company_letter_preview", "company_letter_issue", "company_letter_content"]},
                 {"endpoint": "office_agreements", "label": "Agreements", "icon": "fa-handshake", "active_endpoints": ["office_agreements"]},
                 {"endpoint": "office_legal", "label": "Legal Documents", "icon": "fa-scale-balanced", "active_endpoints": ["office_legal"]},
                 {"endpoint": "corporate_dms", "label": "Corporate DMS", "icon": "fa-folder-tree", "active_endpoints": ["corporate_dms", "corporate_dms_file", "corporate_dms_download"]},
@@ -10225,6 +10293,7 @@ def staff():
         holiday_pay_applicable = request.form.get("holiday_pay_applicable", "No").strip()
         working_hours = request.form.get("working_hours", "0").strip()
         joining_date = request.form.get("joining_date", "").strip()
+        exit_date = request.form.get("exit_date", "").strip()
         date_of_birth = request.form.get("date_of_birth", "").strip()
         gender = request.form.get("gender", "").strip()
         status = request.form.get("status", "Active").strip()
@@ -10292,6 +10361,16 @@ def staff():
         except ValueError:
             flash("Enter valid numeric values for salary and working hours.")
             return redirect(url_for("staff"))
+        if exit_date:
+            exit_parsed = payroll_parse_iso_date(exit_date)
+            if exit_parsed is None:
+                flash("Exit date must be a valid date.")
+                return redirect(url_for("staff", edit=staff_id) if staff_id else url_for("staff"))
+            exit_date = exit_parsed.isoformat()
+            join_parsed = payroll_parse_iso_date(joining_date)
+            if join_parsed and exit_parsed < join_parsed:
+                flash("Exit date cannot be earlier than the joining date.")
+                return redirect(url_for("staff", edit=staff_id) if staff_id else url_for("staff"))
         values = (
             employee_code, staff_name, mobile, email, department, designation_name,
             designation_id, reporting_manager, workflow_role or None,
@@ -10301,6 +10380,7 @@ def staff():
             bank_account, bank_name, ifsc_code, branch_name,
             id_proof, aadhaar_document, pan_document,
             company_room_provided or "No", company_food_provided or "No",
+            exit_date or None,
         )
         if existing_staff:
             db.execute(
@@ -10310,7 +10390,7 @@ def staff():
                 "working_hours=?, joining_date=?, date_of_birth=?, gender=?, photo=?, status=?, "
                 "aadhaar_number=?, pan_number=?, bank_account=?, bank_name=?, ifsc_code=?, "
                 "branch_name=?, id_proof=?, aadhaar_document=?, pan_document=?, "
-                "company_room_provided=?, company_food_provided=? WHERE id=?",
+                "company_room_provided=?, company_food_provided=?, exit_date=? WHERE id=?",
                 values + (staff_id,),
             )
             saved_id = int(staff_id)
@@ -10322,7 +10402,7 @@ def staff():
                 "ot_applicable, ot_rate_per_hour, holiday_pay_applicable, working_hours, joining_date, "
                 "date_of_birth, gender, photo, status, "
                 "aadhaar_number, pan_number, bank_account, bank_name, ifsc_code, branch_name, id_proof, "
-                "aadhaar_document, pan_document, company_room_provided, company_food_provided) "
+                "aadhaar_document, pan_document, company_room_provided, company_food_provided, exit_date) "
                 "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 values,
             )
@@ -18539,46 +18619,81 @@ def payroll():
         if view_run:
             view_run = dict(view_run)
             view_lines = fetch_payroll_lines(db, run_id=view_id)
+            for line in view_lines:
+                line["basis"] = line_day_basis(line)
             wf_ctx = _workflow_view_context(
                 module_id, view_id, record_table, view_run.get("approval_status")
             )
 
-    runs = [
-        dict(r) for r in db.execute(
-            "SELECT pr.*, p.project_name FROM payroll_runs pr "
-            "LEFT JOIN projects p ON pr.project_id = p.id "
-            "ORDER BY pr.id DESC LIMIT 100"
-        ).fetchall()
-    ]
-    attach_run_employee_summaries(db, runs)
     projects = query_db("SELECT id, project_name FROM projects ORDER BY project_name")
     departments = get_departments()
     now = get_app_now(db)
-    pending_month_filter = request.args.get("pending_month", "").strip() or None
-    try:
-        pending_payroll = list_pending_payroll_months(
-            db,
-            year_month_filter=pending_month_filter,
-        )
-        pending_month_summary = summarize_pending_payroll_months(pending_payroll)
-    except Exception:
-        app.logger.exception("Pending payroll dashboard failed")
-        pending_payroll = []
-        pending_month_summary = []
+
+    # --- Dashboard (month selector, summary cards, searchable/paginated staff table) ---
+    dash_month = request.args.get("month", type=int) or now.month
+    dash_year = request.args.get("year", type=int) or now.year
+    if not 1 <= dash_month <= 12:
+        dash_month = now.month
+    if not 2000 <= dash_year <= 2100:
+        dash_year = now.year
+    dash_tab = "runs" if request.args.get("tab") == "runs" else "staff"
+
+    def dash_url(**overrides):
+        """Dashboard URL keeping the current filters; ``None`` removes a parameter."""
+        params = {k: v for k, v in request.args.items() if v not in ("", None) and k != "view"}
+        params.update(overrides)
+        return url_for("payroll", **{k: v for k, v in params.items() if v not in ("", None)})
+
+    dashboard = dashboard_error = None
+    runs_page = None
+    pending_month_summary = []
+    if not view_run:
+        try:
+            if dash_tab == "staff":
+                dashboard = build_payroll_dashboard(
+                    db,
+                    month=dash_month,
+                    year=dash_year,
+                    query=request.args.get("q", "").strip(),
+                    category=request.args.get("category", "").strip(),
+                    status=request.args.get("status", "").strip(),
+                    department=request.args.get("department", "").strip(),
+                    page=request.args.get("page", type=int) or 1,
+                    per_page=request.args.get("per_page", type=int) or 25,
+                )
+            else:
+                runs_page = fetch_payroll_runs_page(
+                    db, page=request.args.get("page", type=int) or 1, per_page=10
+                )
+        except Exception:
+            app.logger.exception("Payroll dashboard failed")
+            dashboard_error = "The payroll dashboard could not be loaded."
+        try:
+            pending_month_summary = summarize_pending_payroll_months(
+                list_pending_payroll_months(db)
+            )
+        except Exception:
+            app.logger.exception("Pending payroll summary failed")
     return render_template(
         "payroll.html",
-        runs=runs,
+        dashboard=dashboard,
+        dashboard_error=dashboard_error,
+        dash_url=dash_url,
+        dash_tab=dash_tab,
+        dash_month=dash_month,
+        dash_year=dash_year,
+        runs_page=runs_page,
+        page_sizes=DASHBOARD_PAGE_SIZES,
+        status_labels=DASHBOARD_STATUS_LABELS,
         view_run=view_run,
         view_lines=view_lines,
         projects=projects,
         departments=departments,
-        pending_payroll=pending_payroll,
         pending_month_summary=pending_month_summary,
-        pending_month_filter=pending_month_filter,
         employee_types=EMPLOYEE_TYPES,
         employment_categories=PAYROLL_EMPLOYMENT_CATEGORIES,
-        current_month=now.month,
-        current_year=now.year,
+        current_month=dash_month,
+        current_year=dash_year,
         history=wf_ctx.get("history"),
         edit_role=wf_ctx.get("edit_role"),
         can_reopen=wf_ctx.get("can_reopen", False) or is_admin_user(),
@@ -18629,10 +18744,46 @@ def payroll_eligible_employees():
         department,
         period_start=period_start,
         period_end=period_end,
+        include_without_data=True,
     )
-    payload = [serialize_eligible_employee(emp) for emp in employees]
-    message = empty_message if not payload else ""
+    overlaps = payroll_overlap_index(db, period_start, period_end)
+    payload = [
+        serialize_eligible_employee(
+            emp, overlap=overlaps.get((emp["employee_type"], emp["employee_id"]))
+        )
+        for emp in employees
+    ]
+    if not payload:
+        message = "No active employees found for this employment type."
+    elif not any(row["selectable"] for row in payload):
+        message = empty_message
+    else:
+        message = ""
     return jsonify({"employees": payload, "message": message})
+
+
+@app.route("/payroll/eligibility-check")
+@login_required
+def payroll_eligibility_check():
+    """Read-only: explain why a person is (not) selectable for a payroll period."""
+    db = get_db()
+    prepare_payroll_page_db(db)
+    employment_category = request.args.get("employment_category", "company_staff").strip()
+    if employment_category not in PAYROLL_EMPLOYMENT_CATEGORIES:
+        employment_category = "company_staff"
+    month = request.args.get("month", type=int)
+    year = request.args.get("year", type=int)
+    period_start = period_end = None
+    if month and year and 1 <= month <= 12:
+        period_start, period_end = period_from_month_year(month, year)
+    results = explain_payroll_eligibility(
+        db,
+        request.args.get("q", ""),
+        employment_category=employment_category,
+        period_start=period_start,
+        period_end=period_end,
+    )
+    return jsonify({"results": results, "period_start": period_start, "period_end": period_end})
 
 
 @app.route("/payroll/holidays", methods=["GET", "POST"])
@@ -18795,6 +18946,8 @@ def payroll_print_run(run_id):
         app.logger.exception("Payroll register print failed for run_id=%s", run_id)
         flash("Could not load payroll register. Please contact support if this persists.")
         return redirect(url_for("payroll", view=run_id))
+    for line in lines:
+        line["basis"] = line_day_basis(line)
     _prepare_corporate_template_db(db)
     ctx = _build_corporate_report_context(
         db,
@@ -18824,6 +18977,7 @@ def payroll_print_slip(line_id):
         flash("Pay slip not found.")
         return redirect(url_for("payroll"))
     line = line_rows[0]
+    line["basis"] = line_day_basis(line)
     bank = {}
     if line.get("staff_id"):
         row = db.execute(
@@ -18873,9 +19027,10 @@ def payroll_export_register(run_id):
     df = pd.DataFrame(rows)
     cols = [
         "run_ref", "employee_code", "employee_name", "employee_type", "department",
-        "period_start", "period_end", "base_salary", "present_days", "ot_hours",
+        "period_start", "period_end", "base_salary", "working_days", "present_days",
+        "payable_days", "daily_rate", "ot_hours",
         "ot_amount", "holiday_pay", "gross_salary", "deductions", "advance_deduction",
-        "net_salary", "payment_status", "verification_status", "approval_status",
+        "net_salary", "calc_basis", "exit_date", "payment_status", "verification_status", "approval_status",
     ]
     export_cols = [c for c in cols if c in df.columns]
     df = df[export_cols]
@@ -19199,9 +19354,389 @@ def office_letter_print(letter_id):
     return render_template(
         "letter_print.html",
         letter=letter,
-        generated_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
-        autoprint=request.args.get("print") == "1",
+        back_url=url_for("office_letters", view=letter["id"]),
     )
+
+
+# --- Administration -> Company Letters --------------------------------------------------
+
+
+@app.template_filter("letter_date")
+def _letter_date_filter(value):
+    return company_letters_service.display_date(value)
+
+
+@app.template_filter("letter_html")
+def _letter_html_filter(value):
+    from markupsafe import Markup
+
+    return Markup(company_letters_service.sanitize_letter_html(value))
+
+
+def _prepare_company_letters_db(db):
+    company_letters_service.ensure_company_letters_schema(db)
+    db.commit()  # schema/seed writes must not leave a transaction open before numbering
+
+
+def _has_employee_data_access(db, user_id) -> bool:
+    """May this (non-admin) user read employee master data?
+
+    The ERP keeps employee data in the HR & Payroll department (Employee Master tab), so access
+    means working in that department, or holding an explicit grant for the Employee Master tab
+    under HR & Payroll in the user's department tab permissions. Unlike tab *visibility*, no
+    grant rows does NOT mean unrestricted here: employee data is sensitive, so it is opt-in.
+    """
+    if (session.get("department") or "").strip() == "HR & Payroll":
+        return True
+    ensure_user_tab_permissions_schema(db)
+    row = db.execute(
+        "SELECT 1 FROM user_tab_permissions WHERE user_id=? AND department_slug='hr-payroll' AND granted=1 "
+        "AND (tab_key=? OR endpoint IN ('staff','employee_profile')) LIMIT 1",
+        (user_id, "staff::Employee Master"),
+    ).fetchone()
+    return row is not None
+
+
+def company_letter_access(db=None) -> dict:
+    """What the logged-in user may do with Company Letters, decided on the server.
+
+    Built only from the ERP's existing access model, nothing new:
+
+    * Administrators: everything.
+    * Guests and base HR/payroll users: nothing (same as the menu).
+    * Everyone else needs the *Company Letters* tab of the Administration department
+      (Users -> department tab permissions; no tab rows saved = unrestricted, as for every
+      other tab), and then their workflow role decides the action:
+        view / print       any role with the tab
+        create / edit      Maker (``can_create``)
+        autofill employee  same as create, and only staff of the user's own company
+        issue              Approver (``can_approve``)
+    * Which letters and employees they see is further limited to their own
+      tenant/company by ``company_letters_service.make_scope``.
+    """
+    cached = getattr(request, "_company_letter_access", None)
+    if cached is not None:
+        return cached
+    none = {"view": False, "create": False, "issue": False, "print": False, "employees": False}
+    if not session.get("user_id") or is_guest_user() or is_hr_base_user():
+        request._company_letter_access = none
+        return none
+    db = db or get_db()
+    if is_admin_user():
+        full = {"view": True, "create": True, "issue": True, "print": True, "employees": True}
+        request._company_letter_access = full
+        return full
+    uid = session["user_id"]
+    ensure_user_tab_permissions_schema(db)
+    has_rows = db.execute(
+        "SELECT 1 FROM user_tab_permissions WHERE user_id=? AND department_slug='administration' LIMIT 1",
+        (uid,),
+    ).fetchone()
+    tab_ok = True
+    if has_rows:  # tab rows saved for the department = restricted to the tabs granted there
+        granted = db.execute(
+            "SELECT 1 FROM user_tab_permissions WHERE user_id=? AND department_slug='administration' "
+            "AND granted=1 AND (tab_key=? OR endpoint=?) LIMIT 1",
+            (uid, "company_letters::Company Letters", "company_letters"),
+        ).fetchone()
+        tab_ok = granted is not None
+    if not tab_ok:
+        request._company_letter_access = none
+        return none
+    caps = user_workflow_capabilities(db, uid, False)
+    can_create = bool(caps.get("can_create"))
+    access = {
+        "view": True,
+        "print": True,
+        "create": can_create,
+        "issue": bool(caps.get("can_approve")),
+        # Employee autofill reads HR records, so letter-create permission alone is not enough.
+        "employees": can_create and _has_employee_data_access(db, uid),
+    }
+    request._company_letter_access = access
+    return access
+
+
+def _company_letters_denied(action: str = "view", *, as_json: bool = False):
+    """None when the user may ``action`` (view/create/issue/print), else a response."""
+    if company_letter_access().get(action):
+        return None
+    if as_json:
+        return jsonify({"error": "forbidden"}), 403
+    flash(
+        "You do not have permission to "
+        + {"view": "open", "print": "print", "create": "create or edit", "issue": "issue",
+           "employees": "use employee details in"}.get(action, action)
+        + " Company Letters."
+    )
+    return redirect(url_for("company_letters" if company_letter_access().get("view") else "dashboard"))
+
+
+def _company_letter_scope():
+    return company_letters_service.make_scope(session)
+
+
+@app.route("/administration/company-letters")
+@login_required
+def company_letters():
+    denied = _company_letters_denied("view")
+    if denied:
+        return denied
+    db = get_db()
+    _prepare_company_letters_db(db)
+    q = request.args.get("q", "").strip()
+    type_filter = request.args.get("type", "").strip()
+    if type_filter not in company_letters_service.LETTER_TYPES:
+        type_filter = ""
+    data = company_letters_service.list_letters(
+        db,
+        scope=_company_letter_scope(),
+        query=q,
+        letter_type=type_filter,
+        page=request.args.get("page", 1, type=int),
+        per_page=request.args.get("per_page", company_letters_service.PAGE_SIZE, type=int),
+    )
+
+    def page_url(page):
+        return url_for(
+            "company_letters", q=q or None, type=type_filter or None,
+            per_page=data["per_page"], page=page,
+        )
+
+    access = company_letter_access()
+    numbering_cfg = None
+    if is_admin_user():
+        numbering_cfg = company_letters_service.numbering_settings(db, scope=_company_letter_scope())
+        db.rollback()  # the lookup may create the year's counter row; it is saved only with the form
+    return render_template(
+        "company_letters.html",
+        numbering=numbering_cfg,
+        data=data, q=q, type_filter=type_filter, page_url=page_url,
+        letter_types=company_letters_service.LETTER_TYPES,
+        page_sizes=company_letters_service.PAGE_SIZES,
+        can_edit=access["create"], can_issue=access["issue"],
+    )
+
+
+@app.route("/administration/company-letters/numbering", methods=["POST"])
+@login_required
+def company_letter_numbering():
+    """Administrators set the prefix, layout, year basis and last number used.
+
+    Kept configurable on purpose: the real current sequence and year basis are confirmed by the
+    business, not assumed by the software.
+    """
+    if not is_admin_user():
+        flash("Only an administrator can change letter numbering.")
+        return redirect(url_for("company_letters"))
+    db = get_db()
+    _prepare_company_letters_db(db)
+    try:
+        company_letters_service.update_numbering_settings(
+            db,
+            prefix=request.form.get("prefix", ""),
+            pattern=request.form.get("pattern", ""),
+            basis=request.form.get("basis", ""),
+            last_number=request.form.get("last_number", ""),
+        )
+        db.commit()
+        flash("Letter numbering updated. Existing letters were not changed.")
+    except ValueError as exc:
+        db.rollback()
+        flash(str(exc))
+    return redirect(url_for("company_letters"))
+
+
+@app.route("/administration/company-letters/new", methods=["GET", "POST"])
+@app.route("/administration/company-letters/<int:letter_id>/edit", methods=["GET", "POST"])
+@login_required
+def company_letter_form(letter_id=None):
+    denied = _company_letters_denied("create")
+    if denied:
+        return denied
+    db = get_db()
+    _prepare_company_letters_db(db)
+    scope = _company_letter_scope()
+    letter = None
+    if letter_id:
+        letter = company_letters_service.get_letter(db, letter_id, scope)
+        if not letter:
+            flash("Letter not found.")
+            return redirect(url_for("company_letters"))
+        if letter["status"] == company_letters_service.STATUS_ISSUED and not company_letter_access()["issue"]:
+            flash("This letter has been issued. Only a user who can issue letters may change it "
+                  "(it then returns to Draft until issued again).")
+            return redirect(url_for("company_letter_view", letter_id=letter_id))
+    errors: list[str] = []
+    suggestion = None
+    if request.method == "POST":
+        values, errors = company_letters_service.validate_letter_form(
+            db, request.form, letter_id, scope,
+            allow_employee=company_letter_access()["employees"],
+            current_employee_id=(letter or {}).get("employee_id"),
+        )
+        if not errors:
+            try:
+                saved_id, saved_ref = company_letters_service.save_letter(
+                    db, values, session.get("username", ""), letter_id, scope
+                )
+                db.commit()
+            except ValueError as exc:
+                db.rollback()
+                errors = [str(exc)]
+            else:
+                msg = "Letter saved as Draft."
+                suggested = request.form.get("suggested_reference", "").strip()
+                if values.get("reference_auto") and suggested and suggested != saved_ref:
+                    msg += (f" The number {suggested} was taken by another letter while you were "
+                            f"editing, so this letter was given {saved_ref}.")
+                flash(msg)
+                if request.form.get("after") == "preview":
+                    return redirect(url_for("company_letter_preview", letter_id=saved_id))
+                return redirect(url_for("company_letter_view", letter_id=saved_id))
+        v = values
+    elif letter:
+        v = dict(letter)
+    else:
+        sig_name, sig_title = company_letters_service.last_signatory(db, scope)
+        today = datetime.now().strftime("%Y-%m-%d")
+        suggestion = company_letters_service.suggest_reference(db, today, scope)
+        v = {
+            "reference_no": suggestion["reference"],
+            "letter_date": today,
+            "letter_type": "General Administration Letter",
+            "recipient_name": "", "recipient_org": "", "recipient_address": "",
+            "subject": "", "salutation": company_letters_service.DEFAULT_SALUTATION,
+            "body_html": "", "closing": company_letters_service.DEFAULT_CLOSING,
+            "signatory_name": sig_name, "signatory_designation": sig_title,
+            "employee_id": None,
+        }
+    employee_label = ""
+    if v.get("employee_id") and company_letter_access()["employees"]:
+        emp = company_letters_service.employee_details(db, v["employee_id"], scope)
+        if emp:
+            employee_label = f"{emp['name']} ({emp.get('employee_code') or '—'})"
+    return render_template(
+        "company_letter_form.html",
+        can_autofill=company_letter_access()["employees"],
+        letter=letter, v=v, errors=errors, employee_label=employee_label,
+        letter_types=company_letters_service.LETTER_TYPES,
+        suggestion=suggestion,
+        suggested_reference=(suggestion or {}).get("reference", ""),
+        earlier_letters=company_letters_service.recent_letters(db, scope),
+        copy_url=url_for("company_letter_content", letter_id=0),
+    )
+
+
+@app.route("/administration/company-letters/<int:letter_id>")
+@login_required
+def company_letter_view(letter_id):
+    denied = _company_letters_denied("view")
+    if denied:
+        return denied
+    db = get_db()
+    _prepare_company_letters_db(db)
+    scope = _company_letter_scope()
+    letter = company_letters_service.get_letter(db, letter_id, scope)
+    if not letter:
+        flash("Letter not found.")
+        return redirect(url_for("company_letters"))
+    employee = None
+    access = company_letter_access()
+    if letter.get("employee_id") and access["employees"]:
+        employee = company_letters_service.employee_details(db, letter["employee_id"], scope)
+    return render_template(
+        "company_letter_view.html", letter=letter, employee=employee,
+        can_edit=access["create"] and (letter["status"] != company_letters_service.STATUS_ISSUED or access["issue"]),
+        can_issue=access["issue"], can_print=access["print"],
+    )
+
+
+@app.route("/administration/company-letters/<int:letter_id>/issue", methods=["POST"])
+@login_required
+def company_letter_issue(letter_id):
+    denied = _company_letters_denied("issue")
+    if denied:
+        return denied
+    db = get_db()
+    _prepare_company_letters_db(db)
+    try:
+        company_letters_service.issue_letter(
+            db, letter_id, session.get("username", ""),
+            confirmed=request.form.get("confirm_content") == "1", scope=_company_letter_scope(),
+        )
+        db.commit()
+        flash("Letter issued.")
+    except ValueError as exc:
+        db.rollback()
+        flash(str(exc))
+    return redirect(url_for("company_letter_view", letter_id=letter_id))
+
+
+@app.route("/administration/company-letters/<int:letter_id>/preview")
+@login_required
+def company_letter_preview(letter_id):
+    """A4 preview and the print screen (print with letterhead / on preprinted paper)."""
+    denied = _company_letters_denied("print")
+    if denied:
+        return denied
+    db = get_db()
+    _prepare_company_letters_db(db)
+    letter = company_letters_service.get_letter(db, letter_id, _company_letter_scope())
+    if not letter:
+        flash("Letter not found.")
+        return redirect(url_for("company_letters"))
+    return render_template(
+        "company_letter_print.html",
+        letter=letter,
+        body_blocks=company_letters_service.split_blocks(letter["body_html"]),
+        back_url=url_for("company_letter_view", letter_id=letter_id),
+        is_draft=letter["status"] != company_letters_service.STATUS_ISSUED,
+        can_edit=company_letter_access()["create"],
+    )
+
+
+@app.route("/administration/company-letters/<int:letter_id>/content")
+@login_required
+def company_letter_content(letter_id):
+    """Subject and body of an earlier letter (same company) to start a new one from."""
+    denied = _company_letters_denied("create", as_json=True)
+    if denied:
+        return denied
+    db = get_db()
+    _prepare_company_letters_db(db)
+    letter = company_letters_service.get_letter(db, letter_id, _company_letter_scope())
+    if not letter:
+        return jsonify({"error": "not found"}), 404
+    return jsonify({
+        "reference_no": letter["reference_no"], "subject": letter["subject"],
+        "salutation": letter["salutation"], "body_html": letter["body_html"],
+        "closing": letter["closing"], "letter_type": letter["letter_type"],
+    })
+
+
+@app.route("/administration/company-letters/employees")
+@login_required
+def company_letter_employees():
+    denied = _company_letters_denied("employees", as_json=True)
+    if denied:
+        return denied
+    db = get_db()
+    return jsonify({"employees": company_letters_service.search_employees(
+        db, request.args.get("q", ""), scope=_company_letter_scope())})
+
+
+@app.route("/administration/company-letters/employee/<int:employee_id>")
+@login_required
+def company_letter_employee(employee_id):
+    denied = _company_letters_denied("employees", as_json=True)
+    if denied:
+        return denied
+    db = get_db()
+    details = company_letters_service.employee_details(db, employee_id, _company_letter_scope())
+    if not details:
+        return jsonify({"error": "not found"}), 404
+    return jsonify(details)
 
 
 @app.route("/office/quotations", methods=["GET", "POST"])

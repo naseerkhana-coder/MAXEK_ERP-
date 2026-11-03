@@ -1,0 +1,33 @@
+{% extends 'letter_print_base.html' %}
+{% block doc_title %}{{ letter.reference_no }}{% endblock %}
+{% block toolbar_extra %}
+  {% if can_edit %}<a href="{{ url_for('company_letter_form', letter_id=letter.id) }}">Edit</a>{% endif %}
+  {% if is_draft %}<span style="color:#b45309;font-weight:700;">DRAFT &mdash; not issued</span>{% endif %}
+  <strong>{{ letter.reference_no }}</strong>
+{% endblock %}
+{% block rows %}
+<tr><td>
+  {% if is_draft %}<div class="lp-draft">DRAFT &mdash; NOT ISSUED</div>{% endif %}
+  <div class="lp-refdate"><span>Ref: {{ letter.reference_no }}</span><span>Date: {{ letter.letter_date|letter_date }}</span></div>
+  <div class="lp-to lp-keep">
+    <div>To,</div>
+    <div class="lp-name">{{ letter.recipient_name }}</div>
+    {% if letter.recipient_org %}<div>{{ letter.recipient_org }}</div>{% endif %}
+    {% if letter.recipient_address %}<div class="lp-addr">{{ letter.recipient_address }}</div>{% endif %}
+  </div>
+  <div class="lp-subject lp-keep">Subject: {{ letter.subject }}</div>
+  <div class="lp-salutation lp-keep">{{ letter.salutation or 'Dear Sir,' }}</div>
+</td></tr>
+{% for block in body_blocks %}
+<tr><td><div class="lp-block">{{ block|safe }}</div></td></tr>
+{% endfor %}
+<tr><td>
+  <div class="lp-sign">
+    <div>{{ letter.closing or 'Yours faithfully,' }}</div>
+    <div class="lp-space"></div>
+    <div class="lp-sig-name">{{ letter.signatory_name }}</div>
+    {% if letter.signatory_designation %}<div>{{ letter.signatory_designation }}</div>{% endif %}
+    <div>for MAXEK Private Limited</div>
+  </div>
+</td></tr>
+{% endblock %}
