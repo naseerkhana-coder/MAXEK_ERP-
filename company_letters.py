@@ -103,6 +103,7 @@ def ensure_company_letters_schema(db) -> None:
     )
     db.execute("CREATE INDEX IF NOT EXISTS ix_company_letters_date ON company_letters(letter_date)")
     numbering.ensure_document_numbering_schema(db)
+    db.execute("CREATE TABLE IF NOT EXISTS app_settings(setting_key TEXT PRIMARY KEY, setting_value TEXT)")
 
 
 # ───────────────────────────── scope (tenant / company) ─────────────────────────────
@@ -222,18 +223,104 @@ def html_to_text(html: str | None) -> str:
 # needs its number entered explicitly, and later letters continue from it automatically.
 
 
-def fiscal_year_for(letter_date: str | None) -> str:
+YEAR_BASIS_KEY = "company_letter_year_basis"
+YEAR_BASES = {"financial": "Financial year (April - March)", "calendar": "Calendar year (January - December)"}
+MAX_PREFIX = 30
+
+
+def get_year_basis(db) -> str:
+    row = db.execute("SELECT setting_value FROM app_settings WHERE setting_key=?", (YEAR_BASIS_KEY,)).fetchone()
+    value = (row[0] if row else "") or "financial"
+    return value if value in YEAR_BASES else "financial"
+
+
+def _letter_date(letter_date: str | None) -> date:
     try:
-        d = datetime.strptime(str(letter_date or "")[:10], "%Y-%m-%d").date()
+        return datetime.strptime(str(letter_date or "")[:10], "%Y-%m-%d").date()
     except ValueError:
-        d = date.today()
+        return date.today()
+
+
+def fiscal_year_for(letter_date: str | None, basis: str = "financial") -> str:
+    """Counter key for a letter date: ``2026-27`` (April-March) or ``CY2026`` (calendar year)."""
+    d = _letter_date(letter_date)
+    if basis == "calendar":
+        return f"CY{d.year}"
     return numbering.get_current_fiscal_year(d)
 
 
 def _sequence(db, letter_date: str | None) -> dict:
-    fy = fiscal_year_for(letter_date)
-    numbering.seed_default_sequences(db, fy)
+    """The counter row for the letter's year, created on first use.
+
+    A new year starts at 0 but inherits the prefix and layout last configured, so a change made
+    in the settings is not lost when the year turns.
+    """
+    fy = fiscal_year_for(letter_date, get_year_basis(db))
+    numbering.ensure_document_numbering_schema(db)
+    if not db.execute("SELECT 1 FROM document_number_sequences WHERE doc_type=? AND fiscal_year=?", (DOC_TYPE, fy)).fetchone():
+        prev = db.execute(
+            "SELECT prefix, format_pattern FROM document_number_sequences WHERE doc_type=? ORDER BY id DESC LIMIT 1",
+            (DOC_TYPE,),
+        ).fetchone()
+        if prev:
+            db.execute(
+                "INSERT INTO document_number_sequences(doc_type, prefix, current_sequence, fiscal_year, format_pattern, last_generated_at) "
+                "VALUES(?,?,0,?,?,?)",
+                (DOC_TYPE, prev[0], fy, prev[1], datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+            )
+        else:
+            numbering.seed_default_sequences(db, fy)
     return numbering._sequence_row(db, DOC_TYPE, fy)
+
+
+def numbering_settings(db, letter_date: str | None = None, scope: dict | None = None) -> dict:
+    """What the numbering is currently set to, for the settings panel."""
+    row = _sequence(db, letter_date)
+    sug = suggest_reference(db, letter_date, scope)
+    return {
+        "prefix": row["prefix"], "pattern": row["format_pattern"], "basis": get_year_basis(db),
+        "year_label": row["fiscal_year"], "counter": int(row["current_sequence"] or 0),
+        "recorded": highest_recorded_sequence(db, row, scope), "next": sug["reference"], "configured": sug["configured"],
+        "basis_options": YEAR_BASES,
+    }
+
+
+def update_numbering_settings(
+    db, *, prefix: str, pattern: str, basis: str, last_number: str | int, letter_date: str | None = None,
+) -> None:
+    """Set prefix, layout, year basis and the last number already used for the current year.
+
+    Nothing is assumed about the real sequence: the numbers come from the register and are
+    entered here. Raises ``ValueError`` with a user-readable message on bad input. Existing
+    letters are never renumbered.
+    """
+    prefix = (prefix or "").strip()
+    pattern = (pattern or "").strip()
+    if not prefix or len(prefix) > MAX_PREFIX:
+        raise ValueError(f"Prefix is required (up to {MAX_PREFIX} characters).")
+    if basis not in YEAR_BASES:
+        raise ValueError("Choose financial year or calendar year.")
+    if "{seq" not in pattern:
+        raise ValueError("The number layout must contain {seq:03d} (or similar) where the running number goes.")
+    try:
+        sample = numbering.format_document_number(prefix, "2026-27", 7, pattern)
+    except (KeyError, IndexError, ValueError):
+        raise ValueError("The number layout may only use {prefix}, {yy}, {fy}, {fiscal_year} and {seq:03d}.") from None
+    if not sample.strip():
+        raise ValueError("The number layout produces an empty reference.")
+    last = str(last_number).strip()
+    if not last.isdigit():
+        raise ValueError("Last number used must be a whole number (0 if none yet).")
+    _begin_write(db)
+    db.execute(
+        "INSERT INTO app_settings(setting_key, setting_value) VALUES(?,?) "
+        "ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value", (YEAR_BASIS_KEY, basis))
+    row = _sequence(db, letter_date)
+    db.execute(
+        "UPDATE document_number_sequences SET prefix=?, format_pattern=?, current_sequence=?, last_generated_at=? "
+        "WHERE doc_type=? AND fiscal_year=?",
+        (prefix, pattern, int(last), datetime.now().strftime("%Y-%m-%d %H:%M:%S"), DOC_TYPE, row["fiscal_year"]),
+    )
 
 
 def _reference_regex(row: dict) -> re.Pattern:
@@ -525,7 +612,10 @@ def _clean(form, key: str) -> str:
     return (form.get(key) or "").strip()
 
 
-def validate_letter_form(db, form, record_id: int | None = None, scope: dict | None = None) -> tuple[dict, list[str]]:
+def validate_letter_form(
+    db, form, record_id: int | None = None, scope: dict | None = None, *,
+    allow_employee: bool = True, current_employee_id: int | None = None,
+) -> tuple[dict, list[str]]:
     """Return ``(values, errors)``. Nothing is written.
 
     ``values["reference_auto"]`` is True for a new letter whose number should be allocated
@@ -551,10 +641,15 @@ def validate_letter_form(db, form, record_id: int | None = None, scope: dict | N
         not values["reference_no"] or (bool(suggested) and values["reference_no"] == suggested)
     )
     emp = _clean(form, "employee_id")
-    values["employee_id"] = int(emp) if emp.isdigit() else None
-    if values["employee_id"] is not None and employee_details(db, values["employee_id"], scope) is None:
-        errors.append("The selected employee was not found in your company.")
-        values["employee_id"] = None
+    if not allow_employee:
+        # No employee-data access: a posted employee is ignored (never looked up, never
+        # linked); a link that already exists on the letter is left as it was.
+        values["employee_id"] = current_employee_id
+    else:
+        values["employee_id"] = int(emp) if emp.isdigit() else None
+        if values["employee_id"] is not None and employee_details(db, values["employee_id"], scope) is None:
+            errors.append("The selected employee was not found in your company.")
+            values["employee_id"] = None
 
     if not values["letter_date"]:
         errors.append("Letter date is required.")

@@ -27,12 +27,35 @@
     .cl-reg td[colspan] { display:block; text-align:left; }
     .cl-reg td[colspan]::before { display:none; }
   }
+  /* Readable rows in every theme (the shared dark-theme striping left some rows grey on grey). */
+  .cl-reg tbody tr { background:#fff !important; }
+  .cl-reg tbody tr:nth-child(even) { background:#f1f5f9 !important; }
+  .cl-reg tbody td { color:#1e293b !important; }
+  .cl-reg tbody td a:not(.erp-btn) { color:#b91c1c !important; font-weight:600; }
+  .cl-reg tbody td .erp-btn { color:#1e293b !important; background:#fff !important; border:1px solid #cbd5e1 !important; }
   .cl-actions { white-space:nowrap; }
   .cl-badge{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;background:#fef3c7;color:#92400e}
   .cl-badge-ok{background:#dcfce7;color:#166534}
 </style>
 {% endblock %}
 {% block content %}
+{% if numbering %}
+<details class="erp-form-card cl-scope" style="margin-bottom:.9rem;" {% if not numbering.configured %}open{% endif %}>
+  <summary style="cursor:pointer;font-weight:600;">Letter numbering settings (administrator)
+    &mdash; next number: <span>{{ numbering.next or 'not set yet' }}</span></summary>
+  <p style="margin:.5rem 0;font-size:13px;color:#475569;">
+    Counting year: <strong>{{ numbering.year_label }}</strong>. Counter: {{ numbering.counter }}; highest number already in the letter registers: {{ numbering.recorded }}.
+    The next letter is numbered above whichever is higher. Enter the real last number from your register; existing letters are never renumbered.
+    Changing the counting year uses a separate counter, so enter the last number again.</p>
+  <form method="post" action="{{ url_for('company_letter_numbering') }}" style="display:flex;flex-wrap:wrap;gap:.6rem;align-items:flex-end;">
+    <div class="erp-field" style="min-width:130px;"><input name="prefix" value="{{ numbering.prefix }}" maxlength="30" placeholder=" " required><label>Prefix</label></div>
+    <div class="erp-field" style="min-width:200px;"><input name="pattern" value="{{ numbering.pattern }}" placeholder=" " required><label>Layout ({prefix} {yy} {seq:03d})</label></div>
+    <div class="erp-field" style="min-width:220px;"><select name="basis">{% for key, label in numbering.basis_options.items() %}<option value="{{ key }}" {% if key == numbering.basis %}selected{% endif %}>{{ label }}</option>{% endfor %}</select><label>Counting year</label></div>
+    <div class="erp-field" style="min-width:150px;"><input name="last_number" value="{{ numbering.counter }}" inputmode="numeric" pattern="[0-9]+" placeholder=" " required><label>Last number used</label></div>
+    <button type="submit" class="erp-btn erp-btn-primary">Save numbering</button>
+  </form>
+</details>
+{% endif %}
 <form method="get" class="erp-form-card cl-scope" style="display:flex;flex-wrap:wrap;gap:.6rem;align-items:flex-end;margin-bottom:.9rem;">
   <div class="erp-field" style="min-width:240px;flex:1 1 240px;"><input name="q" value="{{ q }}" placeholder=" " autocomplete="off"><label>Search reference, recipient, subject</label></div>
   <div class="erp-field" style="min-width:200px;"><select name="type" onchange="this.form.submit()"><option value="">All types</option>{% for t in letter_types %}<option value="{{ t }}" {% if t == type_filter %}selected{% endif %}>{{ t }}</option>{% endfor %}</select><label>Letter type</label></div>

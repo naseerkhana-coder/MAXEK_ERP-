@@ -19378,6 +19378,25 @@ def _prepare_company_letters_db(db):
     db.commit()  # schema/seed writes must not leave a transaction open before numbering
 
 
+def _has_employee_data_access(db, user_id) -> bool:
+    """May this (non-admin) user read employee master data?
+
+    The ERP keeps employee data in the HR & Payroll department (Employee Master tab), so access
+    means working in that department, or holding an explicit grant for the Employee Master tab
+    under HR & Payroll in the user's department tab permissions. Unlike tab *visibility*, no
+    grant rows does NOT mean unrestricted here: employee data is sensitive, so it is opt-in.
+    """
+    if (session.get("department") or "").strip() == "HR & Payroll":
+        return True
+    ensure_user_tab_permissions_schema(db)
+    row = db.execute(
+        "SELECT 1 FROM user_tab_permissions WHERE user_id=? AND department_slug='hr-payroll' AND granted=1 "
+        "AND (tab_key=? OR endpoint IN ('staff','employee_profile')) LIMIT 1",
+        (user_id, "staff::Employee Master"),
+    ).fetchone()
+    return row is not None
+
+
 def company_letter_access(db=None) -> dict:
     """What the logged-in user may do with Company Letters, decided on the server.
 
@@ -19398,13 +19417,13 @@ def company_letter_access(db=None) -> dict:
     cached = getattr(request, "_company_letter_access", None)
     if cached is not None:
         return cached
-    none = {"view": False, "create": False, "issue": False, "print": False}
+    none = {"view": False, "create": False, "issue": False, "print": False, "employees": False}
     if not session.get("user_id") or is_guest_user() or is_hr_base_user():
         request._company_letter_access = none
         return none
     db = db or get_db()
     if is_admin_user():
-        full = {"view": True, "create": True, "issue": True, "print": True}
+        full = {"view": True, "create": True, "issue": True, "print": True, "employees": True}
         request._company_letter_access = full
         return full
     uid = session["user_id"]
@@ -19425,11 +19444,14 @@ def company_letter_access(db=None) -> dict:
         request._company_letter_access = none
         return none
     caps = user_workflow_capabilities(db, uid, False)
+    can_create = bool(caps.get("can_create"))
     access = {
         "view": True,
         "print": True,
-        "create": bool(caps.get("can_create")),
+        "create": can_create,
         "issue": bool(caps.get("can_approve")),
+        # Employee autofill reads HR records, so letter-create permission alone is not enough.
+        "employees": can_create and _has_employee_data_access(db, uid),
     }
     request._company_letter_access = access
     return access
@@ -19443,7 +19465,8 @@ def _company_letters_denied(action: str = "view", *, as_json: bool = False):
         return jsonify({"error": "forbidden"}), 403
     flash(
         "You do not have permission to "
-        + {"view": "open", "print": "print", "create": "create or edit", "issue": "issue"}.get(action, action)
+        + {"view": "open", "print": "print", "create": "create or edit", "issue": "issue",
+           "employees": "use employee details in"}.get(action, action)
         + " Company Letters."
     )
     return redirect(url_for("company_letters" if company_letter_access().get("view") else "dashboard"))
@@ -19481,13 +19504,47 @@ def company_letters():
         )
 
     access = company_letter_access()
+    numbering_cfg = None
+    if is_admin_user():
+        numbering_cfg = company_letters_service.numbering_settings(db, scope=_company_letter_scope())
+        db.rollback()  # the lookup may create the year's counter row; it is saved only with the form
     return render_template(
         "company_letters.html",
+        numbering=numbering_cfg,
         data=data, q=q, type_filter=type_filter, page_url=page_url,
         letter_types=company_letters_service.LETTER_TYPES,
         page_sizes=company_letters_service.PAGE_SIZES,
         can_edit=access["create"], can_issue=access["issue"],
     )
+
+
+@app.route("/administration/company-letters/numbering", methods=["POST"])
+@login_required
+def company_letter_numbering():
+    """Administrators set the prefix, layout, year basis and last number used.
+
+    Kept configurable on purpose: the real current sequence and year basis are confirmed by the
+    business, not assumed by the software.
+    """
+    if not is_admin_user():
+        flash("Only an administrator can change letter numbering.")
+        return redirect(url_for("company_letters"))
+    db = get_db()
+    _prepare_company_letters_db(db)
+    try:
+        company_letters_service.update_numbering_settings(
+            db,
+            prefix=request.form.get("prefix", ""),
+            pattern=request.form.get("pattern", ""),
+            basis=request.form.get("basis", ""),
+            last_number=request.form.get("last_number", ""),
+        )
+        db.commit()
+        flash("Letter numbering updated. Existing letters were not changed.")
+    except ValueError as exc:
+        db.rollback()
+        flash(str(exc))
+    return redirect(url_for("company_letters"))
 
 
 @app.route("/administration/company-letters/new", methods=["GET", "POST"])
@@ -19513,7 +19570,11 @@ def company_letter_form(letter_id=None):
     errors: list[str] = []
     suggestion = None
     if request.method == "POST":
-        values, errors = company_letters_service.validate_letter_form(db, request.form, letter_id, scope)
+        values, errors = company_letters_service.validate_letter_form(
+            db, request.form, letter_id, scope,
+            allow_employee=company_letter_access()["employees"],
+            current_employee_id=(letter or {}).get("employee_id"),
+        )
         if not errors:
             try:
                 saved_id, saved_ref = company_letters_service.save_letter(
@@ -19551,12 +19612,13 @@ def company_letter_form(letter_id=None):
             "employee_id": None,
         }
     employee_label = ""
-    if v.get("employee_id"):
+    if v.get("employee_id") and company_letter_access()["employees"]:
         emp = company_letters_service.employee_details(db, v["employee_id"], scope)
         if emp:
             employee_label = f"{emp['name']} ({emp.get('employee_code') or '—'})"
     return render_template(
         "company_letter_form.html",
+        can_autofill=company_letter_access()["employees"],
         letter=letter, v=v, errors=errors, employee_label=employee_label,
         letter_types=company_letters_service.LETTER_TYPES,
         suggestion=suggestion,
@@ -19580,9 +19642,9 @@ def company_letter_view(letter_id):
         flash("Letter not found.")
         return redirect(url_for("company_letters"))
     employee = None
-    if letter.get("employee_id"):
-        employee = company_letters_service.employee_details(db, letter["employee_id"], scope)
     access = company_letter_access()
+    if letter.get("employee_id") and access["employees"]:
+        employee = company_letters_service.employee_details(db, letter["employee_id"], scope)
     return render_template(
         "company_letter_view.html", letter=letter, employee=employee,
         can_edit=access["create"] and (letter["status"] != company_letters_service.STATUS_ISSUED or access["issue"]),
@@ -19656,7 +19718,7 @@ def company_letter_content(letter_id):
 @app.route("/administration/company-letters/employees")
 @login_required
 def company_letter_employees():
-    denied = _company_letters_denied("create", as_json=True)
+    denied = _company_letters_denied("employees", as_json=True)
     if denied:
         return denied
     db = get_db()
@@ -19667,7 +19729,7 @@ def company_letter_employees():
 @app.route("/administration/company-letters/employee/<int:employee_id>")
 @login_required
 def company_letter_employee(employee_id):
-    denied = _company_letters_denied("create", as_json=True)
+    denied = _company_letters_denied("employees", as_json=True)
     if denied:
         return denied
     db = get_db()

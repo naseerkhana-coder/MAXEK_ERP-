@@ -292,7 +292,6 @@ def test_half_days_count_as_half(ctx):
     [
         (27, 0, 0, 27000.00),   # full attendance
         (25, 0, 2, 25000.00),   # the example: 2 unpaid working-day absences
-        (29, 0, 2, 25000.00),   # entered on a calendar basis (Sundays included)
         (31, 0, 0, 27000.00),   # calendar-month entry, nothing absent: still just the month
         (24, 2, 1, 25000.00),   # 24 + 2 halves = 25 present, 1 absent + 2 half days -> 25
     ],
@@ -307,6 +306,22 @@ def test_monthly_summary_path(ctx, worked, half, absent, expected):
     )
     db.commit()
     assert pay(db, sid, 2026, 10)["gross_salary"] == expected
+
+
+def test_calendar_basis_summary_with_absences_is_blocked_not_guessed(ctx):
+    """29 worked + 2 absent = 31 calendar days: the 2 absences might be Sundays, so no payable
+    figure is produced. (Earlier behaviour silently paid 25 days; see classify_monthly_summary.)"""
+    from payroll_service import PayrollAttendanceError
+    db, _ = ctx
+    sid = add_staff(db, "Calendar Absent", "EMP108B", salary=27000)
+    db.execute(
+        "INSERT INTO staff_monthly_attendance(staff_id, year_month, worked_days, half_days, "
+        "absent_days, ot_hours, approval_status) VALUES(?,?,?,?,?,?,?)",
+        (sid, "2026-10", 29, 0, 2, 0, "Approved"),
+    )
+    db.commit()
+    with pytest.raises(PayrollAttendanceError, match="working-day basis"):
+        pay(db, sid, 2026, 10)
 
 
 def test_joining_mid_month_is_prorated_on_working_days_only(ctx):

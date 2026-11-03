@@ -572,6 +572,26 @@ def classify_monthly_summary(summary: dict, window: dict, staff_row: dict) -> di
     sunday_txt = (f"Sundays in that range: {', '.join(sundays)}" if sundays else "there are no Sundays in that range")
     if total == wd:
         return {"basis": "working_days", "total": total, "ok": True, "issue": None}
+    if not window.get("restricted"):
+        # Whole-period employee: no window to match, so the entry is judged on its own.
+        # Fewer days than the working days, or a full calendar-day attendance with nobody
+        # absent or on half-day, can be paid as entered. Anything that counts Sundays AND
+        # records an absence or half-day cannot say whether those fell on a Sunday.
+        if total < wd or (absent == 0 and half == 0 and total <= cd):
+            basis = "calendar_days" if total == cd else "as_entered"
+            return {"basis": basis, "total": total, "ok": True, "issue": None}
+        why = (f"counts {total:g} days, more than the period's {wd:g} working days, and includes "
+               f"{absent:g} absent and {half:g} half-day(s)") if total <= cd else (
+               f"counts {total:g} days, more than the period's {cd:g} calendar days")
+        return {
+            "basis": "ambiguous", "total": total, "ok": False,
+            "issue": (
+                f"{who}: the monthly attendance entry for {span} {why}. Sundays are not working days, and the "
+                f"entry does not say whether those absences or half-days fell on a Sunday ({sunday_txt}), so the "
+                f"payable days cannot be worked out reliably. Re-enter the entry on a working-day basis ({wd:g} days: "
+                f"worked + half + absent, leaving Sundays out), or enter dated attendance for the period."
+            ),
+        }
     if total == cd:
         if absent == 0 and half == 0:
             return {"basis": "calendar_days", "total": total, "ok": True, "issue": None}
@@ -612,27 +632,23 @@ def _monthly_attendance_basis(db, staff_row: dict, start: str, end: str, window:
     """
     summary = _fetch_monthly_attendance_summary(db, staff_row["id"], start, end)
     restricted = bool(window and window["restricted"])
-    if not restricted:
-        if summary:
-            return {"summary": summary, "rows": []}
-        return {"summary": None, "rows": fetch_attendance_for_employee(db, "staff", staff_row["id"], start, end)}
-    if window["working_days"] == 0 and not window.get("window_start"):
+    if window and window["working_days"] == 0 and not window.get("window_start"):
         return {"summary": None, "rows": []}  # not employed at all in this period: nothing payable
     issue = None
-    if summary:
+    if summary and window:
         issue = _summary_window_issue(summary, window, staff_row)
         if issue is None:
             return {"summary": summary, "rows": []}
-    rows = [
-        r
-        for r in fetch_attendance_for_employee(db, "staff", staff_row["id"], start, end)
-        if in_window(r.get("attendance_date"), window)
-    ]
+    elif summary:
+        return {"summary": summary, "rows": []}
+    rows = fetch_attendance_for_employee(db, "staff", staff_row["id"], start, end)
+    if restricted:
+        rows = [r for r in rows if in_window(r.get("attendance_date"), window)]
     if rows:
         return {"summary": None, "rows": rows}
     if issue:
         raise PayrollAttendanceError(issue)
-    return {"summary": None, "rows": []}
+    return {"summary": None, "rows": rows}
 
 
 def validate_monthly_attendance_basis(db, staff_rows: list[dict], start: str, end: str) -> list[str]:

@@ -176,7 +176,8 @@ def format_document_number(
 ) -> str:
     pat = (pattern or DEFAULT_FORMAT_PATTERN).strip()
     fy = fiscal_year_short(fiscal_year)
-    yy = (fiscal_year or "")[2:4] if len(fiscal_year or "") >= 4 else fy[:2]
+    digits = "".join(ch for ch in (fiscal_year or "") if ch.isdigit())     # 2026-27 / CY2026 -> 2026...
+    yy = digits[2:4] if len(digits) >= 4 else fy[:2]
     return pat.format(prefix=prefix, fy=fy, yy=yy, fiscal_year=fiscal_year, seq=sequence)
 
 

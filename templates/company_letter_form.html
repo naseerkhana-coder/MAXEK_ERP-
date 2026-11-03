@@ -33,7 +33,7 @@
     <div class="erp-field"><input type="date" name="letter_date" id="cl-date" required value="{{ v.letter_date }}"><label>Letter Date *</label></div>
     {% if suggestion %}<div class="span-2"><small class="cl-hint {{ '' if suggestion.configured else 'cl-hint-warn' }}" id="cl-ref-hint">{{ suggestion.basis }}</small></div>{% endif %}
     <div class="erp-field"><select name="letter_type" id="cl-type" required>{% for t in letter_types %}<option value="{{ t }}" {% if v.letter_type == t %}selected{% endif %}>{{ t }}</option>{% endfor %}</select><label>Letter Type *</label></div>
-    <div class="erp-field" style="position:relative;"><input id="cl-emp-search" autocomplete="off" placeholder=" " value="{{ employee_label }}"><label>Employee (optional &mdash; search name or code)</label><div class="cl-emp-results" id="cl-emp-results" hidden></div></div>
+    {% if can_autofill %}<div class="erp-field" style="position:relative;"><input id="cl-emp-search" autocomplete="off" placeholder=" " value="{{ employee_label }}"><label>Employee (optional &mdash; search name or code)</label><div class="cl-emp-results" id="cl-emp-results" hidden></div></div>{% endif %}
     <div class="erp-field"><input name="recipient_name" id="cl-rname" required placeholder=" " value="{{ v.recipient_name }}"><label>Recipient Name *</label></div>
     <div class="erp-field"><input name="recipient_org" id="cl-rorg" placeholder=" " value="{{ v.recipient_org }}"><label>Designation / Company</label></div>
     <div class="erp-field span-2"><textarea name="recipient_address" id="cl-raddr" rows="3" placeholder=" ">{{ v.recipient_address }}</textarea><label>Address</label></div>
@@ -43,7 +43,7 @@
     <div class="erp-field span-2" style="display:block;">
       <label style="position:static;display:block;margin-bottom:4px;">Letter Body *</label>
       <div class="cl-tools">
-        <button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" id="cl-insert-facts" disabled title="Select an employee first">Insert employee details</button>
+        {% if can_autofill %}<button type="button" class="erp-btn erp-btn-ghost erp-btn-sm" id="cl-insert-facts" disabled title="Select an employee first">Insert employee details</button>{% endif %}
         <select id="cl-copy-from" aria-label="Copy content from an earlier letter"><option value="">Copy content from an earlier letter&hellip;</option>{% for r in earlier_letters %}<option value="{{ r.id }}">{{ r.reference_no }} &mdash; {{ r.subject }}</option>{% endfor %}</select>
       </div>
       <small class="cl-hint">The body is not pre-written. Type it, copy it from an earlier approved letter, or insert employee facts, then review it before issuing.</small>

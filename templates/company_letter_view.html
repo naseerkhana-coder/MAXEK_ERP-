@@ -18,7 +18,7 @@
     {% if letter.recipient_address %}<dt>Address</dt><dd style="white-space:pre-line;">{{ letter.recipient_address }}</dd>{% endif %}
     <dt>Subject</dt><dd>{{ letter.subject }}</dd>
     <dt>Signatory</dt><dd>{{ letter.signatory_name }}{% if letter.signatory_designation %}, {{ letter.signatory_designation }}{% endif %}</dd>
-    {% if employee %}<dt>Employee</dt><dd>{{ employee.staff_name }} ({{ employee.employee_code or '—' }})</dd>{% endif %}
+    {% if employee %}<dt>Employee</dt><dd>{{ employee.name }} ({{ employee.employee_code or '—' }})</dd>{% endif %}
     <dt>Created</dt><dd>{{ letter.created_at }} by {{ letter.created_by or '—' }}</dd>
     <dt>Last modified</dt><dd>{{ letter.modified_at or '—' }}{% if letter.modified_by %} by {{ letter.modified_by }}{% endif %}</dd>
   </dl>

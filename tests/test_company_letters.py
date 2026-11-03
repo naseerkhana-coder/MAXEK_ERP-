@@ -72,6 +72,15 @@ def grant_tabs(db, uid, *labels, dept="administration"):
     db.commit()
 
 
+def grant_employee_data(db, uid):
+    """Explicit Employee Master grant under HR & Payroll (the ERP's own department tab permissions)."""
+    from user_permission_service import ensure_user_tab_permissions_schema
+    ensure_user_tab_permissions_schema(db)
+    db.execute("INSERT INTO user_tab_permissions(user_id, department_slug, tab_key, endpoint, label, granted, updated_at) "
+               "VALUES(?,?,?,?,?,1,'2026-11-03')", (uid, "hr-payroll", "staff::Employee Master", "staff", "Employee Master"))
+    db.commit()
+
+
 def count(db, table="company_letters"):
     return db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
 
@@ -419,7 +428,11 @@ def test_roles_decide_view_create_edit_print_issue(ctx, client):
     db, app = ctx
     sid = add_staff(db, "Anita Menon", "EMP9001")
     client.post(f"{BASE}/new", data=form())                       # letter 1, created by admin
-    users = {wf: client_for(app, db, make_user(db, wf.lower(), wf), ) for wf in ("Maker", "Checker", "Approver")}
+    users = {}
+    for wf in ("Maker", "Checker", "Approver"):
+        uid = make_user(db, wf.lower(), wf)
+        grant_employee_data(db, uid)                              # employee-data access held by all three ...
+        users[wf] = client_for(app, db, uid)                      # ... so only the letter permission differs
 
     # view + print: every role that has the tab
     for wf, c in users.items():
@@ -487,6 +500,8 @@ def test_tenant_and_company_restrictions_apply_to_letters_and_employees(ctx, cli
     mine = make_user(db, "mk_a", "Maker", customer_id=1, company_id=10)
     other = make_user(db, "mk_b", "Maker", customer_id=2, company_id=20)
     sibling = make_user(db, "mk_c", "Maker", customer_id=1, company_id=11)
+    for u in (mine, other, sibling):
+        grant_employee_data(db, u)
     ca, cb, cc = (client_for(app, db, u) for u in (mine, other, sibling))
     s_a = add_staff(db, "Alpha Person", "A1")
     s_b = add_staff(db, "Beta Person", "B1")
@@ -784,3 +799,134 @@ def test_phone_width_register_form_view_and_preview(ctx, client):
         finally:
             browser.close()
             p.stop()
+
+
+# ───────────────────────────── employee-data access for autofill ─────────────────────────────
+
+
+def test_autofill_needs_employee_data_access_as_well_as_letter_create(ctx, client):
+    db, app = ctx
+    sid = add_staff(db, "Anita Menon", "EMP9001", salary=30000)
+    db.execute("UPDATE staff SET designation='Site Engineer' WHERE id=?", (sid,))
+    db.commit()
+    uid = make_user(db, "maker_nohr", "Maker", department="Procurement")
+    c = client_for(app, db, uid)
+
+    # letter-create alone: can write letters, cannot read employee records
+    assert _status(c, "/new") == 200
+    assert _status(c, "/employees?q=ani") == 403 and _status(c, f"/employee/{sid}") == 403
+    page = c.get(f"{BASE}/new").get_data(as_text=True)
+    assert 'id="cl-emp-search"' not in page and 'id="cl-insert-facts"' not in page
+    assert "Anita" not in page
+    # a forged employee_id is neither looked up nor stored, and does not leak whether it exists
+    set_counter(db, 10)
+    r = c.post(f"{BASE}/new", data=form(reference_no="", employee_id=str(sid), subject="no link"))
+    assert r.status_code == 302
+    assert db.execute("SELECT employee_id FROM company_letters WHERE subject='no link'").fetchone()[0] is None
+
+    # an existing employee link (made by someone allowed) is kept when this user edits other fields,
+    # but the employee's name is not shown to them
+    client.post(f"{BASE}/new", data=form(reference_no="", employee_id=str(sid), subject="linked"))
+    lid = db.execute("SELECT id FROM company_letters WHERE subject='linked'").fetchone()[0]
+    assert db.execute("SELECT employee_id FROM company_letters WHERE id=?", (lid,)).fetchone()[0] == sid
+    c.post(f"{BASE}/{lid}/edit", data=form(reference_no=db.execute("SELECT reference_no FROM company_letters WHERE id=?", (lid,)).fetchone()[0], subject="linked, edited", employee_id=""))
+    row = db.execute("SELECT employee_id, subject FROM company_letters WHERE id=?", (lid,)).fetchone()
+    assert (row[0], row[1]) == (sid, "linked, edited")
+    assert "Anita Menon" not in c.get(f"{BASE}/{lid}").get_data(as_text=True)
+    assert "Anita Menon" in client.get(f"{BASE}/{lid}").get_data(as_text=True)        # administrator sees it
+
+    # an explicit Employee Master grant (HR & Payroll tab permissions) opens it ...
+    grant_employee_data(db, uid)
+    assert _status(c, "/employees?q=ani") == 200 and _status(c, f"/employee/{sid}") == 200
+    assert 'id="cl-emp-search"' in c.get(f"{BASE}/new").get_data(as_text=True)
+    assert "Anita Menon" in c.get(f"{BASE}/{lid}").get_data(as_text=True)
+    # ... a grant under some other department does not
+    other = make_user(db, "maker_other", "Maker", department="Procurement")
+    db.execute("INSERT INTO user_tab_permissions(user_id, department_slug, tab_key, endpoint, label, granted, updated_at) "
+               "VALUES(?,?,?,?,?,1,'x')", (other, "procurement", "staff::Employee Master", "staff", "Employee Master"))
+    db.commit()
+    assert _status(client_for(app, db, other), "/employees?q=ani") == 403
+
+
+def test_hr_department_staff_and_administrators_have_employee_data_access(ctx, client):
+    db, app = ctx
+    sid = add_staff(db, "Anita Menon", "EMP9001")
+    # works in HR & Payroll (a manager-type role: base HR makers are refused Company Letters altogether)
+    hr = client_for(app, db, make_user(db, "hr_mgr", "Maker", role="Manager", department="HR & Payroll"))
+    assert _status(hr, "/employees?q=ani") == 200 and _status(hr, f"/employee/{sid}") == 200
+    assert client.get(f"{BASE}/employees?q=ani").status_code == 200                     # administrator
+    # access to employee data without letter-create permission is still not enough
+    checker = client_for(app, db, make_user(db, "hr_chk", "Checker", role="Manager", department="HR & Payroll"))
+    assert _status(checker, "/employees?q=ani") == 403
+
+
+# ───────────────────────────── numbering stays configurable ─────────────────────────────
+
+NUM = f"{BASE}/numbering"
+
+
+def test_administrator_can_configure_prefix_layout_year_basis_and_last_number(ctx, client):
+    db, _ = ctx
+    page = client.get(BASE).get_data(as_text=True)
+    assert "Letter numbering settings" in page and "not set yet" in page                # nothing assumed
+    r = client.post(NUM, data={"prefix": "MAX/LT", "pattern": "{prefix}/{yy}/{seq:03d}", "basis": "financial", "last_number": "116"})
+    assert r.status_code == 302
+    assert cl.suggest_reference(db, "2026-11-03")["reference"] == "MAX/LT/26/117"
+    assert "next number: <span>MAX/LT/26/117" in client.get(BASE).get_data(as_text=True)
+    # a different real sequence and layout are accepted without code changes
+    client.post(NUM, data={"prefix": "MXK", "pattern": "{prefix}-{fy}-{seq:04d}", "basis": "financial", "last_number": "40"})
+    assert cl.suggest_reference(db, "2026-11-03")["reference"] == "MXK-2627-0041"
+    # existing letters are never renumbered
+    client.post(f"{BASE}/new", data=form(reference_no="", subject="after settings"))
+    assert db.execute("SELECT reference_no FROM company_letters").fetchone()[0] == "MXK-2627-0041"
+    client.post(NUM, data={"prefix": "MAX/LT", "pattern": "{prefix}/{yy}/{seq:03d}", "basis": "financial", "last_number": "116"})
+    assert db.execute("SELECT reference_no FROM company_letters").fetchone()[0] == "MXK-2627-0041"
+
+
+def test_calendar_year_basis_and_new_year_inherits_the_configured_layout(ctx, client):
+    db, _ = ctx
+    client.post(NUM, data={"prefix": "MAX/LT", "pattern": "{prefix}/{yy}/{seq:03d}", "basis": "calendar", "last_number": "9"})
+    assert cl.get_year_basis(db) == "calendar"
+    assert cl.suggest_reference(db, "2027-01-15")["fiscal_year"] == "CY2027"
+    assert cl.suggest_reference(db, "2026-12-31")["reference"] == "MAX/LT/26/010"        # December is still 2026
+    assert cl.suggest_reference(db, "2027-01-01")["reference"] == ""                       # new year: number must be entered
+    client.post(f"{BASE}/new", data=form(reference_no="MAX/LT/27/001", letter_date="2027-01-02"))
+    assert cl.suggest_reference(db, "2027-02-01")["reference"] == "MAX/LT/27/002"          # inherits prefix and layout
+    # switching back to financial years uses its own counter
+    client.post(NUM, data={"prefix": "MAX/LT", "pattern": "{prefix}/{yy}/{seq:03d}", "basis": "financial", "last_number": "116"})
+    assert cl.suggest_reference(db, "2026-11-03")["reference"] == "MAX/LT/26/117"
+
+
+@pytest.mark.parametrize(
+    "data,message",
+    [
+        ({"prefix": "", "pattern": "{prefix}/{seq:03d}", "basis": "financial", "last_number": "1"}, "Prefix is required"),
+        ({"prefix": "X", "pattern": "{prefix}/001", "basis": "financial", "last_number": "1"}, "must contain {seq"),
+        ({"prefix": "X", "pattern": "{prefix}/{bogus}/{seq}", "basis": "financial", "last_number": "1"}, "may only use"),
+        ({"prefix": "X", "pattern": "{prefix}/{seq:03d}", "basis": "lunar", "last_number": "1"}, "financial year or calendar"),
+        ({"prefix": "X", "pattern": "{prefix}/{seq:03d}", "basis": "financial", "last_number": "-3"}, "whole number"),
+        ({"prefix": "X", "pattern": "{prefix}/{seq:03d}", "basis": "financial", "last_number": "abc"}, "whole number"),
+    ],
+)
+def test_numbering_settings_validation(ctx, client, data, message):
+    db, _ = ctx
+    r = client.post(NUM, data=data, follow_redirects=True)
+    assert message in r.get_data(as_text=True)
+    assert cl.get_year_basis(db) == "financial"
+    assert db.execute("SELECT COUNT(*) FROM document_number_sequences WHERE doc_type='company_letter_no' AND current_sequence>0").fetchone()[0] == 0
+
+
+def test_only_administrators_can_change_numbering(ctx, client):
+    db, app = ctx
+    cl.ensure_company_letters_schema(db)
+    maker = client_for(app, db, make_user(db, "mk_num", "Maker"))
+    approver = client_for(app, db, make_user(db, "ap_num", "Approver"))
+    for c in (maker, approver):
+        assert "Letter numbering settings" not in c.get(BASE).get_data(as_text=True)
+        c.post(NUM, data={"prefix": "HACK", "pattern": "{prefix}/{seq}", "basis": "calendar", "last_number": "999"})
+    assert cl.get_year_basis(db) == "financial"
+    assert db.execute("SELECT COUNT(*) FROM document_number_sequences WHERE prefix='HACK'").fetchone()[0] == 0
+    assert client.post(NUM, data={"prefix": "OK", "pattern": "{prefix}/{seq:03d}", "basis": "financial", "last_number": "5"}).status_code == 302
+    assert cl.suggest_reference(db, "2026-11-03")["reference"] == "OK/006"
+    anon = app.test_client()
+    assert anon.post(NUM, data={"prefix": "X"}).status_code == 302 and "/login" in anon.post(NUM, data={}).headers["Location"]

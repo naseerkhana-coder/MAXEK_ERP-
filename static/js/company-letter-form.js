@@ -31,7 +31,7 @@
   function appendBody(html) { editor.innerHTML = (editorIsBlank() ? "" : editor.innerHTML) + html; sync(); }
 
   // "Insert employee details": only facts held on the staff record, added when asked for.
-  factsBtn.addEventListener("click", function () { if (factsHtml) appendBody(factsHtml); });
+  if (factsBtn) factsBtn.addEventListener("click", function () { if (factsHtml) appendBody(factsHtml); });
 
   // Start from the content of an earlier letter; asks first if something is already typed.
   copySel.addEventListener("change", function () {
@@ -53,6 +53,7 @@
   // (The server validates uniqueness either way.)
 
   var search = document.getElementById("cl-emp-search");
+  if (!search) return;                                    // no employee-data access: no autofill
   var results = document.getElementById("cl-emp-results");
   var idField = document.getElementById("cl-employee-id");
   var timer = null;

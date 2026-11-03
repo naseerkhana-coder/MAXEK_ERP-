@@ -612,7 +612,7 @@ import io  # noqa: E402
 
 from payroll_service import classify_monthly_summary  # noqa: E402
 
-WINDOW = {"working_days": 13, "calendar_days": 15, "window_start": "2026-10-01", "window_end": "2026-10-15"}
+WINDOW = {"working_days": 13, "calendar_days": 15, "window_start": "2026-10-01", "window_end": "2026-10-15", "restricted": True}
 STAFF = {"id": 1, "staff_name": "Test Person"}
 
 
@@ -712,18 +712,64 @@ def test_dated_half_day_on_a_working_day_pays_half(ctx):
     assert pay(db, sid, 2026, 10)["payable_days"] == 10.5
 
 
-def test_whole_period_employees_keep_legacy_behaviour_but_the_basis_is_recorded(ctx):
-    """Nobody already being paid is newly blocked; an unresolved convention is flagged for review."""
+# Whole-period staff (October 2026: 31 calendar days, 27 working days, Sundays 4/11/18/25).
+FULL = {"working_days": 27, "calendar_days": 31, "window_start": "2026-10-01", "window_end": "2026-10-31", "restricted": False}
+
+
+@pytest.mark.parametrize(
+    "worked,half,absent,basis,ok",
+    [
+        (27, 0, 0, "working_days", True),
+        (25, 0, 2, "working_days", True),        # working-day basis with genuine absences
+        (24, 2, 1, "working_days", True),
+        (31, 0, 0, "calendar_days", True),       # everyone present incl. Sundays: capped at 27
+        (20, 0, 3, "as_entered", True),          # fewer days than the month: paid as entered
+        (29, 0, 2, "ambiguous", False),          # 31 calendar days WITH absences: could be Sundays
+        (30, 1, 0, "ambiguous", False),          # ... or a half-day on a Sunday
+        (28, 0, 1, "ambiguous", False),          # 29: more than working days, with an absence
+        (33, 0, 2, "ambiguous", False),          # more than the calendar days of the month
+        (35, 0, 0, "ambiguous", False),
+    ],
+)
+def test_whole_period_summary_classification(worked, half, absent, basis, ok):
+    result = classify_monthly_summary({"worked_days": worked, "half_days": half, "absent_days": absent}, FULL, STAFF)
+    assert (result["basis"], result["ok"]) == (basis, ok)
+    assert (result["issue"] is None) == ok
+
+
+def test_ambiguous_entry_blocks_every_monthly_employee_not_only_part_month_staff(ctx):
     db, _ = ctx
-    # October 2026: 31 calendar days, 27 working days.
     a = add_staff(db, "Working Basis", "SUN130"); add_summary(db, a, 25, 0, 2)
     b = add_staff(db, "Calendar Full", "SUN131"); add_summary(db, b, 31, 0, 0)
     c = add_staff(db, "Calendar Absent", "SUN132"); add_summary(db, c, 29, 0, 2)
-    ca, cb, cc = pay(db, a, 2026, 10), pay(db, b, 2026, 10), pay(db, c, 2026, 10)
-    assert (ca["summary_basis"], ca["gross_salary"], ca["summary_note"]) == ("working_days", 25000.00, None)
-    assert (cb["summary_basis"], cb["gross_salary"], cb["summary_note"]) == ("calendar_days", 27000.00, None)
-    assert cc["summary_basis"] == "ambiguous" and cc["gross_salary"] == 25000.00    # legacy figure, unchanged
-    assert "Sundays" in cc["summary_note"] and "dated attendance" in cc["summary_note"]
-    # dated attendance has no summary basis at all
+    ca, cb = pay(db, a, 2026, 10), pay(db, b, 2026, 10)
+    assert (ca["summary_basis"], ca["gross_salary"]) == ("working_days", 25000.00)
+    assert (cb["summary_basis"], cb["gross_salary"]) == ("calendar_days", 27000.00)
+    with pytest.raises(PayrollAttendanceError) as exc:
+        pay(db, c, 2026, 10)
+    msg = str(exc.value)
+    assert "Calendar Absent" in msg and "04/10, 11/10, 18/10, 25/10" in msg
+    assert "working-day basis (27 days" in msg and "dated attendance" in msg
+    rows = [dict(db.execute("SELECT * FROM staff WHERE id=?", (x,)).fetchone()) for x in (a, b, c)]
+    problems = validate_monthly_attendance_basis(db, rows, "2026-10-01", "2026-10-31")
+    assert len(problems) == 1 and "Calendar Absent" in problems[0]
+    with pytest.raises(ValueError, match="Attendance does not match employment dates"):
+        _generate(db, [a, b, c])
+    db.rollback()
+    assert db.execute("SELECT COUNT(*) FROM payroll_runs").fetchone()[0] == 0     # nothing half-generated
+
+
+def test_dated_attendance_resolves_an_ambiguous_summary_for_whole_period_staff(ctx):
+    db, _ = ctx
+    sid = add_staff(db, "Has Dated", "SUN134")
+    add_summary(db, sid, 29, 0, 2)                              # unusable on its own ...
+    attend(db, sid, _working_dates(2026, 10)[:25])              # ... but dated rows are exact
+    calc = pay(db, sid, 2026, 10)
+    assert calc["attendance_source"] == "daily" and calc["payable_days"] == 25
+    assert calc["gross_salary"] == 25000.00
+
+
+def test_dated_attendance_has_no_summary_basis(ctx):
+    db, _ = ctx
     d = add_staff(db, "Dated", "SUN133"); attend(db, d, _working_dates(2026, 10))
     assert pay(db, d, 2026, 10)["summary_basis"] is None
