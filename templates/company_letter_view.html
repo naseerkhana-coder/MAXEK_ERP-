@@ -1,0 +1,26 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = letter.reference_no %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('company_letters') ~ '">Company Letters</a> &gt; ' ~ letter.reference_no %}
+{% block page_actions %}
+{% if can_edit %}<a href="{{ url_for('company_letter_form', letter_id=letter.id) }}" class="erp-btn erp-btn-ghost">Edit</a>{% endif %}
+<a href="{{ url_for('company_letter_preview', letter_id=letter.id) }}" class="erp-btn erp-btn-ghost">Preview</a>
+<a href="{{ url_for('company_letter_preview', letter_id=letter.id, print=1) }}" target="_blank" rel="noopener" class="erp-btn erp-btn-primary"><i class="fa-solid fa-print"></i> Print</a>
+{% endblock %}
+{% block content %}
+<div class="erp-form-card">
+  <h3 class="erp-form-title">{{ letter.reference_no }} &mdash; {{ letter.letter_type }}</h3>
+  <dl style="display:grid;grid-template-columns:max-content 1fr;gap:.35rem 1.2rem;margin:0 0 1rem;">
+    <dt>Date</dt><dd>{{ letter.letter_date|letter_date }}</dd>
+    <dt>Recipient</dt><dd>{{ letter.recipient_name }}{% if letter.recipient_org %}, {{ letter.recipient_org }}{% endif %}</dd>
+    {% if letter.recipient_address %}<dt>Address</dt><dd style="white-space:pre-line;">{{ letter.recipient_address }}</dd>{% endif %}
+    <dt>Subject</dt><dd>{{ letter.subject }}</dd>
+    <dt>Signatory</dt><dd>{{ letter.signatory_name }}{% if letter.signatory_designation %}, {{ letter.signatory_designation }}{% endif %}</dd>
+    {% if employee %}<dt>Employee</dt><dd>{{ employee.staff_name }} ({{ employee.employee_code or '—' }})</dd>{% endif %}
+    <dt>Created</dt><dd>{{ letter.created_at }} by {{ letter.created_by or '—' }}</dd>
+    <dt>Last modified</dt><dd>{{ letter.modified_at or '—' }}{% if letter.modified_by %} by {{ letter.modified_by }}{% endif %}</dd>
+  </dl>
+  <p><strong>{{ letter.salutation }}</strong></p>
+  <div style="padding:1rem;background:#f8fafc;border-radius:8px;">{{ letter.body_html|letter_html }}</div>
+  <p style="margin-top:1rem;">{{ letter.closing }}<br><strong>{{ letter.signatory_name }}</strong></p>
+</div>
+{% endblock %}

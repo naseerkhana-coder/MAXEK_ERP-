@@ -1,0 +1,59 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = 'Company Letters' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('office_admin') ~ '">Administration</a> &gt; Company Letters' %}
+{% block page_actions %}
+<a href="{{ url_for('office_letters') }}" class="erp-btn erp-btn-ghost"><i class="fa-solid fa-envelope-open-text"></i> Office Letters (existing)</a>
+{% if can_edit %}<a href="{{ url_for('company_letter_form') }}" class="erp-btn erp-btn-primary"><i class="fa-solid fa-plus"></i> New Letter</a>{% endif %}
+{% endblock %}
+{% block head_extra %}
+<style>
+  /* The shared dark-theme field style puts dark text on a dark fill inside the white form card
+     (the existing Office Letters form has the same problem); keep these fields readable. */
+  .cl-scope .erp-field input, .cl-scope .erp-field select, .cl-scope .erp-field textarea {
+    color: #1e293b !important; background: #fff !important; border: 1px solid #cbd5e1 !important; }
+  .cl-scope .erp-field input::placeholder { color: transparent; }
+</style>
+{% endblock %}
+{% block content %}
+<form method="get" class="erp-form-card cl-scope" style="display:flex;flex-wrap:wrap;gap:.6rem;align-items:flex-end;margin-bottom:.9rem;">
+  <div class="erp-field" style="min-width:240px;flex:1 1 240px;"><input name="q" value="{{ q }}" placeholder=" " autocomplete="off"><label>Search reference, recipient, subject</label></div>
+  <div class="erp-field" style="min-width:200px;"><select name="type" onchange="this.form.submit()"><option value="">All types</option>{% for t in letter_types %}<option value="{{ t }}" {% if t == type_filter %}selected{% endif %}>{{ t }}</option>{% endfor %}</select><label>Letter type</label></div>
+  <div class="erp-field" style="min-width:110px;"><select name="per_page" onchange="this.form.submit()">{% for n in page_sizes %}<option value="{{ n }}" {% if n == data.per_page %}selected{% endif %}>{{ n }}</option>{% endfor %}</select><label>Rows</label></div>
+  <button type="submit" class="erp-btn erp-btn-ghost">Search</button>
+  {% if q or type_filter %}<a class="erp-btn erp-btn-ghost" href="{{ url_for('company_letters') }}">Clear</a>{% endif %}
+</form>
+
+<div class="erp-table-panel" data-erp-table>
+  <div class="erp-table-scroll">
+    <table class="erp-table">
+      <thead><tr><th>Reference</th><th>Date</th><th>Type</th><th>Recipient</th><th>Subject</th><th>Actions</th></tr></thead>
+      <tbody>
+        {% for row in data.rows %}
+        <tr>
+          <td><a href="{{ url_for('company_letter_view', letter_id=row.id) }}">{{ row.reference_no }}</a></td>
+          <td>{{ row.letter_date|letter_date }}</td>
+          <td>{{ row.letter_type }}</td>
+          <td>{{ row.recipient_name }}{% if row.recipient_org %}<br><small>{{ row.recipient_org }}</small>{% endif %}</td>
+          <td>{{ row.subject }}</td>
+          <td style="white-space:nowrap;">
+            <a class="erp-btn erp-btn-ghost erp-btn-sm" href="{{ url_for('company_letter_view', letter_id=row.id) }}">View</a>
+            {% if can_edit %}<a class="erp-btn erp-btn-ghost erp-btn-sm" href="{{ url_for('company_letter_form', letter_id=row.id) }}">Edit</a>{% endif %}
+            <a class="erp-btn erp-btn-ghost erp-btn-sm" href="{{ url_for('company_letter_preview', letter_id=row.id) }}">Preview</a>
+            <a class="erp-btn erp-btn-ghost erp-btn-sm" target="_blank" rel="noopener" href="{{ url_for('company_letter_preview', letter_id=row.id, print=1) }}">Print</a>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6">{% if q or type_filter %}No letters match this search.{% else %}No company letters yet.{% endif %}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div style="display:flex;justify-content:space-between;align-items:center;padding:.6rem .2rem;flex-wrap:wrap;gap:.5rem;">
+    <span>{{ data.total }} letter{{ '' if data.total == 1 else 's' }} &middot; page {{ data.page }} of {{ data.pages }}</span>
+    <span>
+      {% if data.page > 1 %}<a class="erp-btn erp-btn-ghost erp-btn-sm" href="{{ page_url(data.page - 1) }}">&larr; Previous</a>{% endif %}
+      {% if data.page < data.pages %}<a class="erp-btn erp-btn-ghost erp-btn-sm" href="{{ page_url(data.page + 1) }}">Next &rarr;</a>{% endif %}
+    </span>
+  </div>
+</div>
+{% endblock %}

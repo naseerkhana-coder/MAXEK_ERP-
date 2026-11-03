@@ -1,0 +1,64 @@
+{% extends 'base_maxek.html' %}
+{% set page_title = ('Edit ' ~ letter.reference_no) if letter and letter.id else 'New Company Letter' %}
+{% set breadcrumbs = '<a href="' ~ url_for('dashboard') ~ '">Home</a> &gt; <a href="' ~ url_for('company_letters') ~ '">Company Letters</a> &gt; ' ~ ('Edit' if letter and letter.id else 'New') %}
+{% block head_extra %}
+<style>
+  /* The shared dark-theme field style puts dark text on a dark fill inside the white form card
+     (the existing Office Letters form has the same problem); keep these fields readable. */
+  .cl-scope .erp-field input, .cl-scope .erp-field select, .cl-scope .erp-field textarea {
+    color: #1e293b !important; background: #fff !important; border: 1px solid #cbd5e1 !important; }
+  .cl-scope .erp-field input::placeholder { color: transparent; }
+  .cl-editor-bar{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px}
+  .cl-editor-bar button{border:1px solid #cbd5e1;background:#fff;border-radius:6px;padding:4px 10px;cursor:pointer;min-width:34px}
+  .cl-editor{min-height:220px;border:1px solid #cbd5e1;border-radius:8px;padding:12px;background:#fff;color:#111;font-family:"Times New Roman",serif;font-size:14px;line-height:1.5}
+  .cl-editor:focus{outline:2px solid #e31e27;outline-offset:1px}
+  .cl-emp-results{position:absolute;z-index:30;left:0;right:0;top:100%;background:#fff;border:1px solid #cbd5e1;border-radius:8px;max-height:240px;overflow:auto;box-shadow:0 6px 18px rgba(0,0,0,.15)}
+  .cl-emp-results button{display:block;width:100%;text-align:left;border:0;background:none;padding:8px 12px;cursor:pointer}
+  .cl-emp-results button:hover,.cl-emp-results button:focus{background:#f1f5f9}
+  .cl-errors{border:1px solid #e31e27;background:#fff1f1;color:#7a0a0f;border-radius:8px;padding:.7rem 1rem;margin-bottom:1rem}
+</style>
+{% endblock %}
+{% block content %}
+{% if errors %}<div class="cl-errors" role="alert"><strong>Please fix the following:</strong><ul style="margin:.4rem 0 0 1.1rem;">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
+<form method="post" class="erp-form-card cl-scope" id="cl-form" data-employee-url="{{ url_for('company_letter_employee', employee_id=0) }}" data-search-url="{{ url_for('company_letter_employees') }}" data-offer-body="{{ offer_body|e }}">
+  <input type="hidden" name="employee_id" id="cl-employee-id" value="{{ v.employee_id or '' }}">
+  <h3 class="erp-form-title">{% if letter and letter.id %}Edit {{ letter.reference_no }}{% else %}New Company Letter{% endif %}</h3>
+  <div class="erp-form-grid">
+    <div class="erp-field"><input name="reference_no" id="cl-ref" required maxlength="60" placeholder=" " value="{{ v.reference_no }}"><label>Reference No *</label></div>
+    <div class="erp-field"><input type="date" name="letter_date" id="cl-date" required value="{{ v.letter_date }}"><label>Letter Date *</label></div>
+    <div class="erp-field"><select name="letter_type" id="cl-type" required>{% for t in letter_types %}<option value="{{ t }}" {% if v.letter_type == t %}selected{% endif %}>{{ t }}</option>{% endfor %}</select><label>Letter Type *</label></div>
+    <div class="erp-field" style="position:relative;"><input id="cl-emp-search" autocomplete="off" placeholder=" " value="{{ employee_label }}"><label>Employee (optional &mdash; search name or code)</label><div class="cl-emp-results" id="cl-emp-results" hidden></div></div>
+    <div class="erp-field"><input name="recipient_name" id="cl-rname" required placeholder=" " value="{{ v.recipient_name }}"><label>Recipient Name *</label></div>
+    <div class="erp-field"><input name="recipient_org" id="cl-rorg" placeholder=" " value="{{ v.recipient_org }}"><label>Designation / Company</label></div>
+    <div class="erp-field span-2"><textarea name="recipient_address" id="cl-raddr" rows="3" placeholder=" ">{{ v.recipient_address }}</textarea><label>Address</label></div>
+    <div class="erp-field span-2"><input name="subject" required placeholder=" " value="{{ v.subject }}"><label>Subject *</label></div>
+    <div class="erp-field"><input name="salutation" id="cl-sal" placeholder=" " value="{{ v.salutation }}"><label>Salutation</label></div>
+    <div class="erp-field"><input name="closing" placeholder=" " value="{{ v.closing }}"><label>Closing</label></div>
+    <div class="erp-field span-2" style="display:block;">
+      <label style="position:static;display:block;margin-bottom:4px;">Letter Body *</label>
+      <div class="cl-editor-bar" role="toolbar" aria-label="Formatting">
+        <button type="button" data-cmd="bold" title="Bold"><b>B</b></button>
+        <button type="button" data-cmd="italic" title="Italic"><i>I</i></button>
+        <button type="button" data-cmd="underline" title="Underline"><u>U</u></button>
+        <button type="button" data-cmd="insertUnorderedList" title="Bullet list">&bull; List</button>
+        <button type="button" data-cmd="insertOrderedList" title="Numbered list">1. List</button>
+        <button type="button" data-cmd="justifyLeft" title="Align left">&#8676;</button>
+        <button type="button" data-cmd="justifyCenter" title="Centre">&#8596;</button>
+        <button type="button" data-cmd="justifyRight" title="Align right">&#8677;</button>
+        <button type="button" data-cmd="justifyFull" title="Justify">&#9776;</button>
+        <button type="button" data-cmd="removeFormat" title="Clear formatting">Clear</button>
+      </div>
+      <div class="cl-editor" id="cl-editor" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Letter body">{{ v.body_html|letter_html }}</div>
+      <textarea name="body_html" id="cl-body" hidden>{{ v.body_html }}</textarea>
+    </div>
+    <div class="erp-field"><input name="signatory_name" required placeholder=" " value="{{ v.signatory_name }}"><label>Authorized Signatory Name *</label></div>
+    <div class="erp-field"><input name="signatory_designation" placeholder=" " value="{{ v.signatory_designation }}"><label>Signatory Designation</label></div>
+  </div>
+  <div style="display:flex;gap:.6rem;flex-wrap:wrap;margin-top:1rem;">
+    <button type="submit" name="after" value="view" class="erp-btn erp-btn-primary">Save</button>
+    <button type="submit" name="after" value="preview" class="erp-btn erp-btn-ghost">Save &amp; Preview</button>
+    <a class="erp-btn erp-btn-ghost" href="{{ url_for('company_letters') }}">Cancel</a>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/company-letter-form.js') }}"></script>{% endblock %}

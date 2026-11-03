@@ -1,0 +1,106 @@
+/* MAXEK company letters - A4 print layout.
+ *
+ * The supplied letterhead is a full-page A4 image (2482 x 3508 px @ 300 dpi, i.e.
+ * 210 x 297 mm). It is drawn as an <img> at exactly 210 x 297 mm - never stretched -
+ * so it prints without "background graphics". Measured on the artwork: the header
+ * ends at 41.0 mm and the footer bar starts at 279.2 mm.
+ */
+:root {
+  --lh-top: 47mm;      /* header art ends at 41.0 mm + breathing room */
+  --lh-bottom: 24mm;   /* footer bar starts at 279.2 mm (17.8 mm tall) + breathing room */
+  --lh-side: 20mm;
+}
+
+@page { size: A4 portrait; margin: 0; }
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body.lp-body {
+  font-family: "Times New Roman", Times, serif;
+  font-size: 12pt;
+  line-height: 1.5;
+  color: #111;
+  background: #e8ecf1;
+}
+
+/* ---------- screen toolbar ---------- */
+.lp-toolbar {
+  position: sticky; top: 0; z-index: 20;
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  padding: 10px 16px; background: #1b1d21; color: #fff;
+  font: 14px/1.3 system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+}
+.lp-toolbar a, .lp-toolbar button {
+  font: inherit; color: #fff; text-decoration: none; cursor: pointer;
+  border: 1px solid #5b6068; background: transparent; border-radius: 6px; padding: 7px 12px;
+}
+.lp-toolbar .lp-primary { background: #e31e27; border-color: #e31e27; font-weight: 600; }
+.lp-toolbar .lp-spacer { flex: 1 1 auto; }
+.lp-toolbar .lp-note { color: #b8bec8; font-size: 12px; }
+.lp-toolbar [aria-pressed="true"] { outline: 2px solid #fff; outline-offset: 1px; }
+
+/* ---------- the sheet ---------- */
+.lp-sheet {
+  position: relative; width: 210mm; margin: 14px auto 40px; background: #fff;
+  box-shadow: 0 2px 14px rgba(0, 0, 0, .25); min-height: 297mm;
+}
+/* Screen only: tile the same artwork down the sheet so continuation pages show it too. */
+@media screen {
+  body.lp-mode-letterhead .lp-sheet {
+    background-image: url("../assets/letterhead/maxek-letterhead.png");
+    background-size: 210mm 297mm; background-repeat: repeat-y;
+  }
+  body.lp-mode-preprinted .lp-sheet {
+    background-image: linear-gradient(#dfe4ea, #dfe4ea), linear-gradient(#dfe4ea, #dfe4ea);
+    background-size: 210mm 1px, 210mm 1px;
+    background-position: 0 var(--lh-top), 0 calc(297mm - var(--lh-bottom));
+    background-repeat: no-repeat;
+  }
+  .lp-bg-print { display: none; }
+}
+
+.lp-doc { width: 210mm; border-collapse: collapse; table-layout: fixed; position: relative; z-index: 1; }
+.lp-doc thead td { height: var(--lh-top); padding: 0; }      /* repeats on every printed page */
+.lp-doc tfoot td { height: var(--lh-bottom); padding: 0; }   /* repeats on every printed page */
+.lp-doc tbody td { padding: 0 var(--lh-side); vertical-align: top; }
+.lp-doc tbody tr.lp-gap td { padding: 0; }
+
+.lp-refdate { display: flex; justify-content: space-between; gap: 12mm; font-weight: 600; margin-bottom: 5mm; }
+.lp-to { margin-bottom: 4mm; }
+.lp-to .lp-name { font-weight: 700; }
+.lp-to .lp-addr { white-space: pre-line; }
+.lp-subject { font-weight: 700; margin: 3mm 0; }
+.lp-salutation { margin: 3mm 0; }
+.lp-block { margin: 0 0 3mm; text-align: justify; overflow-wrap: anywhere; }
+.lp-block p, .lp-block ul, .lp-block ol, .lp-block blockquote, .lp-block h3, .lp-block h4 { margin: 0 0 3mm; }
+.lp-block ul, .lp-block ol { padding-left: 7mm; }
+.lp-block h3, .lp-block h4 { font-size: 12pt; }
+.lp-block table { width: 100%; border-collapse: collapse; margin: 0 0 3mm; }
+.lp-block th, .lp-block td { border: 1px solid #444; padding: 1.5mm 2mm; text-align: left; }
+.lp-pre { white-space: pre-wrap; margin: 4mm 0; }
+.lp-sign { margin-top: 6mm; break-inside: avoid; page-break-inside: avoid; }
+.lp-sign .lp-space { height: 18mm; }
+.lp-sign .lp-sig-name { font-weight: 700; }
+.lp-keep { break-inside: avoid; page-break-inside: avoid; }
+.lp-foot-note { font: 9pt/1.3 Arial, sans-serif; color: #666; margin-top: 6mm; }
+
+/* ---------- print ---------- */
+@media print {
+  /* html paints the (white) canvas; body must stay transparent or its background would
+     cover the z-index:-1 letterhead image. */
+  html { background: #fff !important; }
+  body, body.lp-body { background: transparent !important; }
+  .lp-toolbar, .no-print { display: none !important; }
+  .lp-sheet { width: 210mm; margin: 0; box-shadow: none; min-height: 0; background: none !important; }
+  /* Full-page letterhead repeated on every printed page, behind the text. */
+  .lp-bg-print {
+    display: block; position: fixed; left: 0; top: 0; width: 210mm; height: 297mm;
+    z-index: -1; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  body.lp-mode-preprinted .lp-bg-print { display: none; }   /* same spacing, no artwork */
+  .lp-doc thead { display: table-header-group; }
+  .lp-doc tfoot { display: table-footer-group; }
+  .lp-doc tr.lp-gap { display: none; }
+  .lp-block p, .lp-block li { orphans: 3; widows: 3; }
+  .lp-foot-note { display: none; }
+}

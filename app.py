@@ -183,6 +183,7 @@ from user_activity_service import (
     should_track_page_view,
 )
 
+import company_letters as company_letters_service
 from office_fleet_service import (
     INWARD_MODES,
     OUTWARD_MODES,
@@ -6245,6 +6246,10 @@ FLEET_NAV_ACTIVE = [
 ]
 
 OFFICE_NAV_ACTIVE = [
+    "company_letters",
+    "company_letter_form",
+    "company_letter_view",
+    "company_letter_preview",
     "office_admin",
     "office_inward",
     "office_outward",
@@ -7316,6 +7321,12 @@ NAV_GROUPS = [
                 "label": "Letter Preparation / General Letters",
                 "icon": "fa-envelope-open-text",
                 "active_endpoints": ["office_letters", "office_letter_print"],
+            },
+            {
+                "endpoint": "company_letters",
+                "label": "Company Letters",
+                "icon": "fa-file-lines",
+                "active_endpoints": ["company_letters", "company_letter_form", "company_letter_view", "company_letter_preview"],
             },
             {
                 "endpoint": "office_quotations",
@@ -8606,6 +8617,7 @@ def get_department_portals():
                 {"endpoint": "office_inward", "label": "Letter In / Inward Register", "icon": "fa-inbox", "active_endpoints": ["office_inward"]},
                 {"endpoint": "office_outward", "label": "Letter Out / Outward Register", "icon": "fa-paper-plane", "active_endpoints": ["office_outward"]},
                 {"endpoint": "office_letters", "label": "Letter Preparation", "icon": "fa-envelope-open-text", "active_endpoints": ["office_letters", "office_letter_print"]},
+                {"endpoint": "company_letters", "label": "Company Letters", "icon": "fa-file-lines", "active_endpoints": ["company_letters", "company_letter_form", "company_letter_view", "company_letter_preview"]},
                 {"endpoint": "office_agreements", "label": "Agreements", "icon": "fa-handshake", "active_endpoints": ["office_agreements"]},
                 {"endpoint": "office_legal", "label": "Legal Documents", "icon": "fa-scale-balanced", "active_endpoints": ["office_legal"]},
                 {"endpoint": "corporate_dms", "label": "Corporate DMS", "icon": "fa-folder-tree", "active_endpoints": ["corporate_dms", "corporate_dms_file", "corporate_dms_download"]},
@@ -19340,9 +19352,204 @@ def office_letter_print(letter_id):
     return render_template(
         "letter_print.html",
         letter=letter,
-        generated_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
-        autoprint=request.args.get("print") == "1",
+        back_url=url_for("office_letters", view=letter["id"]),
     )
+
+
+# --- Administration -> Company Letters --------------------------------------------------
+
+
+@app.template_filter("letter_date")
+def _letter_date_filter(value):
+    return company_letters_service.display_date(value)
+
+
+@app.template_filter("letter_html")
+def _letter_html_filter(value):
+    from markupsafe import Markup
+
+    return Markup(company_letters_service.sanitize_letter_html(value))
+
+
+def _prepare_company_letters_db(db):
+    company_letters_service.ensure_company_letters_schema(db)
+
+
+def _company_letters_denied():
+    """None when the user may use Company Letters, else a response to return.
+
+    Same audience as the Administration & Compliance menu: guests and base HR/payroll
+    users are not offered it, so they are refused here too. Everyone else who is logged
+    in may prepare and print letters.
+    """
+    if is_guest_user() or is_hr_base_user():
+        flash("You do not have access to Company Letters.")
+        return redirect(url_for("dashboard"))
+    return None
+
+
+@app.route("/administration/company-letters")
+@login_required
+def company_letters():
+    denied = _company_letters_denied()
+    if denied:
+        return denied
+    db = get_db()
+    _prepare_company_letters_db(db)
+    q = request.args.get("q", "").strip()
+    type_filter = request.args.get("type", "").strip()
+    if type_filter not in company_letters_service.LETTER_TYPES:
+        type_filter = ""
+    data = company_letters_service.list_letters(
+        db,
+        query=q,
+        letter_type=type_filter,
+        page=request.args.get("page", 1, type=int),
+        per_page=request.args.get("per_page", company_letters_service.PAGE_SIZE, type=int),
+    )
+
+    def page_url(page):
+        return url_for(
+            "company_letters", q=q or None, type=type_filter or None,
+            per_page=data["per_page"], page=page,
+        )
+
+    return render_template(
+        "company_letters.html",
+        data=data, q=q, type_filter=type_filter, page_url=page_url,
+        letter_types=company_letters_service.LETTER_TYPES,
+        page_sizes=company_letters_service.PAGE_SIZES,
+        can_edit=True,
+    )
+
+
+@app.route("/administration/company-letters/new", methods=["GET", "POST"])
+@app.route("/administration/company-letters/<int:letter_id>/edit", methods=["GET", "POST"])
+@login_required
+def company_letter_form(letter_id=None):
+    denied = _company_letters_denied()
+    if denied:
+        return denied
+    db = get_db()
+    _prepare_company_letters_db(db)
+    letter = None
+    if letter_id:
+        letter = company_letters_service.get_letter(db, letter_id)
+        if not letter:
+            flash("Letter not found.")
+            return redirect(url_for("company_letters"))
+    errors: list[str] = []
+    if request.method == "POST":
+        values, errors = company_letters_service.validate_letter_form(db, request.form, letter_id)
+        if not errors:
+            try:
+                saved_id = company_letters_service.save_letter(
+                    db, values, session.get("username", ""), letter_id
+                )
+                db.commit()
+            except ValueError as exc:
+                db.rollback()
+                errors = [str(exc)]
+            else:
+                flash("Letter saved.")
+                if request.form.get("after") == "preview":
+                    return redirect(url_for("company_letter_preview", letter_id=saved_id))
+                return redirect(url_for("company_letter_view", letter_id=saved_id))
+        v = values
+    elif letter:
+        v = dict(letter)
+    else:
+        sig_name, sig_title = company_letters_service.last_signatory(db)
+        today = datetime.now().strftime("%Y-%m-%d")
+        v = {
+            "reference_no": company_letters_service.suggest_reference(db, today),
+            "letter_date": today,
+            "letter_type": "General Administration Letter",
+            "recipient_name": "", "recipient_org": "", "recipient_address": "",
+            "subject": "", "salutation": company_letters_service.DEFAULT_SALUTATION,
+            "body_html": "", "closing": company_letters_service.DEFAULT_CLOSING,
+            "signatory_name": sig_name, "signatory_designation": sig_title,
+            "employee_id": None,
+        }
+    employee_label = ""
+    if v.get("employee_id"):
+        emp = db.execute(
+            "SELECT staff_name, employee_code FROM staff WHERE id=?", (v["employee_id"],)
+        ).fetchone()
+        if emp:
+            employee_label = f"{emp['staff_name']} ({emp['employee_code'] or '—'})"
+    return render_template(
+        "company_letter_form.html",
+        letter=letter, v=v, errors=errors, employee_label=employee_label,
+        letter_types=company_letters_service.LETTER_TYPES,
+        offer_body=company_letters_service.OFFER_LETTER_BODY.format(
+            designation="[designation]", joining_date="[date of joining]"
+        ),
+    )
+
+
+@app.route("/administration/company-letters/<int:letter_id>")
+@login_required
+def company_letter_view(letter_id):
+    denied = _company_letters_denied()
+    if denied:
+        return denied
+    db = get_db()
+    _prepare_company_letters_db(db)
+    letter = company_letters_service.get_letter(db, letter_id)
+    if not letter:
+        flash("Letter not found.")
+        return redirect(url_for("company_letters"))
+    employee = None
+    if letter.get("employee_id"):
+        employee = db.execute(
+            "SELECT staff_name, employee_code FROM staff WHERE id=?", (letter["employee_id"],)
+        ).fetchone()
+    return render_template("company_letter_view.html", letter=letter, employee=employee, can_edit=True)
+
+
+@app.route("/administration/company-letters/<int:letter_id>/preview")
+@login_required
+def company_letter_preview(letter_id):
+    """A4 preview and the print screen (print with letterhead / on preprinted paper)."""
+    denied = _company_letters_denied()
+    if denied:
+        return denied
+    db = get_db()
+    _prepare_company_letters_db(db)
+    letter = company_letters_service.get_letter(db, letter_id)
+    if not letter:
+        flash("Letter not found.")
+        return redirect(url_for("company_letters"))
+    return render_template(
+        "company_letter_print.html",
+        letter=letter,
+        body_blocks=company_letters_service.split_blocks(letter["body_html"]),
+        back_url=url_for("company_letter_view", letter_id=letter_id),
+    )
+
+
+@app.route("/administration/company-letters/employees")
+@login_required
+def company_letter_employees():
+    denied = _company_letters_denied()
+    if denied:
+        return jsonify({"employees": []}), 403
+    db = get_db()
+    return jsonify({"employees": company_letters_service.search_employees(db, request.args.get("q", ""))})
+
+
+@app.route("/administration/company-letters/employee/<int:employee_id>")
+@login_required
+def company_letter_employee(employee_id):
+    denied = _company_letters_denied()
+    if denied:
+        return jsonify({"error": "forbidden"}), 403
+    db = get_db()
+    details = company_letters_service.employee_details(db, employee_id)
+    if not details:
+        return jsonify({"error": "not found"}), 404
+    return jsonify(details)
 
 
 @app.route("/office/quotations", methods=["GET", "POST"])
